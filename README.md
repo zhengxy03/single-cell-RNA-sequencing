@@ -19,9 +19,9 @@ rm *.sra
 ensembl-human
 ```
 cd ../genome
-aria2c -d ./ -Z https://ftp.ensembl.org/pub/release-113/fasta/homo_sapiens/cdna/Homo_sapiens.GRCh38.cdna.all.fa.gz
-gzip -d Homo_sapiens.GRCh38.cdna.all.fa.gz
-mv Homo_sapiens.GRCh38.cdna.all.fa refgenome.fa
+aria2c -d ./ -Z https://ftp.ensembl.org/pub/release-113/fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna.toplevel.fa.gz
+gzip -d Homo_sapiens.GRCh38.dna.toplevel.fa.gz
+mv Homo_sapiens.GRCh38.dna.toplevel.fa.gz refgenome.fa
 ```
 ## 1.3 annotation data
 ```
@@ -34,15 +34,18 @@ mv Homo_sapiens.GRCh38.113.gtf hg.gtf
 * fastqc
 ```
 cd ../sequence
-fastqc --threads 3 *.fastq.gz
+fastqc --threads 2 *.fastq.gz
 ```
 * trimmomaric
 ```
 parallel -j 4 "
-  java -jar ~/biosoft/Trimmomatic-0.39/trimmomatic-0.39.jar \
-  PE -phred33 {1} ./trim/{1} \
-  LEADING:20 TRAILING:20 SLIDINGWINDOW:5:15 MINLEN:30 \
+    java -jar ~/biosoft/Trimmomatic-0.39/trimmomatic-0.39.jar \
+    SE -phred33 {} ./trim/{} \
+    LEADING:20 TRAILING:20 SLIDINGWINDOW:5:15 MINLEN:30 \
 " ::: $(ls *.gz)
+
+cd trim
+fastqc --threads 2 *.fastq.gz
 ```
 # 3 seq alignment
 * hisat2
@@ -52,7 +55,7 @@ cd ~/project/scRNA/genome
 mkdir index
 cd index
 
-hisat2-build -p 6 ../*.fasta hg_index
+hisat2-build -p 6 ../*.fa hg_index
 ```
 seq alignment
 ```
@@ -60,8 +63,7 @@ mkdir ../sequence/align
 cd ../sequence/trim
 parallel -k -j 4 "
     hisat2 -p 8 -x ~/project/scRNA/genome/index/hg_index \
-    -1 sra_data/SRR11832836_1_trimmed.fastq \
-    -2 sra_data/SRR11832836_2_trimmed.fastq \
+    -U {1}.fastq.gz \
     -S ../align/{1}.sam 2>../align/{1}.log
 " ::: $(ls *.gz | perl -p -e 's/.fastq.gz$//')
 
@@ -80,13 +82,13 @@ cd ~/project/scRNA/sequence
 mkdir HTseq
 
 cd align
-parallel =j 4 "
-    htseq-count -f bam -s yes {1}.sort.bam ../../annotation/hg.gtf \
-        > ../HTseq/{1}.count 2>../HTseq/{1}.log
+parallel -j 4 "
+    htseq-count -f bam -s no {1}.sort.bam ../../annotation/hg.gtf \
+        > ../../HTseq/{1}.count 2>../../HTseq/{1}.log
 " ::: $(ls *.sort.bam | perl -p -e 's/\.sort\.bam$//')
 
 cd ../HTseq
-cat SRR11832836.count | head -n 10
+cat SRR11832843_1.count | head -n 10
 ```
 # 5 merge & normalize
 ## 5.1 merge data
@@ -119,6 +121,7 @@ write.csv(data_merge, "merge.csv", quote = FALSE, row.names = FALSE)
 ```
 ## 5.2 normalize
 ```
+count_matrix <- read.csv("merge.csv", row.names = "gene_id")
 dds <- DESeqDataSetFromMatrix(countData = count_matrix, colData = data.frame(condition = rep("control", ncol(count_matrix))), design = ~ 1)
 
 # 估计大小因子并进行标准化
