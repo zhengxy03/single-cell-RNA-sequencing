@@ -1,4 +1,51 @@
 # single-cell-RNA-sequencing
+# 0 10x单细胞测序
+## 0.1 实验数据下载
+GSE144240-GSE144236
+```
+nohup prefetch SRR11832836 SRR11832837 -O . &
+
+parallel -j 2 "
+  fastq-dump --split-files --gzip {1}
+" ::: $(ls *.sra)
+
+rm *.sra
+```
+## 0.2 数据分析
+cellranger
+### 0.2.1 cellranger下载
+[cellranger](https://www.10xgenomics.com/support/software/cell-ranger/downloads/eula?closeUrl=%2Fsupport%2Fsoftware%2Fcell-ranger&lastTouchOfferName=Cell%20Ranger&lastTouchOfferType=Software%20Download&product=chromium&redirectUrl=%2Fsupport%2Fsoftware%2Fcell-ranger%2Fdownloads)
+```
+#下载
+
+#安装
+tar xvfz cellranger-9.0.0.tar.gz
+cd ~/biosoft/cellranger-9.0.0
+export PATH="$(pwd):$PATH"
+source ~/.bashrc
+
+cellranger
+```
+### 0.2.2 参考基因组下载
+https://www.10xgenomics.com/support/software/space-ranger/downloads#reference-downloads
+```
+curl -O "https://cf.10xgenomics.com/supp/spatial-exp/refdata-gex-GRCh38-2020-A.tar.gz"
+```
+* 或者自建参考基因组
+refgenome:
+> 大部分物种我们需要下载toplevel的序列文件，但是对于人和小鼠这类有单倍型信息的基因组，我们需要下载primary_assembly的序列。将下载好的文件传到linux主机上。<br>
+annotation:gtf.gz
+> 10x单细胞使用的polydT进行RNA逆转录，只能测到带有polyA尾的RNA序列，所以我们需要从GTF文件中过滤掉non-polyA的基因。Cellranger的`mkgtf`命令可以对GTF文件进行过滤，通过--attribute参数指定需要保留的基因类型：
+```
+```
+处理完GTF文件之后，就可以使用cellranger的`mkref`命令构建基因组了：
+```
+```
+### 0.2.3 测序
+cellranger-count
+
+
+
 # 1 数据下载
 GSE144240-GSE144236
 ```
