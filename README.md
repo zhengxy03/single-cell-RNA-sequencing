@@ -8,6 +8,7 @@
 ## 0.1 实验数据下载
 GSE144240-GSE144236
 ```
+anchr ena  
 nohup prefetch SRR11832836 SRR11832837 -O . &
 
 parallel -j 2 "
@@ -110,12 +111,6 @@ FindVariableFeatures（）参数意义：<br>
 #0.0125 <非零值均值 < 3 且标准差> 0.5
 seurat_obj <- FindVariableFeatures(seurat_obj, selection.method = "vst", nfeatures = 2000, mean.cutoff = c(0.0125, 3), dispersion.cutoff = c(0.5, Inf))
 
-variable.genes <- VariableFeatures(object = seurat_obj)
-if (is.null(variable.genes)) {
-  print("没有识别到高变基因")
-} else {
-  print(paste("识别到", length(variable.genes), "个高变基因"))
-}
 ```
 # 3 PCA 分析：线性降维
 ## 3.1 标准化
