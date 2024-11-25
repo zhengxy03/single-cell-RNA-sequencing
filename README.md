@@ -1,5 +1,10 @@
 # single-cell-RNA-sequencing
 # 0 10x单细胞测序
+测序工作流程：
+* 单细胞解离：通过一个称为单细胞解离的过程生成单细胞悬浮液，在这个过程中组织被消化。
+* 单细胞分离：为了单独分析每个细胞中的mRNA，必须进行单细胞分离。基于平板的技术将细胞分离到平板的孔中，基于液滴的方法则依赖于在每个微流体液滴中捕获单个细胞。每个孔或液滴都包含必要的化学物质来分解细胞膜并进行文库构建。
+* 文库构建：在这个过程中捕获细胞内的mRNA，将其逆转录为cDNA分子并放大。每个细胞的mRNA可以被标记为孔或液滴特有的细胞条形码。此外，许多实验协议还使用独特的分子标识符（UMI）来标记捕获的分子。在测序前对细胞cDNA进行放大，以增加其被测量的可能性。UMI使我们能够区分相同mRNA分子的放大副本和来自同一基因转录的不同mRNA分子的读取。
+* 测序：文库构建后，细胞cDNA文库被标记为细胞条形码，根据协议，还可能加上UMI。这些文库被汇集在一起（多重）进行测序。测序产生读取数据，这些数据经过质量控制，根据分配的条形码进行分组（解复用）以及在读取处理流程中的比对。对于基于UMI的协议，读取数据可以进一步解复用，以产生捕获的mRNA分子的计数（计数数据）。
 ## 0.1 实验数据下载
 GSE144240-GSE144236
 ```
@@ -33,13 +38,14 @@ https://www.10xgenomics.com/support/software/space-ranger/downloads#reference-do
 curl -O "https://cf.10xgenomics.com/supp/spatial-exp/refdata-gex-GRCh38-2020-A.tar.gz"
 tar xvfz refdata-gex-GRCh38-2020-A.tar.gz
 ```
-* 或者自建参考基因组
+* 或者自建参考基因组<br>
 refgenome:
 > 大部分物种我们需要下载toplevel的序列文件，但是对于人和小鼠这类有单倍型信息的基因组，我们需要下载primary_assembly的序列。将下载好的文件传到linux主机上。<br>
-annotation:gtf.gz
-> 10x单细胞使用的polydT进行RNA逆转录，只能测到带有polyA尾的RNA序列，所以我们需要从GTF文件中过滤掉non-polyA的基因。Cellranger的`mkgtf`命令可以对GTF文件进行过滤，通过--attribute参数指定需要保留的基因类型：
 
-处理完GTF文件之后，就可以使用cellranger的`mkref`命令构建基因组了：
+annotation:gtf.gz<br>
+> 10x单细胞使用的polydT进行RNA逆转录，只能测到带有polyA尾的RNA序列，所以我们需要从GTF文件中过滤掉non-polyA的基因。Cellranger的`mkgtf`命令可以对GTF文件进行过滤，通过--attribute参数指定需要保留的基因类型<br>
+
+处理完GTF文件之后，就可以使用cellranger的`mkref`命令构建基因组了
 
 ### 0.2.3 测序
 ```
@@ -93,15 +99,13 @@ seurat_obj <- subset(seurat_obj, subset = nFeature_RNA > 200 & percent.mito < 10
 > 数据标准化的意义: 去除测序深度带来的影响<br>
 > 标准化原则：每个细胞的每个基因的count数除以该细胞总count数，然后乘以因子（10000），再进行log(n+1)转换<br>
 
-normalization函数，默认LogNormalize的方法
+使用normalization函数，默认LogNormalize的方法
 ```
 seurat_obj <- NormalizeData(seurat_obj)
 ```
-
 ## 2.3 找到高变基因
 FindVariableFeatures（）参数意义：<br>
 * FindVariableFeatures 函数有 3 种选择高表达变异基因的方法，可以通过 selection.method参数来选择，它们分别是： vst（默认值）， mean.var.plot 和 dispersion。 nfeatures 参数的默认值是 2000，可以改变。如果 selection.method 参数选择的是 mean.var.plot，就不需要人为规定高表达变异基因的数目，算法会自动选择合适的数目。 建议使用完 FindVariableFeatures 函数后，用 VariableFeaturePlot 对这些高表达变异基因再做个可视化，看看使用默认值 2000 会不会有问题。
-
 ```
 #0.0125 <非零值均值 < 3 且标准差> 0.5
 seurat_obj <- FindVariableFeatures(seurat_obj, selection.method = "vst", nfeatures = 2000, mean.cutoff = c(0.0125, 3), dispersion.cutoff = c(0.5, Inf))
@@ -141,13 +145,12 @@ DimPlot(seurat_obj, reduction = "pca")
 
 VizDimLoadings(seurat_obj, dims = 1:2, reduction = "pca")
 ```
-DimPlot（）函数生成主成分分析结果图：
-![Dimplot](./pic/pca1.png, "Dimplot")
-VizDimLoadings结果图：
+DimPlot（）函数生成主成分分析结果图：<br>
+![Dimplot](./pic/pca1.png, "Dimplot")<br>
+VizDimLoadings结果图：<br>
 ![vizdimloading](./pic/pca2.png, "vizdimloading")
 
 ## 3.3 确定合适的主成分数（使用 ElbowPlot 可视化）
-* 确定数据集的维度<br>
 > 目的：每个维度（pc）本质上代表一个“元特征”，它将相关特征集中的信息组合在一起。因此，越在顶部的主成分越可能代表数据集。然而，我们应该选择多少个主成分才认为我们选择的数据包含了绝大部分的原始数据信息呢？
 
 方法<br>
@@ -187,7 +190,7 @@ FindAllMarkers（）参数意义：<br>
 * only.pos = TRUE：只寻找上调的基因
 * min.pct = 0.1：某基因在细胞中表达的细胞数占相应cluster细胞数最低10%
 * logfc.threshold = 0.25 ：fold change倍数为0.25
-```
+
 所有基因先分组，再根据avg_log2FC进行排序:
 ```
 cluster_markers %>% group_by(cluster) %>% top_n(n = 2, wt = avg_log2FC)
