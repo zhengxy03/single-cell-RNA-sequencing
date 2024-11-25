@@ -146,9 +146,9 @@ DimPlot(seurat_obj, reduction = "pca")
 VizDimLoadings(seurat_obj, dims = 1:2, reduction = "pca")
 ```
 DimPlot（）函数生成主成分分析结果图：<br>
-![Dimplot](./pic/pca1.png, "Dimplot")<br>
+![Dimplot](./pic/pca1.png "Dimplot")<br>
 VizDimLoadings结果图：<br>
-![vizdimloading](./pic/pca2.png, "vizdimloading")
+![vizdimloading](./pic/pca2.png "vizdimloading")
 
 ## 3.3 确定合适的主成分数（使用 ElbowPlot 可视化）
 > 目的：每个维度（pc）本质上代表一个“元特征”，它将相关特征集中的信息组合在一起。因此，越在顶部的主成分越可能代表数据集。然而，我们应该选择多少个主成分才认为我们选择的数据包含了绝大部分的原始数据信息呢？
@@ -159,7 +159,7 @@ VizDimLoadings结果图：<br>
 ```
 ElbowPlot(seurat_obj)
 ```
-![elbowplot](./pic/elbowplot.png, "elbowplot")
+![elbowplot](./pic/elbowplot.png "elbowplot")
 
 ## 3.4 UMAP降维聚类
 基于选定的主成分（根据 ElbowPlot 确定为前 15 个主成分）进行 UMAP 降维并绘制 UMAP 图：
@@ -170,7 +170,7 @@ seurat_obj <- RunUMAP(seurat_obj, dims = 1:15)
 # 绘制UMAP图（可根据需要调整参数，如label是否显示标签等）
 DimPlot(seurat_obj, reduction = "umap", label = TRUE)
 ```
-![umap](./pic/umap.png, "umap")
+![umap](./pic/umap.png "umap")
 # 4 细胞类型注释
 ## 4.1 无监督聚类unsupervised clustering
 ```
@@ -209,7 +209,7 @@ cluster_markers %>% group_by(cluster) %>% top_n(n = 2, wt = avg_log2FC)
 #VlnPlot: 基于细胞类群的基因表达概率分布
 VlnPlot(seurat_obj, features = c("hg19-EEF1A1", "hg19-RPL10"))
 ```
-![vlnplot](./pic/vln.png, "vln")
+![vlnplot](./pic/vln.png "vln")
 ## 4.3 细胞类型注释
 [cellmarker](https://bibio-bigdata.hrbmu.edu.cn/CellMarker/CellMarker_annotation.jsp)
 ```
