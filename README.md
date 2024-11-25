@@ -1,14 +1,43 @@
-# single-cell-RNA-sequencing
-# 0 10x单细胞测序
+# 单细胞RNA分析(sc-RNA seq)
+[单细胞测序流程](./pic/单细胞测序流程.png "单细胞测序流程")
+# 目录
+
+# 0 介绍
+单细胞测序技术，简单来说，是一种在单个细胞水平上对基因组、转录组及表观基因组进行测序分析的技术。与传统的测序方法相比，单细胞测序提供了对细胞异质性（即细胞之间的差异）的信息。
 测序工作流程：
 * 单细胞解离：通过一个称为单细胞解离的过程生成单细胞悬浮液，在这个过程中组织被消化。
 * 单细胞分离：为了单独分析每个细胞中的mRNA，必须进行单细胞分离。基于平板的技术将细胞分离到平板的孔中，基于液滴的方法则依赖于在每个微流体液滴中捕获单个细胞。每个孔或液滴都包含必要的化学物质来分解细胞膜并进行文库构建。
 * 文库构建：在这个过程中捕获细胞内的mRNA，将其逆转录为cDNA分子并放大。每个细胞的mRNA可以被标记为孔或液滴特有的细胞条形码。此外，许多实验协议还使用独特的分子标识符（UMI）来标记捕获的分子。在测序前对细胞cDNA进行放大，以增加其被测量的可能性。UMI使我们能够区分相同mRNA分子的放大副本和来自同一基因转录的不同mRNA分子的读取。
 * 测序：文库构建后，细胞cDNA文库被标记为细胞条形码，根据协议，还可能加上UMI。这些文库被汇集在一起（多重）进行测序。测序产生读取数据，这些数据经过质量控制，根据分配的条形码进行分组（解复用）以及在读取处理流程中的比对。对于基于UMI的协议，读取数据可以进一步解复用，以产生捕获的mRNA分子的计数（计数数据）。
+* 数据分析：对测序数据进行处理，包括质量控制、去除低质量数据、基因表达定量、数据标准化和细胞聚类分析等
+目前单细胞测序获取细胞的方法主要有两种：
+
 ## 0.1 实验数据下载
+首先下载原始数据，为了进行演示，本文使用[Multimodal Analysis of Composition and Spatial Architecture in Human Squamous Cell Carcinoma](https://doi.org/10.1016/j.cell.2020.05.039)这篇文章的数据`GSE144240`，这里可以使用[anchr](https://github.com/wang-q/anchr)下载单细胞RNA测序中的一个样本数据缩短时间。
 GSE144240-GSE144236
+
 ```
-anchr ena  
+mkdir -p ~/project/genome
+cd ~/project/genome
+
+cat <<EOF > source.csv
+SRX8383286,human,HiSeq 4000
+EOF
+
+anchr ena info | perl - -v source.csv > ena_info.yml
+anchr ena prep | perl - ena_info.yml
+
+mlr --icsv --omd cat ena_info.csv
+
+aria2c -j 4 -x 4 -s 2 -c --file-allocation=none -i ena_info.ftp.txt
+
+md5sum --check ena_info.md5.txt
+
+# sampling reads as test materials
+seqtk sample -s 23 SRR5042715_1.fastq.gz 20000 | pigz > R1.fq.gz
+seqtk sample -s 23 SRR5042715_2.fastq.gz 20000 | pigz > R2.fq.gz
+
+
 nohup prefetch SRR11832836 SRR11832837 -O . &
 
 parallel -j 2 "
@@ -110,7 +139,6 @@ FindVariableFeatures（）参数意义：<br>
 ```
 #0.0125 <非零值均值 < 3 且标准差> 0.5
 seurat_obj <- FindVariableFeatures(seurat_obj, selection.method = "vst", nfeatures = 2000, mean.cutoff = c(0.0125, 3), dispersion.cutoff = c(0.5, Inf))
-
 ```
 # 3 PCA 分析：线性降维
 ## 3.1 标准化
