@@ -38,11 +38,9 @@ refgenome:
 > 大部分物种我们需要下载toplevel的序列文件，但是对于人和小鼠这类有单倍型信息的基因组，我们需要下载primary_assembly的序列。将下载好的文件传到linux主机上。<br>
 annotation:gtf.gz
 > 10x单细胞使用的polydT进行RNA逆转录，只能测到带有polyA尾的RNA序列，所以我们需要从GTF文件中过滤掉non-polyA的基因。Cellranger的`mkgtf`命令可以对GTF文件进行过滤，通过--attribute参数指定需要保留的基因类型：
-```
-```
+
 处理完GTF文件之后，就可以使用cellranger的`mkref`命令构建基因组了：
-```
-```
+
 ### 0.2.3 测序
 ```
 cellranger count --id=scRNA \
