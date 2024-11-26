@@ -21,7 +21,7 @@ mkdir -p ~/project/genome
 cd ~/project/genome
 
 cat <<EOF > source.csv
-SRX8383286,human,HiSeq 4000
+SRX8383286,,HiSeq 4000
 EOF
 
 anchr ena info | perl - -v source.csv > ena_info.yml
