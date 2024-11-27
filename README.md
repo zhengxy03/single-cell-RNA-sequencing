@@ -185,6 +185,14 @@ ElbowPlot(seurat_obj)
 ![elbowplot](./pic/elbowplot.png "elbowplot")
 
 ## 3.4 UMAP降维聚类
+* UMAP(Uniform Manifold Approximation and Projection)<br>
+一种降维技术，假设可用数据样本均匀（Uniform）分布在拓扑空间（Manifold）中，可以从这些有限数据样本中近似（Approximation）并映射（Projection）到低维空间。<br>
+以下描述不是官方定义，而是我总结出来的可帮助我们理解 UMAP 的要点。
+
+  * Projection ——通过投影点在平面、曲面或线上再现空间对象的过程或技术。也可以将其视为对象从高维空间到低维空间的映射。<br>
+  * Approximation——算法假设我们只有一组有限的数据样本（点），而不是构成流形的整个集合。因此，我们需要根据可用数据来近似流形。<br>
+  * Manifold——流形是一个拓扑空间，在每个点附近局部类似于欧几里得空间。一维流形包括线和圆，但不包括类似数字8的形状。二维流形（又名曲面）包括平面、球体、环面等。关于流行的更多介绍可以查看：[流行](https://zhuanlan.zhihu.com/p/622263134)<br>
+  * Uniform——均匀性假设告诉我们我们的数据样本均匀（均匀）分布在流形上。但是，在现实世界中，这种情况很少发生。因此这个假设引出了在流形上距离是变化的概念。即，空间本身是扭曲的：空间根据数据显得更稀疏或更密集的位置进行拉伸或收缩。<br>
 基于选定的主成分（根据 ElbowPlot 确定为前 15 个主成分）进行 UMAP 降维并绘制 UMAP 图：
 ```
 # 执行UMAP降维
