@@ -34,3 +34,11 @@ cluster_markers <- FindAllMarkers(merged_seurat_obj, only.pos = TRUE, min.pct = 
 
 cluster_markers %>% subset(p_val<0.05)
 list_marker <- cluster_markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+df_marker=data.frame(p_val = list_marker$p_val,
+                     avg_log2FC = list_marker$avg_log2FC,
+                     pct.1 = list_marker$pct.1,
+                     pct.2 = list_marker$pct.2,
+                     p_val_adj = list_marker$p_val_adj,
+                     cluster = list_marker$cluster,
+                     gene = list_marker$gene)
+write.csv(df_marker,"marker.csv")

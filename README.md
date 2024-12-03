@@ -138,8 +138,9 @@ dim(merged_seurat_obj[["RNA"]]$counts)
 seurat_obj <- NormalizeData(seurat_obj)
 ```
 ## 2.3 找到高变基因
+高变基因是指在单细胞RNA测序数据分析中，那些在不同细胞间表达差异显著的基因。可以使用FindVariableFeatures函数来获取。<br>
 FindVariableFeatures（）参数意义：<br>
-* FindVariableFeatures 函数有 3 种选择高表达变异基因的方法，可以通过 selection.method参数来选择，它们分别是： vst（默认值）， mean.var.plot 和 dispersion。 nfeatures 参数的默认值是 2000，可以改变。如果 selection.method 参数选择的是 mean.var.plot，就不需要人为规定高表达变异基因的数目，算法会自动选择合适的数目。 建议使用完 FindVariableFeatures 函数后，用 VariableFeaturePlot 对这些高表达变异基因再做个可视化，看看使用默认值 2000 会不会有问题。
+* FindVariableFeatures 函数有3种选择高表达变异基因的方法，可以通过 selection.method参数来选择，它们分别是： vst（默认值）， mean.var.plot 和 dispersion。 nfeatures 参数的默认值是 2000，可以改变。如果 selection.method 参数选择的是 mean.var.plot，就不需要人为规定高表达变异基因的数目，算法会自动选择合适的数目。 建议使用完 FindVariableFeatures 函数后，用 VariableFeaturePlot 对这些高表达变异基因再做个可视化，看看使用默认值 2000 会不会有问题。
 ```
 #0.0125 <非零值均值 < 3 且标准差> 0.5
 seurat_obj <- FindVariableFeatures(seurat_obj, selection.method = "vst", nfeatures = 2000, mean.cutoff = c(0.0125, 3), dispersion.cutoff = c(0.5, Inf))
@@ -196,7 +197,7 @@ seurat_obj <- RunUMAP(seurat_obj, dims = 1:15)
 DimPlot(seurat_obj, reduction = "umap", label = TRUE)
 ```
 ![umap](./pic/umap.png "umap")
-## 4.2 差异表达分析
+## 4.3 差异表达分析
 使用 FindAllMarkers 函数进行差异表达分析，获取每个聚类的标记基因（默认参数）：
 ```
 cluster_markers <- FindAllMarkers(seurat_obj, only.pos = TRUE)
@@ -205,7 +206,7 @@ FindAllMarkers（）参数意义：<br>
 * only.pos = TRUE：只寻找上调的基因
 * min.pct = 0.1：某基因在细胞中表达的细胞数占相应cluster细胞数最低10%
 * logfc.threshold = 0.25 ：fold change倍数为0.25 
-## 4.3 细胞类型注释
+## 4.4 细胞类型注释
 [cellmarker](https://bibio-bigdata.hrbmu.edu.cn/CellMarker/CellMarker_annotation.jsp)
 ```
 #对marker_gene进行筛选p_val<0.05
@@ -223,11 +224,12 @@ df_marker=data.frame(p_val = list_marker$p_val,
 write.csv(df_marker,"marker.csv")
  
 #添加细胞注释信息,通过CellMarker注释每一个cluster代表的细胞类群
-new.cluster.ids <- c("Memory CD4 T", "Activated effector", "Pro-inflammatory macrophage", "CDC2", "CD8 T", "Non-classical monocyte", "CD3/CD28-stimulated NK", "Megakaryocyte")
+new.cluster.ids <- c("Fibroblast", "B cells", "Proliferating cell", "Epithelial cells")
 names(new.cluster.ids) <- levels(seurat_obj)
 seurat_obj <- RenameIdents(seurat_obj, new.cluster.ids)
 DimPlot(seurat_obj, reduction = "umap", label = TRUE, pt.size = 0.5) + NoLegend()
 ```
+![umap](./pic/umap2.png "umap2")
 # 5 细胞子集：
 ## 5.1 提取髓细胞相关聚类
 seurat_obj--cell_type-`Myeloid`
