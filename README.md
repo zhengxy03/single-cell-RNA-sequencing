@@ -1,5 +1,5 @@
 # 单细胞RNA分析(sc-RNA seq)
-[单细胞测序流程](./pic/单细胞测序流程.png "单细胞测序流程")
+![单细胞测序流程](./pic/单细胞测序流程.png "单细胞测序流程")
 # 目录
 
 # 0 介绍
@@ -37,7 +37,7 @@ md5sum --check ena_info.md5.txt
 seqtk sample -s 23 SRR5042715_1.fastq.gz 20000 | pigz > R1.fq.gz
 seqtk sample -s 23 SRR5042715_2.fastq.gz 20000 | pigz > R2.fq.gz
 
-
+#从NCBI上下载
 nohup prefetch SRR11832836 SRR11832837 -O . &
 
 parallel -j 2 "
@@ -89,14 +89,14 @@ cellranger count --id=scRNA \
 ```
 
 # 1 数据下载
-GSE144240-GSE144236
+这里可以直接使用GSE144236中的矩阵
 ```
 wget https://ftp.ncbi.nlm.nih.gov/geo/series/GSE144nnn/GSE144236/suppl/GSE144236%5FSCC13%5Fcounts.txt.gz
 gzip -d GSE144236_SCC13_counts.txt.gz
 mv GSE144236_SCC13_counts.txt scc13.gz
 ``` 
 # 2 数据处理
-R-Seurat 
+使用R中的Seurat包
 * 1.基于QC度量的细胞选择与筛选（即质控）
 * 2.数据标化与缩放（即数据标准化）
 * 3.高度可变特征的检测（特征性基因的选择）
@@ -121,8 +121,12 @@ VlnPlot(seurat_obj, features = c("nFeature_RNA", "nCount_RNA", "percent.mito"), 
 
 seurat_obj <- subset(seurat_obj, subset = nFeature_RNA > 200 & percent.mito < 10)
 
-#merge different samples
+#如果有多个样本可以创建不同的seurat对象之后使用merge融合为一个seurat对象
 #merged_seurat_obj <- merge(seurat_obj1, y = c(seurat_obj2), add.cell.ids = c("Sample1", "Sample2"))
+
+merged_seurat_obj <- JoinLayers(merged_seurat_obj)
+#查看之后发现只有一个维度了
+dim(merged_seurat_obj[["RNA"]]$counts)
 ```
 ## 2.2 标准化
 标准化的意义：<br>
@@ -153,26 +157,7 @@ seurat_obj <- ScaleData(seurat_obj, vars.to.regress = c("nCount_RNA", "percent.m
 ```
 #PCA降维：通常仅对高变基因进行标准化和降维
 seurat_obj <- RunPCA(seurat_obj, features = VariableFeatures(object = seurat_obj))
-
-#选择前5个维度进行查看
-print(seurat_obj[["pca"]], dims = 1:5, nfeatures = 5)
-
-#PCA降维后的细胞嵌入的前两行和前两列的数据
-head(seurat_obj[['pca']]@cell.embeddings)[1:2,1:2]
-#                     PC_1      PC_2
-#AAACCTGAGCCACGCT 7.965446 -3.265728
-#AAACCTGGTAGCCTCG 7.356585 -6.612420
-
-#可视化
-DimPlot(seurat_obj, reduction = "pca")
-
-VizDimLoadings(seurat_obj, dims = 1:2, reduction = "pca")
 ```
-DimPlot（）函数生成主成分分析结果图：<br>
-![Dimplot](./pic/pca1.png "Dimplot")<br>
-VizDimLoadings结果图：<br>
-![vizdimloading](./pic/pca2.png "vizdimloading")
-
 ## 3.3 确定合适的主成分数（使用 ElbowPlot 可视化）
 > 目的：每个维度（pc）本质上代表一个“元特征”，它将相关特征集中的信息组合在一起。因此，越在顶部的主成分越可能代表数据集。然而，我们应该选择多少个主成分才认为我们选择的数据包含了绝大部分的原始数据信息呢？
 
@@ -184,7 +169,16 @@ ElbowPlot(seurat_obj)
 ```
 ![elbowplot](./pic/elbowplot.png "elbowplot")
 
-## 3.4 UMAP降维聚类
+
+# 4 细胞类型注释
+## 4.1 无监督聚类unsupervised clustering
+```
+#计算最邻近距离
+seurat_obj <- FindNeighbors(seurat_obj, dims = 1:15)
+#聚类，包含设置下游聚类的“间隔尺度”的分辨率参数resolution，增加值会导致更多的聚类。
+seurat_obj <- FindClusters(seurat_obj, resolution = 0.1)
+```
+## 4.2 UMAP降维
 * UMAP(Uniform Manifold Approximation and Projection)<br>
 一种降维技术，假设可用数据样本均匀（Uniform）分布在拓扑空间（Manifold）中，可以从这些有限数据样本中近似（Approximation）并映射（Projection）到低维空间。<br>
 以下描述不是官方定义，而是我总结出来的可帮助我们理解 UMAP 的要点。
@@ -202,16 +196,6 @@ seurat_obj <- RunUMAP(seurat_obj, dims = 1:15)
 DimPlot(seurat_obj, reduction = "umap", label = TRUE)
 ```
 ![umap](./pic/umap.png "umap")
-# 4 细胞类型注释
-## 4.1 无监督聚类unsupervised clustering
-```
-#计算最邻近距离
-seurat_obj <- FindNeighbors(seurat_obj, dims = 1:15)
-#聚类，包含设置下游聚类的“间隔尺度”的分辨率参数resolution ，增加值会导致更多的聚类。
-seurat_obj <- FindClusters(seurat_obj, resolution = 0.1)
-
-head(Idents(seurat_obj), 5)
-```
 ## 4.2 差异表达分析
 使用 FindAllMarkers 函数进行差异表达分析，获取每个聚类的标记基因（默认参数）：
 ```
@@ -220,27 +204,7 @@ cluster_markers <- FindAllMarkers(seurat_obj, only.pos = TRUE)
 FindAllMarkers（）参数意义：<br>
 * only.pos = TRUE：只寻找上调的基因
 * min.pct = 0.1：某基因在细胞中表达的细胞数占相应cluster细胞数最低10%
-* logfc.threshold = 0.25 ：fold change倍数为0.25
-
-所有基因先分组，再根据avg_log2FC进行排序:
-```
-cluster_markers %>% group_by(cluster) %>% top_n(n = 2, wt = avg_log2FC)
-# A tibble: 6 × 7
-# Groups:   cluster [3]
-      p_val avg_log2FC pct.1 pct.2 p_val_adj cluster gene              
-      <dbl>      <dbl> <dbl> <dbl>     <dbl> <fct>   <chr>             
-1 2.34e-  4       2.40 0.145 0.108 1   e+  0 0       hg19-HCAR3        
-2 3.39e-  3       2.83 0.01  0.001 1   e+  0 0       hg19-RP11-346D14.1
-3 0               5.66 0.657 0.025 0         1       hg19-NDC80        
-4 8.38e-201       5.61 0.382 0.013 1.57e-196 1       hg19-HIST1H1B     
-5 9.68e- 39       7.48 0.14  0.014 1.81e- 34 2       hg19-FLG          
-6 1.76e- 38       8.69 0.077 0.002 3.29e- 34 2       hg19-SPRR2B     
-```
-```
-#VlnPlot: 基于细胞类群的基因表达概率分布
-VlnPlot(seurat_obj, features = c("hg19-EEF1A1", "hg19-RPL10"))
-```
-![vlnplot](./pic/vln.png "vln")
+* logfc.threshold = 0.25 ：fold change倍数为0.25 
 ## 4.3 细胞类型注释
 [cellmarker](https://bibio-bigdata.hrbmu.edu.cn/CellMarker/CellMarker_annotation.jsp)
 ```
@@ -248,8 +212,6 @@ VlnPlot(seurat_obj, features = c("hg19-EEF1A1", "hg19-RPL10"))
 cluster_markers %>% subset(p_val<0.05)
 #所有基因先分组，再根据avg_log2FC进行排序，选出每组前十个
 list_marker <- cluster_markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
-#打印list_marker所有值
-print(list_marker,n = Inf)
 #保存差异分析结果到csv
 df_marker=data.frame(p_val = list_marker$p_val,
                      avg_log2FC = list_marker$avg_log2FC,
