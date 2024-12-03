@@ -63,10 +63,10 @@ source ~/.bashrc
 cellranger
 ```
 ### 0.2.2 参考基因组下载
-https://www.10xgenomics.com/support/software/space-ranger/downloads#reference-downloads
+
 ```
-curl -O "https://cf.10xgenomics.com/supp/spatial-exp/refdata-gex-GRCh38-2020-A.tar.gz"
-tar xvfz refdata-gex-GRCh38-2020-A.tar.gz
+curl -O "curl -O "https://cf.10xgenomics.com/supp/cell-exp/refdata-gex-GRCh38-2024-A.tar.gz"
+tar xvfz refdata-gex-GRCh38-2024-A.tar.gz
 ```
 * 或者自建参考基因组<br>
 refgenome:
@@ -89,11 +89,11 @@ cellranger count --id=scRNA \
 ```
 
 # 1 数据下载
-这里可以直接使用GSE144236中的矩阵
+这里可以直接使用GSE144236中的单细胞测序表达矩阵数据
 ```
 wget https://ftp.ncbi.nlm.nih.gov/geo/series/GSE144nnn/GSE144236/suppl/GSE144236%5FSCC13%5Fcounts.txt.gz
 gzip -d GSE144236_SCC13_counts.txt.gz
-mv GSE144236_SCC13_counts.txt scc13.gz
+mv GSE144236_SCC13_counts.txt scc13.txt
 ``` 
 # 2 数据处理
 使用R中的Seurat包
@@ -177,7 +177,7 @@ ElbowPlot(seurat_obj)
 #计算最邻近距离
 seurat_obj <- FindNeighbors(seurat_obj, dims = 1:15)
 #聚类，包含设置下游聚类的“间隔尺度”的分辨率参数resolution，增加值会导致更多的聚类。
-seurat_obj <- FindClusters(seurat_obj, resolution = 0.1)
+seurat_obj <- FindClusters(seurat_obj, resolution = 0.15)
 ```
 ## 4.2 UMAP降维
 * UMAP(Uniform Manifold Approximation and Projection)<br>
