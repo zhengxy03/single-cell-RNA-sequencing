@@ -69,24 +69,23 @@ cellranger
 下面介绍一下常用的Cell Ranger命令---cellrange count。count也是cellrange中一个很重要的命令，用来对单细胞转录组数据进行基因组比对，细胞定量最终得到用后下游分析的单细胞表达矩阵（默认情况也会对表达矩阵进行聚类）。<br>
 在做定量之前，我们首先需要准备2组文件：原始fq文件以及物种的References（其中包括参考基因组序列、gtf文件以及star的索引文件）。<br>
 * 1.原始fq文件<br>
+
 cellranger的输入文件格式是fq格式，并且文件的命名也是有要求，文件命名格式如下：<br>
 [Sample Name]_S1_L00[Lane Number]\_[Read Type]_001.fastq.gz<br>
 详细可以看官网上的说明文档：[fastq-input](https://support.10xgenomics.com/single-cell-multiome-atac-gex/software/pipelines/latest/using/fastq-input#gex_rightname)<br>
 如果fq的文件名格式不对，在运行的过程中会出现错误，所以最开始需要确定文件名的格式以及进行修改。
 * 2.参考基因组<br>
-好消息就是Cell Ranger官网已经为我们提供了人和小鼠的References，如果大家的样本是人或者小鼠的某些细胞可以直接去Cell Ranger官网进行下载。<br>
-下载网页：[refdata](https://www.10xgenomics.com/support/software/cell-ranger/downloads#reference-downloads)
+
+好消息就是Cell Ranger官网已经为我们提供了人和小鼠的References，如果大家的样本是人或者小鼠的某些细胞可以直接去Cell Ranger官网进行下载。下载网页：[refdata](https://www.10xgenomics.com/support/software/cell-ranger/downloads#reference-downloads)
 ```
 curl -O "curl -O "https://cf.10xgenomics.com/supp/cell-exp/refdata-gex-GRCh38-2024-A.tar.gz"
 tar xvfz refdata-gex-GRCh38-2024-A.tar.gz
 ```
-* 或者自建参考基因组<br>
-refgenome:
-> 大部分物种我们需要下载toplevel的序列文件，但是对于人和小鼠这类有单倍型信息的基因组，我们需要下载primary_assembly的序列。将下载好的文件传到linux主机上。<br>
-
-annotation:gtf.gz<br>
+或者自建参考基因组:
+大部分物种我们需要下载toplevel的序列文件(gtf.gz格式)，但是对于人和小鼠这类有单倍型信息的基因组，我们需要下载primary_assembly的序列。将下载好的文件传到linux主机上。<br>
 > 10x单细胞使用的polydT进行RNA逆转录，只能测到带有polyA尾的RNA序列，所以我们需要从GTF文件中过滤掉non-polyA的基因。Cellranger的`mkgtf`命令可以对GTF文件进行过滤，通过--attribute参数指定需要保留的基因类型<br>
 * 3.定量<br>
+
 处理完GTF文件之后，就可以使用cellranger的`mkref`命令构建基因组了，具体命令如下（一般使用默认参数）：
 ```
 cellranger count --id=scRNA \
@@ -158,10 +157,10 @@ FindVariableFeatures（）参数意义：<br>
 seurat_obj <- FindVariableFeatures(seurat_obj, selection.method = "vst", nfeatures = 2000, mean.cutoff = c(0.0125, 3), dispersion.cutoff = c(0.5, Inf))
 ```
 # 3 PCA 分析：线性降维
+主成分分析 (PCA, principal component analysis)是一种数学降维方法, 利用正交变换 (orthogonal transformation)把一系列可能`线性相关的变量`转换为一组`线性不相关的新变量`，也称为主成分，从而利用新变量在更小的维度下展示数据的特征。
 ## 3.1 标准化
-ScaleData()标准化函数作用：<br>
-> 为后续PCA降维做准备。<br>
-> PCA降维要求数据为正态分布，即平均值为0，方差为1。<br>
+在进行PCA之前，首先需要对数据进行标准化处理。这是因为不同特征的量纲和范围可能差异较大，直接进行分析可能导致某些特征对结果的影响过大。Seurat包中可以直接使用ScaleData()进行标准化：<br>
+
 ```
 #回归 UMI 计数和线粒体基因百分比
 seurat_obj <- ScaleData(seurat_obj, vars.to.regress = c("nCount_RNA", "percent.mito"))
