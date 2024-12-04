@@ -83,10 +83,42 @@ tar xvfz refdata-gex-GRCh38-2024-A.tar.gz
 ```
 或者自建参考基因组:
 大部分物种我们需要下载toplevel的序列文件(gtf.gz格式)，但是对于人和小鼠这类有单倍型信息的基因组，我们需要下载primary_assembly的序列。将下载好的文件传到linux主机上。<br>
-> 10x单细胞使用的polydT进行RNA逆转录，只能测到带有polyA尾的RNA序列，所以我们需要从GTF文件中过滤掉non-polyA的基因。Cellranger的`mkgtf`命令可以对GTF文件进行过滤，通过--attribute参数指定需要保留的基因类型<br>
-* 3.定量<br>
 
-处理完GTF文件之后，就可以使用cellranger的`mkref`命令构建基因组了，具体命令如下（一般使用默认参数）：
+10x单细胞使用的polydT进行RNA逆转录，只能测到带有polyA尾的RNA序列，所以我们需要从GTF文件中过滤掉non-polyA的基因。Cellranger的`mkgtf`命令可以对GTF文件进行过滤，通过--attribute参数指定需要保留的基因类型：<br>
+```
+cellranger mkgtf \
+Homo_sapiens.GRC38.103.gtf \
+Homo_sapiens.GRC38.103.filtered.gtf \
+--attribute=gene_biotype:protein_coding \
+--attribute=gene_biotype:lincRNA \
+--attribute=gene_biotype:antisense \
+--attribute=gene_biotype:IG_LV-gene \
+--attribute=gene_biotype:IG_V_gene \
+--attribute=gene_biotype:IG_V_pseudogene \
+--attribute=gene_biotype:IG_D_gene \
+--attribute=gene_biotype:IG_J_gene \
+--attribute=gene_biotype:IG_C_gene \
+--attribute=gene_biotype:IG_J_pseudogene \
+--attribute=gene_biotype:IG_C_pseudogene \
+--attribute=gene_biotype:TR_V_gene \
+--attribute=gene_biotype:TR_V_pseudogene \
+--attribute=gene_biotype:TR_D_gene \
+--attribute=gene_biotype:TR_J_gene \
+--attribute=gene_biotype:TR_C_gene \
+--attribute=gene_biotype:TR_J_pseudogene \
+```
+Ensembl和NCBI提供的GTF文件通常都有gene_biotype标签来标记基因的类型。如果从其他来源下载的GTF文件中没有gene_biotype标记，那么就不需要对GTF进行过滤。<br>
+
+处理完GTF文件之后，就可以使用cellranger的mkref命令构建基因组了：<br>
+```
+cellranger mkref --genome=Homo_sapiens.GRCh38.103 \
+--fasta=Homo_sapiens.GRCh38.dna.primary_assembly.fa \
+--genes=Homo_sapiens.GRCh38.103.filtered.gtf
+```
+
+* 3.定量<br>
+构建好的基因组就可以进行下一步的定量。
+
 ```
 cellranger count --id=scRNA \
   --create-bam false \
