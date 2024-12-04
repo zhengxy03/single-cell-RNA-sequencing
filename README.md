@@ -63,16 +63,17 @@ source ~/.bashrc
 
 cellranger
 ```
-
-
 ### 1.2.2 测序
 下面介绍一下常用的Cell Ranger命令---cellrange count。count也是cellrange中一个很重要的命令，用来对单细胞转录组数据进行基因组比对，细胞定量最终得到用后下游分析的单细胞表达矩阵（默认情况也会对表达矩阵进行聚类）。<br>
+
 在做定量之前，我们首先需要准备2组文件：原始fq文件以及物种的References（其中包括参考基因组序列、gtf文件以及star的索引文件）。<br>
 * 1.原始fq文件<br>
 
 cellranger的输入文件格式是fq格式，并且文件的命名也是有要求，文件命名格式如下：<br>
 [Sample Name]_S1_L00[Lane Number]\_[Read Type]_001.fastq.gz<br>
+
 详细可以看官网上的说明文档：[fastq-input](https://support.10xgenomics.com/single-cell-multiome-atac-gex/software/pipelines/latest/using/fastq-input#gex_rightname)<br>
+
 如果fq的文件名格式不对，在运行的过程中会出现错误，所以最开始需要确定文件名的格式以及进行修改。
 * 2.参考基因组<br>
 
@@ -117,6 +118,7 @@ cellranger mkref --genome=Homo_sapiens.GRCh38.103 \
 ```
 
 * 3.定量<br>
+
 构建好的基因组就可以进行下一步的定量。
 
 ```
@@ -252,7 +254,7 @@ FindAllMarkers（）参数意义：<br>
 * logfc.threshold = 0.25 ：fold change倍数为0.25 
 ## 4.4 细胞类型注释
 关于细胞注释可以查看这篇文章[https://www.sohu.com/a/474334410_121118947](细胞注释)<br>
-使用CellMarker中的[cell annotation](https://bibio-bigdata.hrbmu.edu.cn/CellMarker/CellMarker_annotation.jsp)工具进行注释
+这里使用CellMarker中的[cell annotation](https://bibio-bigdata.hrbmu.edu.cn/CellMarker/CellMarker_annotation.jsp)工具进行人工注释：
 ```
 #对marker_gene进行筛选p_val<0.05
 cluster_markers %>% subset(p_val<0.05)
