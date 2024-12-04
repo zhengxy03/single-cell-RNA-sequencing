@@ -124,8 +124,10 @@ seurat_obj <- subset(seurat_obj, subset = nFeature_RNA > 200 & percent.mito < 10
 #如果有多个样本可以创建不同的seurat对象之后使用merge融合为一个seurat对象
 #merged_seurat_obj <- merge(seurat_obj1, y = c(seurat_obj2), add.cell.ids = c("Sample1", "Sample2"))
 
+LayerData(merged_seurat_obj, assay = "RNA", layer = "counts")
+#但是仍然有2个layers。如果不进一步处理，后续在提取counts时数据不完整，分析会一直出错。因此我们需要使用JoinLayers函数对layers进行合并。
 merged_seurat_obj <- JoinLayers(merged_seurat_obj)
-#查看之后发现只有一个维度了
+#查看之后发现只有一个layer了
 dim(merged_seurat_obj[["RNA"]]$counts)
 ```
 ## 2.2 标准化
@@ -207,6 +209,7 @@ FindAllMarkers（）参数意义：<br>
 * min.pct = 0.1：某基因在细胞中表达的细胞数占相应cluster细胞数最低10%
 * logfc.threshold = 0.25 ：fold change倍数为0.25 
 ## 4.4 细胞类型注释
+关于细胞注释可以查看这篇文章[https://www.sohu.com/a/474334410_121118947](细胞注释)<br>
 [cellmarker](https://bibio-bigdata.hrbmu.edu.cn/CellMarker/CellMarker_annotation.jsp)
 ```
 #对marker_gene进行筛选p_val<0.05
@@ -229,7 +232,37 @@ names(new.cluster.ids) <- levels(seurat_obj)
 seurat_obj <- RenameIdents(seurat_obj, new.cluster.ids)
 DimPlot(seurat_obj, reduction = "umap", label = TRUE, pt.size = 0.5) + NoLegend()
 ```
-![umap](./pic/umap2.png "umap2")
+![umap2](./pic/umap2.png "umap2")
+umap图美化：
+```
+#可以将坐标轴进行缩放
+##调用第三方包
+library(tidyr)
+library(ggplot2)
+##绘图
+p <- DimPlot(seurat_obj, reduction = "umap", label = TRUE, pt.size = 1.2) + 
+  theme_dr(xlength = 0.2, 
+           ylength = 0.2,
+           arrow = arrow(length = unit(0.2, "inches"),type = "closed")) +
+  theme(panel.grid = element_blank(),
+        axis.title = element_text(face = 2,hjust = 0.03)) +
+  NoLegend()
+```
+几个参数
+* pt.size = 1.2：设置绘制的点（代表细胞）的大小为 1.2，调整点的大小可以影响图形的清晰度和视觉效果，使细胞分布更加直观可见。<br>
+* theme_dr主题函数调整图片主题样式<br>
+  * face是加粗<br>
+  * hjust = 0.03设置水平对齐方式，使坐标轴标题向左偏移一定距离，以避免与图形内容重叠或改善视觉布局。<br>
+生成的图片如下：<br>
+![umap3](./pic/umap3.png "ump3")
+还可以将配色进行调整：
+```
+##调用第三方包
+library(ggsci)
+##随机选一种
+p1 <- p + scale_color_npg() + labs(title = "npg", tag = "A")
+```
+![umap4](./pic/umap4.png "umap4")
 # 5 细胞子集：
 ## 5.1 提取髓细胞相关聚类
 seurat_obj--cell_type-`Myeloid`
