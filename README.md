@@ -232,7 +232,7 @@ names(new.cluster.ids) <- levels(seurat_obj)
 seurat_obj <- RenameIdents(seurat_obj, new.cluster.ids)
 DimPlot(seurat_obj, reduction = "umap", label = TRUE, pt.size = 0.5) + NoLegend()
 ```
-![umap2](./pic/umap2.png "umap2")
+![umap2](./pic/umap2.png "umap2")<br>
 umap图美化：
 ```
 #可以将坐标轴进行缩放
@@ -254,7 +254,7 @@ p <- DimPlot(seurat_obj, reduction = "umap", label = TRUE, pt.size = 1.2) +
   * face是加粗<br>
   * hjust = 0.03设置水平对齐方式，使坐标轴标题向左偏移一定距离，以避免与图形内容重叠或改善视觉布局。<br>
 生成的图片如下：<br>
-![umap3](./pic/umap3.png "ump3")
+![umap3](./pic/umap3.png "ump3")<br>
 还可以将配色进行调整：
 ```
 ##调用第三方包
