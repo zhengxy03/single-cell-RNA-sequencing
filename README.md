@@ -261,6 +261,7 @@ p <- DimPlot(seurat_obj, reduction = "umap", label = TRUE, pt.size = 1.2) +
 library(ggsci)
 ##随机选一种
 p1 <- p + scale_color_npg() + labs(title = "npg", tag = "A")
+ggsave("umap4.png", plot = p1, width = 6, height = 6, dpi = 300)
 ```
 ![umap4](./pic/umap4.png "umap4")
 # 5 细胞子集：
