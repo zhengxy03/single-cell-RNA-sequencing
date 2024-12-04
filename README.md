@@ -331,48 +331,66 @@ myeloid_cluster_markers <- FindAllMarkers(myeloid_cells)
 ## 5.5 确定细胞子集
 同细胞类型注释。。。
 # 6 细胞周期分析
+细胞周期一般分成4个阶段:
+
+* G1(gap1)：Cell increases in size(Cellular contents duplicated)
+* S(synthesis) ：DNA replication, each of the 46 chromosomes (23 pairs) is replicated by the cell
+* G2(gap2)：Cell grows more，organelles and proteins develop in preparation for cell division，为分裂做准备
+* M(mitosis)：'Old' cell partitions the two copies of the genetic material into the two daughter cells.
+And the cell cycle can begin again.<br>
+
+在分析单细胞数据时，同一类型的细胞往往来自于不同的细胞周期阶段，这可能对下游聚类分析，细胞类型注释产生混淆；<br>
+
+由于细胞周期也是通过cell cycle related protein 调控，即每个阶段有显著的marker基因；通过分析细胞周期有关基因的表达情况，可以对细胞所处周期阶段进行注释；<br>
+
+在单细胞周期分析时，通常只考虑三个阶段：`G1、S、G2M`。(即把G2和M当做一个phase)
+
 ## 6.1 确定细胞周期相关基因和循环细胞
 首先需要确定用于细胞周期评分的基因，通常 Seurat 包提供了人类细胞周期基因的列表（分为 S 期和 G2/M 期基因），可以使用以下方式获取：
+```
+str(cc.genes)
+#List of 2
+# $ s.genes  : chr [1:43] "MCM5" "PCNA" "TYMS" "FEN1" ...
+# $ g2m.genes: chr [1:54] "HMGB2" "CDK1" "NUSAP1" "UBE2C" ...
+```
+如上是Seurat包提供的人的细胞中分别与S期、G2M期直接相关的marker基因。<br>
+
+`CellCycleScoring`函数即根据此，对每个细胞的S期、G2M期可能性进行打分；具体如何计算的，暂时在Seurat官方文档中没有提及。
 ```
 # 加载Seurat内置的细胞周期基因列表
 s.genes <- cc.genes$s.genes
 g2m.genes <- cc.genes$g2m.genes
 
-# 获取细胞周期相关基因表达数据（这里从Seurat对象的RNA assay中获取计数数据）
-cell_cycle_expr <- GetAssayData(seurat_obj, slot = "counts")[c(s.genes, g2m.genes), ]
 
-# 计算每个细胞的细胞周期相关基因表达量总和
-total_expr <- Matrix::colSums(cell_cycle_expr)
+# 使用CellCycleScoring函数计算S期和G2/M期得分
+seurat_obj <- CellCycleScoring(seurat_obj, 
+                               s.features = s.genes, 
+                               g2m.features = g2m.genes, 
+                               set.ident = FALSE)
 
-# 根据数据分布情况设定一个合适的阈值，这里假设阈值设为1000（需根据实际数据调整）
-threshold <- 1000
+# 使用ScaleData函数回归S期和G2/M期得分
+seurat_obj <- ScaleData(seurat_obj, 
+                        verbose = FALSE, 
+                        features = NULL, 
+                        variables = c("S.Score", "G2M.Score"))
 
-# 创建一个逻辑向量，表示细胞是否为循环细胞
-is_cycling <- total_expr > threshold
+# 重新聚类
+seurat_obj <- FindNeighbors(seurat_obj, dims = 1:10)
+seurat_obj <- FindClusters(seurat_obj, resolution = 0.5)  # 这里的分辨率需要根据数据调整
+```
+## 6.3 计算循环细胞的比例
+```
+# 例如，可以设置一个阈值来确定哪些细胞是循环的
+threshold <- 0.5  # 这个阈值需要根据您的数据来调整
+seurat_obj@meta.data$is.cycling <- seurat_obj@meta.data$S.Score > threshold
 
-# 将is_cycling结果添加到Seurat对象的元数据中，作为新的一列
-seurat_obj$is_cycling <- is_cycling
-```
-## 6.2 进行细胞周期评分
-使用`CellCycleScoring`函数计算每个单细胞的 S 和 G2/M 期分数，并将结果添加到 Seurat 对象中：
-```
-seurat_obj <- CellCycleScoring(seurat_obj, s.features = s.genes, g2m.features = g2m.genes, set.ident = TRUE)
-```
-## 6.3 回归细胞周期分数
-使用`ScaleData`函数回归掉 S 和 G2/M 期分数，以消除细胞周期对基因表达数据的影响（这一步假设之前已经进行了数据归一化等操作，如`NormalizeData`函数）：
-```
-seurat_obj <- ScaleData(seurat_obj, vars.to.regress = c("S.Score", "G2M.Score"))
-```
-## 6.4 重新聚类
-```
-seurat_obj <- FindNeighbors(seurat_obj, dims = 1:15) # 根据之前确定的主成分数调整
-seurat_obj <- FindClusters(seurat_obj, resolution = 0.1)
-```
-## 6.5 计算循环细胞比例
-计算循环细胞比例，这里假设在回归细胞周期分数之前已经通过某种方式（如根据细胞周期相关基因的表达阈值等）确定了循环细胞（存储在 seurat_obj 的某个列中，例如 is_cycling 列，值为 TRUE 或 FALSE），以下是计算循环细胞比例的代码：
-```
-pre_regression_cycling_cells <- subset(seurat_obj, subset = is_cycling == TRUE)
-post_regression_cycling_cells <- subset(seurat_obj, subset =idents(seurat_obj) %in% rownames(pre_regression_cycling_cells))
-cycling_cell_proportion <- nrow(post_regression_cycling_cells) / nrow(seurat_obj)
-print(paste("Proportion of cycling cells:", cycling_cell_proportion))
+# 计算每个聚类中的循环细胞数量
+pre_regression_clusters <- table(seurat_obj@meta.data$seurat_clusters[seurat_obj@meta.data$is.cycling])
+post_regression_clusters <- table(Idents(seurat_obj)[seurat_obj@meta.data$is.cycling])
+
+# 计算循环细胞的比例
+proportion_cycling_cells <- sum(post_regression_clusters) / sum(pre_regression_clusters)
+
+# 输出循环细胞的比例
+proportion_cycling_cells
 ```
