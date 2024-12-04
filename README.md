@@ -284,7 +284,7 @@ umap图美化：
 library(tidyr)
 library(ggplot2)
 ##绘图
-p <- DimPlot(seurat_obj, reduction = "umap", label = TRUE, pt.size = 1.2) + 
+p <- DimPlot(seurat_obj, reduction = "umap", label = TRUE, pt.size = 1.2 ,label.size = 5) + 
   theme_dr(xlength = 0.2, 
            ylength = 0.2,
            arrow = arrow(length = unit(0.2, "inches"),type = "closed")) +
@@ -304,7 +304,7 @@ p <- DimPlot(seurat_obj, reduction = "umap", label = TRUE, pt.size = 1.2) +
 ##调用第三方包
 library(ggsci)
 ##随机选一种
-p1 <- p + scale_color_npg() + labs(title = "npg", tag = "A")
+p1 <- p + scale_color_npg() + labs(title = "scc13", tag = "A")
 ggsave("umap4.png", plot = p1, width = 6, height = 6, dpi = 300)
 ```
 ![umap4](./pic/umap4.png "umap4")
