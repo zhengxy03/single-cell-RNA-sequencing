@@ -2,6 +2,7 @@
 ![单细胞测序流程](./pic/单细胞测序流程.png "单细胞测序流程")
 # 目录
 
+
 # 0 介绍
 单细胞测序技术，简单来说，是一种在单个细胞水平上对基因组、转录组及表观基因组进行测序分析的技术。与传统的测序方法相比，单细胞测序提供了对细胞异质性（即细胞之间的差异）的信息。
 测序工作流程：
@@ -12,9 +13,9 @@
 * 数据分析：对测序数据进行处理，包括质量控制、去除低质量数据、基因表达定量、数据标准化和细胞聚类分析等
 目前单细胞测序获取细胞的方法主要有两种：
 
-## 0.1 实验数据下载
-首先下载原始数据，为了进行演示，本文使用[Multimodal Analysis of Composition and Spatial Architecture in Human Squamous Cell Carcinoma](https://doi.org/10.1016/j.cell.2020.05.039)这篇文章的数据`GSE144240`，这里可以使用[anchr](https://github.com/wang-q/anchr)下载单细胞RNA测序中的一个样本数据缩短时间。
-GSE144240-GSE144236
+# 1 上游数据获取与分析
+## 1.1 实验数据下载
+首先下载原始数据，为了进行演示，本文使用[Multimodal Analysis of Composition and Spatial Architecture in Human Squamous Cell Carcinoma](https://doi.org/10.1016/j.cell.2020.05.039)这篇文章的数据`GSE144240`，这里可以使用[anchr](https://github.com/wang-q/anchr)下载单细胞RNA测序中的一个样本数据缩短时间。（这里原始的测序数据ENA数据库缺失，可以使用NCBI下载）
 
 ```
 mkdir -p ~/project/genome
@@ -46,9 +47,9 @@ parallel -j 2 "
 
 rm *.sra
 ```
-## 0.2 数据分析
-cellranger
-### 0.2.1 cellranger下载
+## 1.2 数据分析
+Cell Ranger是10X Genomics为单细胞分析专门打造的分析软件，直接对10X的下机数据进行基因组比对、定量、生成单细胞矩阵、聚类以及其他的分析等。
+### 1.2.1 cellranger下载
 [cellranger](https://www.10xgenomics.com/support/software/cell-ranger/downloads/eula?closeUrl=%2Fsupport%2Fsoftware%2Fcell-ranger&lastTouchOfferName=Cell%20Ranger&lastTouchOfferType=Software%20Download&product=chromium&redirectUrl=%2Fsupport%2Fsoftware%2Fcell-ranger%2Fdownloads)
 ```
 #下载
@@ -62,8 +63,19 @@ source ~/.bashrc
 
 cellranger
 ```
-### 0.2.2 参考基因组下载
 
+
+### 1.2.2 测序
+下面介绍一下常用的Cell Ranger命令---cellrange count。count也是cellrange中一个很重要的命令，用来对单细胞转录组数据进行基因组比对，细胞定量最终得到用后下游分析的单细胞表达矩阵（默认情况也会对表达矩阵进行聚类）。<br>
+在做定量之前，我们首先需要准备2组文件：原始fq文件以及物种的References（其中包括参考基因组序列、gtf文件以及star的索引文件）。<br>
+* 1.原始fq文件
+cellranger的输入文件格式是fq格式，并且文件的命名也是有要求，文件命名格式如下：<br>
+[Sample Name]_S1_L00[Lane Number]\_[Read Type]_001.fastq.gz<br>
+详细可以看官网上的说明文档：[fastq-input](https://support.10xgenomics.com/single-cell-multiome-atac-gex/software/pipelines/latest/using/fastq-input#gex_rightname)<br>
+如果fq的文件名格式不对，在运行的过程中会出现错误，所以最开始需要确定文件名的格式以及进行修改。
+* 2.参考基因组
+好消息就是Cell Ranger官网已经为我们提供了人和小鼠的References，如果大家的样本是人或者小鼠的某些细胞可以直接去Cell Ranger官网进行下载。<br>
+下载网页：[refdata](https://www.10xgenomics.com/support/software/cell-ranger/downloads#reference-downloads)
 ```
 curl -O "curl -O "https://cf.10xgenomics.com/supp/cell-exp/refdata-gex-GRCh38-2024-A.tar.gz"
 tar xvfz refdata-gex-GRCh38-2024-A.tar.gz
@@ -74,10 +86,8 @@ refgenome:
 
 annotation:gtf.gz<br>
 > 10x单细胞使用的polydT进行RNA逆转录，只能测到带有polyA尾的RNA序列，所以我们需要从GTF文件中过滤掉non-polyA的基因。Cellranger的`mkgtf`命令可以对GTF文件进行过滤，通过--attribute参数指定需要保留的基因类型<br>
-
-处理完GTF文件之后，就可以使用cellranger的`mkref`命令构建基因组了
-
-### 0.2.3 测序
+* 3.定量
+处理完GTF文件之后，就可以使用cellranger的`mkref`命令构建基因组了，具体命令如下（一般使用默认参数）：
 ```
 cellranger count --id=scRNA \
   --create-bam false \
@@ -87,20 +97,20 @@ cellranger count --id=scRNA \
   --sample=SRR11832842 \
   --jobmode=local
 ```
-
-# 1 数据下载
+# 2 下游数据分析
+# 2.1 数据下载
 这里可以直接使用GSE144236中的单细胞测序表达矩阵数据
 ```
 wget https://ftp.ncbi.nlm.nih.gov/geo/series/GSE144nnn/GSE144236/suppl/GSE144236%5FSCC13%5Fcounts.txt.gz
 gzip -d GSE144236_SCC13_counts.txt.gz
 mv GSE144236_SCC13_counts.txt scc13.txt
 ``` 
-# 2 数据处理
+# 2.2 数据处理
 使用R中的Seurat包
 * 1.基于QC度量的细胞选择与筛选（即质控）
 * 2.数据标化与缩放（即数据标准化）
 * 3.高度可变特征的检测（特征性基因的选择）
-## 2.1 质量控制
+## 2.2.1 质量控制
 > ⼀般是指细胞的过滤，其实是从⼀个barcode X gene矩阵中过滤掉⼀部分不是细胞的barcode，如细胞碎⽚，双细胞，死细胞等。这三类barcode的特征可以通过其对应的基因表达情况来描述：`nCount(总基因表达数)、nFeature(总基因数)、percent.HB(红细胞基因表达⽐例)、percent.MT(线粒体基因表达⽐例)`。nCount和nFeature过⾼可能是双细胞，过低可能是细胞碎⽚。percent.HB刻画红细胞⽐例，percent.MT刻画细胞状态，值过⾼可能是濒临死亡的细胞
 
 PercentageFeatureSet 函数是根据counts总数相除算的打分：该基因集的counts总和/所有基因的counts总和。
@@ -130,7 +140,7 @@ merged_seurat_obj <- JoinLayers(merged_seurat_obj)
 #查看之后发现只有一个layer了
 dim(merged_seurat_obj[["RNA"]]$counts)
 ```
-## 2.2 标准化
+## 2.2.2 标准化
 标准化的意义：<br>
 > 数据标准化的意义: 去除测序深度带来的影响<br>
 > 标准化原则：每个细胞的每个基因的count数除以该细胞总count数，然后乘以因子（10000），再进行log(n+1)转换<br>
@@ -139,7 +149,7 @@ dim(merged_seurat_obj[["RNA"]]$counts)
 ```
 seurat_obj <- NormalizeData(seurat_obj)
 ```
-## 2.3 找到高变基因
+## 2.2.3 找到高变基因
 高变基因是指在单细胞RNA测序数据分析中，那些在不同细胞间表达差异显著的基因。可以使用FindVariableFeatures函数来获取。<br>
 FindVariableFeatures（）参数意义：<br>
 * FindVariableFeatures 函数有3种选择高表达变异基因的方法，可以通过 selection.method参数来选择，它们分别是： vst（默认值）， mean.var.plot 和 dispersion。 nfeatures 参数的默认值是 2000，可以改变。如果 selection.method 参数选择的是 mean.var.plot，就不需要人为规定高表达变异基因的数目，算法会自动选择合适的数目。 建议使用完 FindVariableFeatures 函数后，用 VariableFeaturePlot 对这些高表达变异基因再做个可视化，看看使用默认值 2000 会不会有问题。
@@ -175,6 +185,7 @@ ElbowPlot(seurat_obj)
 
 # 4 细胞类型注释
 ## 4.1 无监督聚类unsupervised clustering
+将具有相似基因表达模式的细胞之间绘制边缘，然后将他们划分为一个内联群体。
 ```
 #计算最邻近距离
 seurat_obj <- FindNeighbors(seurat_obj, dims = 1:15)
@@ -210,7 +221,7 @@ FindAllMarkers（）参数意义：<br>
 * logfc.threshold = 0.25 ：fold change倍数为0.25 
 ## 4.4 细胞类型注释
 关于细胞注释可以查看这篇文章[https://www.sohu.com/a/474334410_121118947](细胞注释)<br>
-[cellmarker](https://bibio-bigdata.hrbmu.edu.cn/CellMarker/CellMarker_annotation.jsp)
+使用CellMarker中的[cell annotation](https://bibio-bigdata.hrbmu.edu.cn/CellMarker/CellMarker_annotation.jsp)工具进行注释
 ```
 #对marker_gene进行筛选p_val<0.05
 cluster_markers %>% subset(p_val<0.05)
