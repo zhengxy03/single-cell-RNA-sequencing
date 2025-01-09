@@ -18,26 +18,6 @@
 首先下载原始数据，为了进行演示，本文使用[Multimodal Analysis of Composition and Spatial Architecture in Human Squamous Cell Carcinoma](https://doi.org/10.1016/j.cell.2020.05.039)这篇文章的数据`GSE144240`，这里可以使用[anchr](https://github.com/wang-q/anchr)下载单细胞RNA测序中的一个样本数据缩短时间。（这里原始的测序数据ENA数据库缺失，可以使用NCBI下载）
 
 ```
-mkdir -p ~/project/genome
-cd ~/project/genome
-
-cat <<EOF > source.csv
-SRX8383286,,HiSeq 4000
-EOF
-
-anchr ena info | perl - -v source.csv > ena_info.yml
-anchr ena prep | perl - ena_info.yml
-
-mlr --icsv --omd cat ena_info.csv
-
-aria2c -j 4 -x 4 -s 2 -c --file-allocation=none -i ena_info.ftp.txt
-
-md5sum --check ena_info.md5.txt
-
-# sampling reads as test materials
-seqtk sample -s 23 SRR5042715_1.fastq.gz 20000 | pigz > R1.fq.gz
-seqtk sample -s 23 SRR5042715_2.fastq.gz 20000 | pigz > R2.fq.gz
-
 #从NCBI上下载
 nohup prefetch SRR11832836 SRR11832837 -O . &
 
