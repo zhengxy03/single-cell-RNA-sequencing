@@ -49,14 +49,7 @@ markers <- FindAllMarkers(merged_seurat_obj,
 #significant markers
 significant_markers <- subset(markers, p_val_adj < 0.05)
 
-list_marker <- significant_markers %>% group_by(cluster) %>% top_n(n = 20, wt = avg_log2FC)
-df_marker=data.frame(p_val = list_marker$p_val,
-                     avg_log2FC = list_marker$avg_log2FC,
-                     pct.1 = list_marker$pct.1,
-                     pct.2 = list_marker$pct.2,
-                     p_val_adj = list_marker$p_val_adj,
-                     cluster = list_marker$cluster,
-                     gene = list_marker$gene)
+
 write.csv(df_marker,"marker.csv")
 
 #cell annotation
@@ -66,7 +59,7 @@ merged_seurat_obj <- RenameIdents(merged_seurat_obj, new.cluster.ids)
 DimPlot(merged_seurat_obj, reduction = "umap", label = TRUE, pt.size = 0.5)
 
 #get T cells subset
-t_cells <- subset(merged_seurat_obj, features = c("CD3D", "CD3E", "CD3G", "CD2", "NKG7", "IL7R", "TRAC", "TRBC1", "CCR4", "CCR5", "PTPRC", "KLRD1", "CD8A", "CD4"))
+t_cells <- subset(merged_seurat_obj, subset = seurat_clusters == "0")
 t_cells <- NormalizeData(t_cells)
 t_cells <- FindVariableFeatures(t_cells, selection.method = "vst", nfeatures = 2000)
 t_cells <- ScaleData(t_cells, features = rownames(t_cells))
@@ -79,11 +72,16 @@ t_cells <- RunUMAP(t_cells, dims = 1:10)
 
 #annotation
 t_cells <- FindNeighbors(t_cells, dims = 1:10)
-t_cells <- FindClusters(t_cells, resolution = 0.5)
-
+t_cells <- FindClusters(t_cells, resolution = 0.2)
 
 DimPlot(t_cells, reduction = "umap", label = TRUE)
 
-
 t_cell_markers <- FindAllMarkers(t_cells, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use = "wilcox")
+t_significant_markers <- subset(t_cell_markers, p_val_adj < 0.05)
+write.csv(t_significant_markers, "t_all_marker.csv")
 
+#t cells annotation
+new.cluster.ids <- c("CD8+Tem", "CD8+Tex", "CD4+Tcm", "CD4+Treg", "CD8+Tex", "CD8+Tex", "Cycling T", "Cycling T", "Cycling T", "NK")
+names(new.cluster.ids) <- levels(t_cells)
+t_cells <- RenameIdents(t_cells, new.cluster.ids)
+DimPlot(t_cells, reduction = "umap", label = TRUE, pt.size = 0.5)
