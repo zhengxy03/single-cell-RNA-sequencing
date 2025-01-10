@@ -44,7 +44,7 @@ source ~/.bashrc
 cellranger
 ```
 ### 1.2.2 测序
-下面介绍一下常用的Cell Ranger命令---cellrange count。count也是cellrange中一个很重要的命令，用来对单细胞转录组数据进行基因组比对，细胞定量最终得到用后下游分析的单细胞表达矩阵（默认情况也会对表达矩阵进行聚类）。<br>
+下面介绍一下常用的Cell Ranger命令---cellranger count。count也是cellranger中一个很重要的命令，用来对单细胞转录组数据进行基因组比对，细胞定量最终得到用后下游分析的单细胞表达矩阵（默认情况也会对表达矩阵进行聚类）。<br>
 
 在做定量之前，我们首先需要准备2组文件：原始fq文件以及物种的References（其中包括参考基因组序列、gtf文件以及star的索引文件）。<br>
 * 1.原始fq文件<br>
