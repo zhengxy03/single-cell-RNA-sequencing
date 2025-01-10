@@ -1,5 +1,6 @@
 library(Seurat)
 library(ggplot2)
+library(dplyr)
 #format 1:barcodes.tsv.gz(cell barcode),features.tsv.gz(gene ID),matrix.mtx.gz
 #GSE203115
 setwd("E:/project/ESCC/GSE203115/matrix")
@@ -19,6 +20,10 @@ seurat_obj2 <- CreateSeuratObject(counts = counts_matrix2, project = "Sample2")
 seurat_obj3 <- CreateSeuratObject(counts = counts_matrix3, project = "Sample3")
 merged_seurat_obj <- merge(seurat_obj1, y = c(seurat_obj2,seurat_obj3), add.cell.ids = c("Sample1", "Sample2", "Sample3"))
 merged_seurat_obj <- JoinLayers(merged_seurat_obj)
+
+merged_seurat_obj$response_status <- ifelse(
+  merged_seurat_obj$orig.ident %in% c("Sample3"), "Non-Responder", "Responder"
+)
 
 
 
