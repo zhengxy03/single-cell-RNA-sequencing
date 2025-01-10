@@ -76,3 +76,14 @@ t_cells <- RunPCA(t_cells, features = VariableFeatures(object = t_cells))
 
 #UMAP
 t_cells <- RunUMAP(t_cells, dims = 1:10)
+
+#annotation
+t_cells <- FindNeighbors(t_cells, dims = 1:10)
+t_cells <- FindClusters(t_cells, resolution = 0.5)
+
+
+DimPlot(t_cells, reduction = "umap", label = TRUE)
+
+
+t_cell_markers <- FindAllMarkers(t_cells, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use = "wilcox")
+
