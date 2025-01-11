@@ -72,7 +72,7 @@ t_cells <- RunUMAP(t_cells, dims = 1:10)
 
 #annotation
 t_cells <- FindNeighbors(t_cells, dims = 1:10)
-t_cells <- FindClusters(t_cells, resolution = 0.2)
+t_cells <- FindClusters(t_cells, resolution = 0.5)
 
 DimPlot(t_cells, reduction = "umap", label = TRUE)
 
