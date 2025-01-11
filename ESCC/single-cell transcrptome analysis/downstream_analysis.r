@@ -85,3 +85,62 @@ new.cluster.ids <- c("CD8+Tem", "CD8+Tex", "CD4+Tcm", "CD4+Treg", "CD8+Tex", "CD
 names(new.cluster.ids) <- levels(t_cells)
 t_cells <- RenameIdents(t_cells, new.cluster.ids)
 DimPlot(t_cells, reduction = "umap", label = TRUE, pt.size = 0.5)
+
+#VlnPlot
+genes_to_plot <- c("GZMK", "CXCL13", "CTLA4", "FOXP3", "ICOS", "SELL", "HAVCR2", "PRDM1")
+VlnPlot(t_cells, features = genes_to_plot, group.by = "seurat_clusters", pt.size = 0)
+
+#bubble heat map
+DotPlot(t_cells, features = genes_to_plot, group.by = "seurat_clusters") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+#Monocle2
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install("monocle")
+library(monocle)
+
+CD8 <- subset(t_cells, subset = seurat_clusters %in% c(0, 1, 4, 5))
+CD4 <- subset(t_cells, subset = seurat_clusters %in% c(2,3))
+
+# 提取表达矩阵（使用标准化数据）
+expression_matrix <- LayerData(CD8, assay = "RNA", layer = "data")
+
+# 提取细胞注释
+cell_metadata <- CD8@meta.data
+
+# 提取基因注释
+gene_metadata <- data.frame(gene_short_name = rownames(CD8))
+rownames(gene_metadata) <- rownames(CD8)
+
+# 创建 CellDataSet 对象
+cds <- newCellDataSet(
+  expression_matrix,
+  phenoData = new("AnnotatedDataFrame", data = cell_metadata),
+  featureData = new("AnnotatedDataFrame", data = gene_metadata),
+  expressionFamily = negbinomial.size()  # 适用于单细胞数据的分布
+)
+
+
+
+# 数据预处理
+cds <- estimateSizeFactors(cds)
+cds <- estimateDispersions(cds)
+cds <- detectGenes(cds, min_expr = 0.1)
+
+# 选择用于轨迹分析的基因
+disp_table <- dispersionTable(cds)
+ordering_genes <- subset(disp_table, mean_expression >= 0.1 & dispersion_empirical >= 1 * dispersion_fit)$gene_id
+cds <- setOrderingFilter(cds, ordering_genes)
+
+# 降维
+cds <- reduceDimension(cds, max_components = 2, method = 'DDRTree')
+
+# 轨迹推断
+cds <- orderCells(cds)
+
+# 绘制轨迹图
+plot_cell_trajectory(cds, color_by = "response") +
+  theme_minimal() +
+  labs(title = "Trajectory Analysis by Response Status", x = "Component 1", y = "Component 2") +
+  scale_color_manual(values = c("Responder" = "blue", "Non-Responder" = "red"))
