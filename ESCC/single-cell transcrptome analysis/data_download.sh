@@ -84,3 +84,11 @@ SRX13144551,,Illumina NovaSeq 6000
 SRX13144554,,Illumina NovaSeq 6000
 SRX13144555,,Illumina NovaSeq 6000
 EOF
+
+#PRJDB15365
+cat <<EOF > source.csv
+DRX435800,,Illumina HiSeq 2500
+DRX435799,,Illumina HiSeq 2500
+DRX435797,,Illumina HiSeq 2500
+DRX435798,,Illumina HiSeq 2500
+EOF
