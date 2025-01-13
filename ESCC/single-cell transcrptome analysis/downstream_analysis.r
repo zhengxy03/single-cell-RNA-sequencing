@@ -187,6 +187,23 @@ Epi_cells <- RunUMAP(Epi_cells, dims = 1:10)
 
 #find Epi clusters
 Epi_cells <- FindNeighbors(Epi_cells, dims = 1:10)
-Epi_cells <- FindClusters(Epi_cells, resolution = 0.5)
+Epi_cells <- FindClusters(Epi_cells, resolution = 0.25)
 
-DimPlot(Epi_cells, reduction = "umap", label = TRUE)
+DimPlot(Epi_cells, reduction = "umap", group.by = "seurat_clusters", label = TRUE)
+
+#subset of tumor and normal tissues
+sample_types2 <- c("T", "N", "T", "N", "T", "N")
+Epi_cells@meta.data$sample_type2 <- sample_types2[as.numeric(factor(Epi_cells@meta.data$orig.ident))]
+
+markers <- FindMarkers(Epi_cells, 
+                       ident.1 = "T", 
+                       ident.2 = "N", 
+                       group.by = "sample_type2",
+                       test.use = "wilcox",  # 使用 Wilcoxon rank sum test
+                       logfc.threshold = 0.25)
+
+markers$gene <- rownames(markers)
+markers$neg_log10_pval <- -log10(markers$p_val)
+markers$diffexpressed <- "No"
+markers$diffexpressed[markers$avg_log2FC > 0.25 & markers$p_val < 0.05] <- "Up"
+markers$diffexpressed[markers$avg_log2FC < -0.25 & markers$p_val < 0.05] <- "Down"
