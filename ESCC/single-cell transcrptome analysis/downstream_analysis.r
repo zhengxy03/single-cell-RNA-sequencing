@@ -207,3 +207,12 @@ markers$neg_log10_pval <- -log10(markers$p_val)
 markers$diffexpressed <- "No"
 markers$diffexpressed[markers$avg_log2FC > 0.25 & markers$p_val < 0.05] <- "Up"
 markers$diffexpressed[markers$avg_log2FC < -0.25 & markers$p_val < 0.05] <- "Down"
+
+ggplot(markers, aes(x = avg_log2FC, y = neg_log10_pval, color = diffexpressed)) +
+  geom_point(size = 1.5) + 
+  scale_color_manual(values = c("Up" = "red", "Down" = "green", "No" = "gray")) + 
+  labs(x = "Log2 Fold Change", y = "-Log10(P-value)", color = "Expression") + 
+  theme_minimal() +
+  theme(legend.position = "top") +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed", color = "black") + 
+  geom_vline(xintercept = c(-0.25, 0.25), linetype = "dashed", color = "black")
