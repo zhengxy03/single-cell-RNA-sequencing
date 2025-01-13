@@ -48,9 +48,7 @@ markers <- FindAllMarkers(merged_seurat_obj,
                           test.use = "wilcox")
 #significant markers
 significant_markers <- subset(markers, p_val_adj < 0.05)
-
-
-write.csv(df_marker,"marker.csv")
+write.csv(significant_markers,"marker.csv")
 
 #cell annotation
 new.cluster.ids <- c("T cell", "Fibroblast", "Myeloid", "Endothelia cell", "Epithelia cell","Epithelia cell", "B cell & mast cell", "SMC & pericyte cell", "plasma", "Double cell")
@@ -70,12 +68,13 @@ t_cells <- RunPCA(t_cells, features = VariableFeatures(object = t_cells))
 #UMAP
 t_cells <- RunUMAP(t_cells, dims = 1:10)
 
-#annotation
+
+#find T clusters
 t_cells <- FindNeighbors(t_cells, dims = 1:10)
 t_cells <- FindClusters(t_cells, resolution = 0.5)
 
 DimPlot(t_cells, reduction = "umap", label = TRUE)
-
+#annotation
 t_cell_markers <- FindAllMarkers(t_cells, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use = "wilcox")
 t_significant_markers <- subset(t_cell_markers, p_val_adj < 0.05)
 write.csv(t_significant_markers, "t_all_marker.csv")
@@ -128,10 +127,66 @@ merged_seurat_obj <- RunHarmony(merged_seurat_obj, group.by.vars = "orig.ident",
 merged_seurat_obj <- FindNeighbors(merged_seurat_obj, reduction = "harmony", dims = 1:50)
 merged_seurat_obj <- FindClusters(merged_seurat_obj, resolution = 0.5)
 
-#DEGs
-markers <- FindAllMarkers(merged_seurat_obj, min.pct = 0.25, logfc.threshold = 0.25, only.pos = TRUE)
 #UMAP
 merged_seurat_obj <- RunUMAP(merged_seurat_obj, reduction = "harmony", dims = 1:50)
 
+#visualize based on clusters
+DimPlot(merged_seurat_obj, reduction = "umap", label = TRUE, pt.size = 0.5)
+
+#DEGs
+markers <- FindAllMarkers(merged_seurat_obj, min.pct = 0.25, logfc.threshold = 0.25, only.pos = TRUE)
+significant_markers <- subset(markers, p_val_adj < 0.05)
+write.csv(significant_markers,"marker.csv")
+
+#cell annotation
+new.cluster.ids <- c("mast cells", "NK cells", "T cells", "B cells", "Fibroblast","Neutrophils", "Epithelial cells", "Myeloid cells", "T cells", "T cells", "Myeloid cells", "Epithelial cells", "Plasma", "Myeloid cells", "Fibroblast", "Endothelial cells", "Epithelial cells", "Fibroblast", "Fibroblast", "Mast cells", "Fibroblast", "Epithelial cells", "Epithelial cells", "Myeloid cells")
+names(new.cluster.ids) <- levels(merged_seurat_obj)
+merged_seurat_obj <- RenameIdents(merged_seurat_obj, new.cluster.ids)
+DimPlot(merged_seurat_obj, reduction = "umap", label = TRUE, pt.size = 0.5)
+
 #visualize based on sample types
 DimPlot(merged_seurat_obj, reduction = "umap", group.by = "sample_type")
+
+#heatmap of markers
+gene_list <- c("IGHG1", "IGKC", "GNLY", "KLRD1", "KRT5", "KRT13", "TP63", "MS4A1", "CD79A", 
+               "CD19", "BANK1", "CD2", "CD3D", "CD3E", "CD14", "CD68", "ENG", "PECAM1", 
+               "VWF", "CPA3", "TPSAB1", "TPSB2", "COL1A1", "COL1A2", "COL14A1", "DCN", 
+               "PDGFRB", "THY1", "S100A8", "FFAR2", "CSF3R", "FCGR3B", "CXCR2")
+#add cell Idents into meta.data
+merged_seurat_obj@meta.data$ident <- Idents(merged_seurat_obj)
+#DoHeatmap
+DoHeatmap(merged_seurat_obj, features = gene_list, 
+          group.by = "ident", group.bar.height = 0.01, size = 3, angle = 90, hjust = 0, label = TRUE) + scale_fill_gradient2(low = "blue", mid = "white", high = "red")
+
+#cell proportion
+proportion_data <- merged_seurat_obj@meta.data %>%
+  group_by(sample_type, ident) %>% summarise(count = n()) %>% mutate(proportion = count / sum(count))
+
+ggplot(proportion_data, aes(x = sample_type, y = proportion, fill = ident)) +
+  geom_bar(stat = "identity", position = "stack") +  # 堆叠柱状图
+  labs(x = "Sample Type", y = "Proportion", fill = "Cell Type") +  # 设置坐标轴和图例标题
+  theme_classic() +  # 使用经典主题（独立坐标轴）
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),  # 调整横轴标签角度
+    axis.line = element_line(color = "black"),  # 设置坐标轴颜色
+    panel.grid.major = element_blank(),  # 移除主要网格线
+    panel.grid.minor = element_blank()   # 移除次要网格线
+  )
+
+#get Epi subset
+Epi_cells <- subset(merged_seurat_obj, subset = ident == "Epithelial cells")
+Epi_cells <- NormalizeData(Epi_cells)
+Epi_cells <- FindVariableFeatures(Epi_cells, selection.method = "vst", nfeatures = 2000)
+Epi_cells <- ScaleData(Epi_cells, features = rownames(Epi_cells))
+
+#PCA
+Epi_cells <- RunPCA(Epi_cells, features = VariableFeatures(object = Epi_cells))
+
+#UMAP
+Epi_cells <- RunUMAP(Epi_cells, dims = 1:10)
+
+#find Epi clusters
+Epi_cells <- FindNeighbors(Epi_cells, dims = 1:10)
+Epi_cells <- FindClusters(Epi_cells, resolution = 0.5)
+
+DimPlot(Epi_cells, reduction = "umap", label = TRUE)

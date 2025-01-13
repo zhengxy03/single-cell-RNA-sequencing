@@ -110,6 +110,31 @@ SRX11403386,,HiSeq X Ten
 SRX11403385,,HiSeq X Ten
 SRX11403384,,HiSeq X Ten
 SRX11403383,,HiSeq X Ten
+SRX11403382,,HiSeq X Ten
+SRX11403380,,HiSeq X Ten
+SRX11403379,,HiSeq X Ten
+SRX11403378,,HiSeq X Ten
+SRX11403381,,HiSeq X Ten
+SRX11403377,,HiSeq X Ten
+SRX11403376,,HiSeq X Ten
+SRX11403375,,HiSeq X Ten
+SRX11403374,,HiSeq X Ten
+SRX11403372,,HiSeq X Ten
+SRX11403371,,HiSeq X Ten
+SRX11403370,,HiSeq X Ten
+SRX11403373,,HiSeq X Ten
+SRX11403369,,HiSeq X Ten
+SRX11403368,,HiSeq X Ten
+SRX11403367,,HiSeq X Ten
+SRX11403366,,HiSeq X Ten
+SRX11403364,,HiSeq X Ten
+SRX11403363,,HiSeq X Ten
+SRX11403362,,HiSeq X Ten
+SRX11403365,,HiSeq X Ten
+SRX11403361,,HiSeq X Ten
+SRX11403360,,HiSeq X Ten
+SRX11403359,,HiSeq X Ten
+SRX11403358,,HiSeq X Ten
 EOF
 
 anchr ena info | perl - -v source.csv > ena_info.yml
@@ -190,3 +215,58 @@ DRX435799,,Illumina HiSeq 2500
 DRX435797,,Illumina HiSeq 2500
 DRX435798,,Illumina HiSeq 2500
 EOF
+
+#GSE197677
+
+cat <<EOF > source.csv
+SRR18245527,,Illumina NovaSeq 6000
+SRR18245531,,Illumina NovaSeq 6000
+SRR18245535,,Illumina NovaSeq 6000
+SRR18245539,,Illumina NovaSeq 6000
+SRR18245543,,Illumina NovaSeq 6000
+SRR18245547,,Illumina NovaSeq 6000
+SRR18245528,,Illumina NovaSeq 6000
+SRR18245529,,Illumina NovaSeq 6000
+SRR18245530,,Illumina NovaSeq 6000
+SRR18245532,,Illumina NovaSeq 6000
+SRR18245533,,Illumina NovaSeq 6000
+SRR18245534,,Illumina NovaSeq 6000
+SRR18245536,,Illumina NovaSeq 6000
+SRR18245537,,Illumina NovaSeq 6000
+SRR18245538,,Illumina NovaSeq 6000
+SRR18245540,,Illumina NovaSeq 6000
+SRR18245541,,Illumina NovaSeq 6000
+SRR18245542,,Illumina NovaSeq 6000
+SRR18245544,,Illumina NovaSeq 6000
+SRR18245545,,Illumina NovaSeq 6000
+SRR18245546,,Illumina NovaSeq 6000
+SRR18245548,,Illumina NovaSeq 6000
+SRR18245549,,Illumina NovaSeq 6000
+SRR18245550,,Illumina NovaSeq 6000
+EOF
+
+
+
+
+#
+base_url="https://download.cncb.ac.cn/OMIX/OMIX005710/OMIX005710-"
+
+# 定义文件的后缀范围
+start=3
+end=49
+
+# 循环下载文件
+for i in $(seq -w $start $end); do
+    file_url="${base_url}${i}.tar"
+    echo "Downloading $file_url..."
+    curl -O "$file_url"
+    
+    # 检查下载是否成功
+    if [ $? -eq 0 ]; then
+        echo "Download completed: OMIX005710-${i}.tar"
+    else
+        echo "Failed to download: OMIX005710-${i}.tar"
+    fi
+done
+
+echo "All downloads completed."
