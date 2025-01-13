@@ -38,7 +38,6 @@ dirs <- c(
 )
 
 seurat_objs <- list()
-
 for (i in seq_along(dirs)) {
   dir <- dirs[i]
   print(paste("current_dir:", dir))
@@ -48,6 +47,11 @@ for (i in seq_along(dirs)) {
 }
 print(seurat_objs)
 
+merged_seurat_obj <- merge(seurat_objs[[1]], y = seurat_objs[-1], add.cell.ids = c("Sample1", "Sample2", "Sample3", "Sample4", "Sample5", "Sample6"))
+merged_seurat_obj <- JoinLayers(merged_seurat_obj)
+
+sample_types <- c("tumor", "peri-tumor", "tumor", "peri-tumor", "tumor", "peri-tumor")
+merged_seurat_obj@meta.data$sample_type <- sample_types[as.numeric(factor(merged_seurat_obj@meta.data$orig.ident))]
 
 #format 2:counts_matrix.csv.gz
 setwd()

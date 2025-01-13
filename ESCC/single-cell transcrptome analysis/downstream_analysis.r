@@ -103,3 +103,35 @@ library(monocle)
 CD8 <- subset(t_cells, subset = seurat_clusters %in% c(0, 1, 4, 5))
 CD4 <- subset(t_cells, subset = seurat_clusters %in% c(2,3))
 
+
+#GSE196756
+#quality control
+#calculate the proportion of mitochondria
+merged_seurat_obj[["percent.mt"]] <- PercentageFeatureSet(merged_seurat_obj, pattern = "^MT-")
+#filter low qyality cells
+merged_seurat_obj <- subset(merged_seurat_obj, subset = nFeature_RNA > 200 & nFeature_RNA < 6000 & percent.mt < 50)
+print(paste("过滤后的细胞数量:", ncol(merged_seurat_obj)))
+#33817
+
+
+#further analysis
+merged_seurat_obj <- NormalizeData(merged_seurat_obj)
+merged_seurat_obj <- FindVariableFeatures(merged_seurat_obj, nfeatures = 2000)
+merged_seurat_obj <- ScaleData(merged_seurat_obj)
+merged_seurat_obj <- RunPCA(merged_seurat_obj, npcs = 50)
+
+#correct the batch effects
+library(harmony)
+merged_seurat_obj <- RunHarmony(merged_seurat_obj, group.by.vars = "orig.ident", dims.use = 1:50)
+
+#find clusters based on harmony space
+merged_seurat_obj <- FindNeighbors(merged_seurat_obj, reduction = "harmony", dims = 1:50)
+merged_seurat_obj <- FindClusters(merged_seurat_obj, resolution = 0.5)
+
+#DEGs
+markers <- FindAllMarkers(merged_seurat_obj, min.pct = 0.25, logfc.threshold = 0.25, only.pos = TRUE)
+#UMAP
+merged_seurat_obj <- RunUMAP(merged_seurat_obj, reduction = "harmony", dims = 1:50)
+
+#visualize based on sample types
+DimPlot(merged_seurat_obj, reduction = "umap", group.by = "sample_type")
