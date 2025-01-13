@@ -27,20 +27,21 @@ merged_seurat_obj$response_status <- ifelse(
 
 
 #GSE196756
-setwd("E:/project/ESCC/GSE196756/matrix")
+setwd("E:/project/ESCC/GSE196756/matrix/GSE196756_RAW")
 dirs <- c(
-  "E:/project/ESCC/GSE196756/matrix/GSM5900215_1T",
-  "E:/project/ESCC/GSE196756/matrix/GSM5900216_1N",
-  "E:/project/ESCC/GSE196756/matrix/GSM5900217_2T",
-  "E:/project/ESCC/GSE196756/matrix/GSM5900218_2N",
-  "E:/project/ESCC/GSE196756/matrix/GSM5900219_3T",
-  "E:/project/ESCC/GSE196756/matrix/GSM5900220_3N"
+  "E:/project/ESCC/GSE196756/matrix/GSE196756_RAW/GSM5900215_1T",
+  "E:/project/ESCC/GSE196756/matrix/GSE196756_RAW/GSM5900216_1N",
+  "E:/project/ESCC/GSE196756/matrix/GSE196756_RAW/GSM5900217_2T",
+  "E:/project/ESCC/GSE196756/matrix/GSE196756_RAW/GSM5900218_2N",
+  "E:/project/ESCC/GSE196756/matrix/GSE196756_RAW/GSM5900219_3T",
+  "E:/project/ESCC/GSE196756/matrix/GSE196756_RAW/GSM5900220_3N"
 )
 
 seurat_objs <- list()
 
 for (i in seq_along(dirs)) {
   dir <- dirs[i]
+  print(paste("current_dir:", dir))
   counts_matrix <- Read10X(data.dir = dir)
   seurat_obj <- CreateSeuratObject(counts = counts_matrix, project = paste0("Sample", i))
   seurat_objs[[i]] <- seurat_obj
