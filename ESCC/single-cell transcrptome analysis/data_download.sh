@@ -245,28 +245,36 @@ SRR18245549,,Illumina NovaSeq 6000
 SRR18245550,,Illumina NovaSeq 6000
 EOF
 
-
-
-
 #
-base_url="https://download.cncb.ac.cn/OMIX/OMIX005710/OMIX005710-"
-
-# 定义文件的后缀范围
-start=3
-end=49
-
-# 循环下载文件
-for i in $(seq -w $start $end); do
-    file_url="${base_url}${i}.tar"
-    echo "Downloading $file_url..."
-    curl -O "$file_url"
-    
-    # 检查下载是否成功
-    if [ $? -eq 0 ]; then
-        echo "Download completed: OMIX005710-${i}.tar"
-    else
-        echo "Failed to download: OMIX005710-${i}.tar"
-    fi
-done
-
-echo "All downloads completed."
+cat <<EOF > source.csv
+SRX12995859
+SRX12995858
+SRX12995857
+SRX12995855
+SRX12995852
+SRX12995850
+SRX12995846
+SRX12995844
+SRX12995839
+SRX12995838
+SRX12995835
+SRX12995830
+SRX12995829
+SRX12995851
+SRX12995849
+SRX12995856
+SRX12995847
+SRX12995854
+SRX12995845
+SRX12995853
+SRX12995842
+SRX12995848
+SRX12995837
+SRX12995843
+SRX12995834
+SRX12995841
+SRX12995833
+SRX12995840
+SRX12995831
+SRX12995836
+SRX12995832

@@ -267,3 +267,6 @@ pheatmap(enrichment_matrix_zscore,
          show_rownames = TRUE,  # 显示行名
          angle_col = 0)
 
+#KM-plot
+#http://kmplot.com/analysis/
+#choose pan-cancer
