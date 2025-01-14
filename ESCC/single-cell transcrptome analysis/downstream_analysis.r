@@ -202,6 +202,7 @@ markers <- FindMarkers(Epi_cells,
                        test.use = "wilcox",  # 使用 Wilcoxon rank sum test
                        logfc.threshold = 0.25)
 
+#volano figure
 markers$gene <- rownames(markers)
 markers$neg_log10_pval <- -log10(markers$p_val)
 markers$diffexpressed <- "No"
@@ -216,3 +217,53 @@ ggplot(markers, aes(x = avg_log2FC, y = neg_log10_pval, color = diffexpressed)) 
   theme(legend.position = "top") +
   geom_hline(yintercept = -log10(0.05), linetype = "dashed", color = "black") + 
   geom_vline(xintercept = c(-0.25, 0.25), linetype = "dashed", color = "black")
+
+
+#enrichment analysis
+#GSVA
+BiocManager::install("GSVA")
+library(GSVA)
+
+#normalized expression matrix
+expression_matrix <- as.matrix(Epi_cells@assays$RNA$data)
+
+#import gene set
+#https://www.gsea-msigdb.org/gsea/msigdb/human/collections.jsp#H
+gmt_file <- "../../h.all.v2024.1.Hs.symbols.gmt"
+gene_sets <- GSEABase::getGmt(gmt_file)
+
+#Run GSVA
+gsvaPar <- ssgseaParam(exprData = expression_matrix, 
+                       geneSets = gene_sets,
+                       normalize = TRUE)
+gsva_results <- GSVA::gsva(gsvaPar, verbose = FALSE)
+
+#calculate enrichment score
+group_info <- Epi_cells@meta.data$sample_type2
+tumor_samples <- colnames(gsva_results)[group_info == "T"]
+tumor_means <- rowMeans(gsva_results[, tumor_samples, drop = FALSE])
+
+normal_samples <- colnames(gsva_results)[group_info == "N"]
+normal_means <- rowMeans(gsva_results[, normal_samples, drop = FALSE])
+
+enrichment_matrix <- cbind(T = tumor_means, N = normal_means)
+rownames(enrichment_matrix) <- gsub("^HALLMARK_", "", rownames(enrichment_matrix))
+#z-score normalized
+enrichment_matrix_zscore <- t(scale(t(enrichment_matrix))) 
+
+#heatmap
+#pheatmap
+install.packages("pheatmap")
+library(pheatmap)
+
+pheatmap(enrichment_matrix_zscore, 
+         scale = "none",  # 不进行额外标准化（因为已经 z-score 标准化）
+         cluster_rows = TRUE,  # 启用行聚类
+         cluster_cols = TRUE,  # 启用列聚类
+         treeheight_row = 0,  # 隐藏行聚类树
+         treeheight_col = 0,  # 隐藏列聚类树
+         color = colorRampPalette(c("blue", "white", "red"))(100),
+         show_colnames = TRUE,  # 显示列名
+         show_rownames = TRUE,  # 显示行名
+         angle_col = 0)
+
