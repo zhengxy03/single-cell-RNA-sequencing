@@ -93,14 +93,44 @@ VlnPlot(t_cells, features = genes_to_plot, group.by = "seurat_clusters", pt.size
 DotPlot(t_cells, features = genes_to_plot, group.by = "seurat_clusters") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
+#Trajectory analysis
 #Monocle2
 if (!requireNamespace("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 BiocManager::install("monocle")
-library(monocle)
+library(monocle)  #版本不兼容，看看以后会不会更新🌚
+
+#Slightshot
+BiocManager::install("slingshot")
 
 CD8 <- subset(t_cells, subset = seurat_clusters %in% c(0, 1, 4, 5))
 CD4 <- subset(t_cells, subset = seurat_clusters %in% c(2,3))
+#convert Seurat_obj to SingleCellExperiment_obj
+cd8_sce <- as.SingleCellExperiment(CD8)
+
+#Run slightshot
+cd8_sce <- slingshot(cd8_sce, clusterLabels = "seurat_clusters", reducedDim = "UMAP")
+trajectories <- slingCurves(cd8_sce)
+
+#plot
+umap_data <- as.data.frame(Embeddings(CD8, reduction = "umap"))
+umap_data$response_status <- CD8$response_status
+curve_data <- as.data.frame(trajectories[[1]]$s[trajectories[[1]]$ord, ])
+
+ggplot(umap_data, aes(x = umap_1, y = umap_2, color = response_status)) +
+  geom_point(size = 2, alpha = 0.8, shape = 16) +
+  geom_path(data = curve_data, aes(x = umap_1, y = umap_2), 
+            color = "black", size = 1.5, linetype = "solid") +
+  scale_color_npg() +  # 使用 Nature Publishing Group 配色
+  theme_classic() +
+  ggtitle("Trajectory Analysis of CD8 T Cells by Response Status") +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"), 
+    legend.position = "right",
+    legend.title = element_blank()  # 隐藏图例标题
+  )
+
+
 
 
 #GSE196756
