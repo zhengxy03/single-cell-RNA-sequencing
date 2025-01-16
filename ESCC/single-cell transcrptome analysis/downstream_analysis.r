@@ -405,6 +405,7 @@ slingshot_obj <- slingshot(umap_coords, clusterLabels = cell_types)
 # Trajectory curves
 curves <- slingCurves(slingshot_obj)
 length(curves)
+#2
 
 # Pseudotime info
 pseudotime <- slingPseudotime(slingshot_obj)
@@ -420,7 +421,7 @@ library(ggsci)
 plot_data <- data.frame(
   UMAP1 = umap_coords[, 1], 
   UMAP2 = umap_coords[, 2], 
-  Pseudotime = pseudotime[, 1], 
+  Pseudotime = pseudotime[, 1], # 使用第一个轨迹的伪时间(改成2就是第二个轨迹)
   Cluster = cell_types
 )
 
@@ -520,3 +521,47 @@ p2 <- p2 + geom_text(
 )
 
 print(p2)
+
+# 绘制第一条轨迹伪时间密度图
+p3 <- ggplot(plot_data, aes(x = Pseudotime, fill = Cluster)) +
+  geom_density(alpha = 0.5, adjust = 4) +  # 绘制密度图，设置透明度, adjust：控制带宽的缩放因子。默认值为 1，增加该值可以平滑密度图
+  scale_fill_npg() +  # 使用 Nature 风格的配色方案
+  theme_classic(base_size = 12) +  # 使用经典主题，设置基础字号
+  theme(
+    panel.border = element_rect(color = "black", fill = NA, size = 1),  # 添加实线边框
+    axis.line = element_line(size = 0.8),  # 加粗坐标轴线
+    axis.title = element_text(size = 14, face = "bold"),  # 坐标轴标题字体
+    axis.text = element_text(size = 12, color = "black"),  # 坐标轴刻度字体
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),  # 图标题字体
+    legend.title = element_text(size = 12, face = "bold"),  # 图例标题字体
+    legend.text = element_text(size = 10),  # 图例文字字体
+    legend.position = "right"  # 图例位置
+  ) +
+  labs(title = "Pseudotime Density Plot", x = "Pseudotime", y = "Density")
+print(p3)
+
+#split to 8 pics
+p4 <- ggplot(plot_data, aes(x = Pseudotime, fill = Cluster)) +
+  geom_density(alpha = 0.5, adjust = 4) +  # 填充颜色，设置透明度，调整带宽
+  scale_fill_npg() +  # 使用 Nature 风格的配色方案
+  facet_wrap(~ Cluster, ncol = 1) +  # 按细胞类型分面，一列显示
+  theme_classic(base_size = 12) +  # 使用经典主题，设置基础字号
+  theme(
+    panel.border = element_rect(color = "black", fill = NA, size = 1),  # 添加实线边框
+    axis.line = element_line(size = 0.8),  # 加粗坐标轴线
+    axis.title = element_text(size = 14, face = "bold"),  # 坐标轴标题字体
+    axis.text = element_text(size = 12, color = "black"),  # 坐标轴刻度字体
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),  # 图标题字体
+    legend.title = element_text(size = 12, face = "bold"),  # 图例标题字体
+    legend.text = element_text(size = 10),  # 图例文字字体
+    legend.position = "right",  # 图例位置
+    axis.text.y = element_blank(),  # 去掉 y 轴刻度
+    axis.ticks.y = element_blank(),  # 去掉 y 轴刻度线
+    axis.title.y = element_blank(),  # 去掉 y 轴标题
+    strip.background = element_blank(),  # 去掉分面标签背景
+    strip.text = element_text(size = 12, face = "bold"),  # 分面标签字体
+    panel.spacing = unit(0.1, "lines")  # 调整分面图之间的间距，使其更紧凑
+  ) +
+  labs(title = "Pseudotime Density Plot by Cell Type", x = "Pseudotime")
+
+print(p4)
