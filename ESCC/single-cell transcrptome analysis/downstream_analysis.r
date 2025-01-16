@@ -142,7 +142,6 @@ merged_seurat_obj <- subset(merged_seurat_obj, subset = nFeature_RNA > 200 & nFe
 print(paste("过滤后的细胞数量:", ncol(merged_seurat_obj)))
 #33817
 
-
 #further analysis
 merged_seurat_obj <- NormalizeData(merged_seurat_obj)
 merged_seurat_obj <- FindVariableFeatures(merged_seurat_obj, nfeatures = 2000)
@@ -205,6 +204,7 @@ ggplot(proportion_data, aes(x = sample_type, y = proportion, fill = ident)) +
 
 #get Epi subset
 Epi_cells <- subset(merged_seurat_obj, subset = ident == "Epithelial cells")
+#3318
 Epi_cells <- NormalizeData(Epi_cells)
 Epi_cells <- FindVariableFeatures(Epi_cells, selection.method = "vst", nfeatures = 2000)
 Epi_cells <- ScaleData(Epi_cells, features = rownames(Epi_cells))
@@ -232,7 +232,14 @@ markers <- FindMarkers(Epi_cells,
                        test.use = "wilcox",  # 使用 Wilcoxon rank sum test
                        logfc.threshold = 0.25)
 
+
+
 #volano figure
+library(ggplot2)
+library(dplyr)
+library(ggrepel)
+
+top_genes <- markers %>% arrange(p_val) %>% head(10)
 markers$gene <- rownames(markers)
 markers$neg_log10_pval <- -log10(markers$p_val)
 markers$diffexpressed <- "No"
@@ -246,8 +253,18 @@ ggplot(markers, aes(x = avg_log2FC, y = neg_log10_pval, color = diffexpressed)) 
   theme_minimal() +
   theme(legend.position = "top") +
   geom_hline(yintercept = -log10(0.05), linetype = "dashed", color = "black") + 
-  geom_vline(xintercept = c(-0.25, 0.25), linetype = "dashed", color = "black")
-
+  geom_vline(xintercept = c(-0.25, 0.25), linetype = "dashed", color = "black") +
+  geom_text_repel(
+    data = top_genes,  # 选择要标注的基因
+    aes(label = gene),  # 标注基因名称
+    color = "black",  # 文本颜色
+    size = 3,  # 文本大小
+    box.padding = 0.5,  # 文本与点之间的间距
+    segment.color = "black",  # 短线颜色
+    segment.size = 0.5,  # 短线粗细
+    min.segment.length = 0,  # 短线最小长度
+    max.overlaps = Inf  # 允许的最大重叠次数
+  )
 
 #enrichment analysis
 #GSVA
@@ -300,3 +317,75 @@ pheatmap(enrichment_matrix_zscore,
 #KM-plot
 #http://kmplot.com/analysis/
 #choose pan-cancer
+
+
+
+
+#analysis fibroblast
+Fibroblast_cells <- subset(merged_seurat_obj, subset = ident == "Fibroblast")
+#3635
+Fibroblast_cells <- NormalizeData(Fibroblast_cells)
+Fibroblast_cells <- FindVariableFeatures(Fibroblast_cells, selection.method = "vst", nfeatures = 2000)
+Fibroblast_cells <- ScaleData(Fibroblast_cells, features = rownames(Fibroblast_cells))
+
+#PCA
+Fibroblast_cells <- RunPCA(Fibroblast_cells, features = VariableFeatures(object = Fibroblast_cells))
+
+#UMAP
+Fibroblast_cells <- RunUMAP(Fibroblast_cells, dims = 1:10)
+
+#find Epi clusters
+Fibroblast_cells <- FindNeighbors(Fibroblast_cells, dims = 1:10)
+Fibroblast_cells <- FindClusters(Fibroblast_cells, resolution = 0.25)
+
+DimPlot(Fibroblast_cells, reduction = "umap", group.by = "seurat_clusters", label = TRUE)
+#visualize based on sample types
+DimPlot(Fibroblast_cells, reduction = "umap", group.by = "sample_type")
+
+#DEGs
+markers <- FindAllMarkers(Fibroblast_cells, min.pct = 0.25, logfc.threshold = 0.25, only.pos = TRUE)
+significant_markers <- subset(markers, p_val_adj < 0.05)
+write.csv(significant_markers,"fibro_marker.csv")
+
+#cell annotation
+new.cluster.ids <- c("iCAFs", "iCAFs", "myCAFs", "iCAFs", "myCAFs", "iCAFs", "myCAFs", "iCAFs", "myCAFs", "myCAFs", "iCAFs", "iCAFs")
+names(new.cluster.ids) <- levels(Fibroblast_cells)
+Fibroblast_cells <- RenameIdents(Fibroblast_cells, new.cluster.ids)
+Fibroblast_cells$Idents <- Idents(Fibroblast_cells)
+DimPlot(Fibroblast_cells, reduction = "umap", group.by = "Idents", label = TRUE, pt.size = 0.5)
+
+#featureplot
+genes_to_plot <- c("CFD", "CXCL12", "ACTA2", "TAGLN")
+FeaturePlot(Fibroblast_cells, features = genes_to_plot)
+
+
+
+#T cells analysis
+t_cells <- subset(merged_seurat_obj, subset = ident == "T cells")
+#6427
+t_cells <- NormalizeData(t_cells)
+t_cells <- FindVariableFeatures(t_cells, selection.method = "vst", nfeatures = 2000)
+t_cells <- ScaleData(t_cells, features = rownames(t_cells))
+
+#PCA
+t_cells <- RunPCA(t_cells, features = VariableFeatures(object = t_cells))
+
+#UMAP
+t_cells <- RunUMAP(t_cells, dims = 1:10)
+
+
+#find T clusters
+t_cells <- FindNeighbors(t_cells, dims = 1:10)
+t_cells <- FindClusters(t_cells, resolution = 0.2)
+
+DimPlot(t_cells, reduction = "umap", group.by = "seurat_clusters", label = TRUE)
+#annotation
+t_cell_markers <- FindAllMarkers(t_cells, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use = "wilcox")
+t_significant_markers <- subset(t_cell_markers, p_val_adj < 0.05)
+write.csv(t_significant_markers, "t_marker.csv")
+
+#t cells annotation
+new.cluster.ids <- c("CD8+Tem", "CD8+Tex", "CD4+Tcm", "CD4+Treg", "CD8+Tex", "CD8+Tex", "Cycling T", "Cycling T", "Cycling T", "NK")
+names(new.cluster.ids) <- levels(t_cells)
+t_cells <- RenameIdents(t_cells, new.cluster.ids)
+DimPlot(t_cells, reduction = "umap", label = TRUE, pt.size = 0.5)

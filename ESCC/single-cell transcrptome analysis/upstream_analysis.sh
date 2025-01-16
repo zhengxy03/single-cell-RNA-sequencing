@@ -45,19 +45,21 @@ cellranger count --id=SRR19226083 \
 
 #batch process
 declare -a samples=(
-  "SRR19226088"
-  "SRR19226089"
-  "SRR19226084"
-  "SRR19226086"
-)
   "SRR19226087"
   "SRR19226090"
   "SRR19226091"
   "SRR19226092"
   "SRR19226093"
   "SRR19226094"
+)
+
 
   "SRR19226085"
+  "SRR19226088"
+  "SRR19226089"
+  "SRR19226084"
+  "SRR19226086"
+
 for sample_prefix in "${samples[@]}"; do
     echo "now processing $sample_prefix"
     cellranger count --id="$sample_prefix" \
@@ -70,8 +72,13 @@ done
 
 #Integration of results
 cat <<EOF > aggregation.csv
+sample_id,molecule_h5
 SRR19226083,/home/zxy0303/project/project/ESCC/GSE203115/SRR19226083/outs/molecule_info.h5
-SRR19226084,
-SRR19226085,
-SRR19226086,
+SRR19226084,/home/zxy0303/project/project/ESCC/GSE203115/SRR19226084/outs/molecule_info.h5
+SRR19226085,/home/zxy0303/project/project/ESCC/GSE203115/SRR19226085/outs/molecule_info.h5
+SRR19226086,/home/zxy0303/project/project/ESCC/GSE203115/SRR19226086/outs/molecule_info.h5
 EOF
+
+cellranger aggr --id=Esc1 \
+                --csv=aggregation.csv \
+                --normalize=mapped
