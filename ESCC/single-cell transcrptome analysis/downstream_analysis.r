@@ -102,6 +102,7 @@ library(monocle)  #版本不兼容，看看以后会不会更新🌚
 
 #Slightshot
 BiocManager::install("slingshot")
+library(slightshot)
 
 CD8 <- subset(t_cells, subset = seurat_clusters %in% c(0, 1, 4, 5))
 CD4 <- subset(t_cells, subset = seurat_clusters %in% c(2,3))
@@ -385,7 +386,137 @@ t_significant_markers <- subset(t_cell_markers, p_val_adj < 0.05)
 write.csv(t_significant_markers, "t_marker.csv")
 
 #t cells annotation
-new.cluster.ids <- c("CD8+Tem", "CD8+Tex", "CD4+Tcm", "CD4+Treg", "CD8+Tex", "CD8+Tex", "Cycling T", "Cycling T", "Cycling T", "NK")
+new.cluster.ids <- c("CD4 CCR7", "CD4 TRBV28", "CD4 Treg", "CD4 IL6R", "CD4 IL17F", "CD4 HAVCR2", "CD8-1", "CD8-2", "CD8-2", "CD8-1")
 names(new.cluster.ids) <- levels(t_cells)
 t_cells <- RenameIdents(t_cells, new.cluster.ids)
-DimPlot(t_cells, reduction = "umap", label = TRUE, pt.size = 0.5)
+t_cells$Idents <- Idents(t_cells)
+DimPlot(t_cells, reduction = "umap", group.by = "Idents", label = TRUE, pt.size = 0.5)
+
+# Pseudotime analysis
+library(slingshot)
+
+# Get UMAP coordinates
+umap_coords <- Embeddings(t_cells, reduction = "umap")
+cell_types <- Idents(t_cells)
+
+# Trajectory analysis
+slingshot_obj <- slingshot(umap_coords, clusterLabels = cell_types)
+
+# Trajectory curves
+curves <- slingCurves(slingshot_obj)
+length(curves)
+
+# Pseudotime info
+pseudotime <- slingPseudotime(slingshot_obj)
+head(pseudotime)
+
+# Visualize pseudotime
+library(ggplot2)
+library(viridis)
+library(dplyr)
+library(ggsci)
+
+# Create a data frame for plotting
+plot_data <- data.frame(
+  UMAP1 = umap_coords[, 1], 
+  UMAP2 = umap_coords[, 2], 
+  Pseudotime = pseudotime[, 1], 
+  Cluster = cell_types
+)
+
+# 计算点的边界范围
+x_min <- min(plot_data$UMAP1)
+x_max <- max(plot_data$UMAP1)
+y_min <- min(plot_data$UMAP2)
+y_max <- max(plot_data$UMAP2)
+
+# Plot with modified aesthetics
+lineage_colors <- c("#CCCCCC", "#666666")  #浅灰和深灰
+
+p1 <- ggplot(plot_data, aes(x = UMAP1, y = UMAP2, color = Pseudotime)) +
+  geom_point(size = 1.5, alpha = 0.7, shape = 16) +  # 调整点的大小和透明度
+  scale_color_gradientn(colors = c("#F7FBFF", "#6BAED6", "#08306B")) +  # 蓝色渐变
+  theme_classic(base_size = 12) +  # 使用经典主题，设置基础字号
+  theme(
+    panel.border = element_rect(color = "black", fill = NA, size = 1),  # 添加实线边框
+    axis.line = element_line(size = 0.8),  # 加粗坐标轴线
+    axis.title = element_text(size = 14, face = "bold"),  # 坐标轴标题字体
+    axis.text = element_text(size = 12, color = "black"),  # 坐标轴刻度字体
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),  # 图标题字体
+    legend.title = element_text(size = 12, face = "bold"),  # 图例标题字体
+    legend.text = element_text(size = 10),  # 图例文字字体
+    legend.position = "right"  # 图例位置
+  ) +
+  labs(title = "Pseudotime Trajectory of T Cells", x = "UMAP1", y = "UMAP2")
+
+# Add trajectory curves with smaller arrows
+for (i in seq_along(curves)) {
+  curve_data <- as.data.frame(curves[[i]]$s[curves[[i]]$ord, ])
+  
+  # 裁剪轨迹线，确保不超出点的边界范围
+  curve_data <- curve_data %>%
+    filter(umap_1 >= x_min & umap_1 <= x_max & umap_2 >= y_min & umap_2 <= y_max)
+  
+  p1 <- p1 + geom_path(
+    data = curve_data, 
+    aes(x = umap_1, y = umap_2), 
+    color = lineage_colors[i],  # 每个分支使用不同颜色
+    size = 1.2,  # 轨迹线粗细
+    arrow = arrow(type = "closed", length = unit(0.15, "inches"))  # 箭头大小
+  )
+}
+print(p1)
+
+# 计算每个细胞类型的中心位置（用于标注）
+cell_type_centers <- plot_data %>%
+  group_by(Cluster) %>%
+  summarise(
+    UMAP1 = median(UMAP1),  # 使用中位数作为中心位置
+    UMAP2 = median(UMAP2)
+  )
+
+p2 <- ggplot(plot_data, aes(x = UMAP1, y = UMAP2, color = cell_types)) +
+  geom_point(size = 1.5, alpha = 0.7) +  # 调整点的大小和透明度
+  scale_color_npg() +  # 使用 Nature 风格的配色方案
+  theme_classic(base_size = 12) +  # 使用经典主题，设置基础字号
+  theme(
+    panel.border = element_rect(color = "black", fill = NA, size = 1),  # 添加实线边框
+    axis.line = element_line(size = 0.8),  # 加粗坐标轴线
+    axis.title = element_text(size = 14, face = "bold"),  # 坐标轴标题字体
+    axis.text = element_text(size = 12, color = "black"),  # 坐标轴刻度字体
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),  # 图标题字体
+    legend.title = element_text(size = 12, face = "bold"),  # 图例标题字体
+    legend.text = element_text(size = 10),  # 图例文字字体
+    legend.position = "right"  # 图例位置
+  ) +
+  labs(title = "Cell Type Classification", x = "UMAP1", y = "UMAP2")
+
+for (i in seq_along(curves)) {
+  curve_data <- as.data.frame(curves[[i]]$s[curves[[i]]$ord, ])
+  
+  # 裁剪轨迹线，确保不超出点的边界范围
+  curve_data <- curve_data %>%
+    filter(umap_1 >= min(plot_data$UMAP1) & umap_1 <= max(plot_data$UMAP1) &
+           umap_2 >= min(plot_data$UMAP2) & umap_2 <= max(plot_data$UMAP2))
+  
+  p2 <- p2 + geom_path(
+    data = curve_data, 
+    aes(x = umap_1, y = umap_2), 
+    color = "black",  # 轨迹线颜色
+    size = 1,  # 轨迹线粗细
+    arrow = arrow(type = "closed", length = unit(0.1, "inches"))  # 箭头大小
+  )
+}
+
+# 添加细胞类型标注
+p2 <- p2 + geom_text(
+  data = cell_type_centers, 
+  aes(x = UMAP1, y = UMAP2, label = Cluster), 
+  color = "black",  # 标注颜色
+  size = 2.5,  # 标注字体大小
+  fontface = "bold",  # 标注字体加粗
+  vjust = 1.5,  # 垂直调整位置
+  hjust = 1.5   # 水平调整位置
+)
+
+print(p2)
