@@ -392,32 +392,33 @@ t_cells <- RenameIdents(t_cells, new.cluster.ids)
 t_cells$Idents <- Idents(t_cells)
 DimPlot(t_cells, reduction = "umap", group.by = "Idents", label = TRUE, pt.size = 0.5)
 
-# Pseudotime analysis
+#Pseudotime analysis
 library(slingshot)
 
-# Get UMAP coordinates
+#Get UMAP coordinates
 umap_coords <- Embeddings(t_cells, reduction = "umap")
 cell_types <- Idents(t_cells)
 
-# Trajectory analysis
+#Trajectory analysis
 slingshot_obj <- slingshot(umap_coords, clusterLabels = cell_types)
 
-# Trajectory curves
+#Trajectory curves
 curves <- slingCurves(slingshot_obj)
 length(curves)
 #2
 
-# Pseudotime info
+#Pseudotime info
 pseudotime <- slingPseudotime(slingshot_obj)
 head(pseudotime)
 
-# Visualize pseudotime
+#Visualize pseudotime
 library(ggplot2)
 library(viridis)
 library(dplyr)
 library(ggsci)
+library(tidyr)
 
-# Create a data frame for plotting
+#Create a data frame for plotting
 plot_data <- data.frame(
   UMAP1 = umap_coords[, 1], 
   UMAP2 = umap_coords[, 2], 
@@ -425,13 +426,13 @@ plot_data <- data.frame(
   Cluster = cell_types
 )
 
-# 计算点的边界范围
+#calculate point boundary
 x_min <- min(plot_data$UMAP1)
 x_max <- max(plot_data$UMAP1)
 y_min <- min(plot_data$UMAP2)
 y_max <- max(plot_data$UMAP2)
 
-# Plot with modified aesthetics
+#Plot with modified aesthetics
 lineage_colors <- c("#CCCCCC", "#666666")  #浅灰和深灰
 
 p1 <- ggplot(plot_data, aes(x = UMAP1, y = UMAP2, color = Pseudotime)) +
@@ -450,7 +451,7 @@ p1 <- ggplot(plot_data, aes(x = UMAP1, y = UMAP2, color = Pseudotime)) +
   ) +
   labs(title = "Pseudotime Trajectory of T Cells", x = "UMAP1", y = "UMAP2")
 
-# Add trajectory curves with smaller arrows
+#Add trajectory curves with smaller arrows
 for (i in seq_along(curves)) {
   curve_data <- as.data.frame(curves[[i]]$s[curves[[i]]$ord, ])
   
@@ -468,7 +469,7 @@ for (i in seq_along(curves)) {
 }
 print(p1)
 
-# 计算每个细胞类型的中心位置（用于标注）
+#Calculate the center position of each cell type (for labeling)
 cell_type_centers <- plot_data %>%
   group_by(Cluster) %>%
   summarise(
@@ -509,7 +510,7 @@ for (i in seq_along(curves)) {
   )
 }
 
-# 添加细胞类型标注
+#add cell types annotation
 p2 <- p2 + geom_text(
   data = cell_type_centers, 
   aes(x = UMAP1, y = UMAP2, label = Cluster), 
@@ -522,7 +523,7 @@ p2 <- p2 + geom_text(
 
 print(p2)
 
-# 绘制第一条轨迹伪时间密度图
+#Plotting the pseudotime density of the first trajectory
 p3 <- ggplot(plot_data, aes(x = Pseudotime, fill = Cluster)) +
   geom_density(alpha = 0.5, adjust = 4) +  # 绘制密度图，设置透明度, adjust：控制带宽的缩放因子。默认值为 1，增加该值可以平滑密度图
   scale_fill_npg() +  # 使用 Nature 风格的配色方案
@@ -565,3 +566,76 @@ p4 <- ggplot(plot_data, aes(x = Pseudotime, fill = Cluster)) +
   labs(title = "Pseudotime Density Plot by Cell Type", x = "Pseudotime")
 
 print(p4)
+
+#enrichment analysis with pseudotime info
+#extract cd4 T cells
+cd4_cells <- subset(t_cells, idents = grep("^CD4", levels(Idents(t_cells)), value = TRUE))
+cd4_cell_names <- colnames(cd4_cells)
+#extract Lineage1 pseudotime
+cd4_pseudotime <- pseudotime[cd4_cell_names, 1]
+#extract hallmark genesets
+hallmark_genesets <- read.gmt("../../h.all.v2024.1.Hs.symbols.gmt")
+hallmark_pathway_genes <- split(hallmark_genesets$gene, hallmark_genesets$term)
+
+#calculate hallmark pathway scores
+hallmark_pathway_scores <- matrix(NA, nrow = length(hallmark_pathway_genes), ncol = ncol(cd4_cells))
+rownames(hallmark_pathway_scores) <- names(hallmark_pathway_genes)
+colnames(hallmark_pathway_scores) <- colnames(cd4_cells)
+
+for (i in 1:length(hallmark_pathway_genes)) {
+  genes <- hallmark_pathway_genes[[i]]
+  genes <- genes[genes %in% rownames(cd4_cells)]  # 只保留表达矩阵中存在的基因
+  if (length(genes) > 0) {
+    hallmark_pathway_scores[i, ] <- colMeans(GetAssayData(cd4_cells, slot = "data")[genes, ])
+  }
+}
+
+hallmark_pathway_scores <- hallmark_pathway_scores[rowSums(is.na(hallmark_pathway_scores)) == 0, ]
+
+#ordered by pseudoime
+ordered_cells <- order(cd4_pseudotime)
+hallmark_pathway_scores_ordered <- hallmark_pathway_scores[, ordered_cells]
+
+#z-score standardization
+hallmark_pathway_scores_zscore <- t(scale(t(hallmark_pathway_scores_ordered)))
+
+#calculate pathway mean scores & sort
+hallmark_pathway_mean_scores <- rowMeans(hallmark_pathway_scores_zscore, na.rm = TRUE)
+
+top_30_hallmark_pathways <- names(sort(hallmark_pathway_mean_scores, decreasing = TRUE))[1:30]
+hallmark_pathway_scores_zscore_top30 <- hallmark_pathway_scores_zscore[top_30_hallmark_pathways, ]
+
+#plot
+library(pheatmap)
+
+# pseudotime annotation
+annotation_col <- data.frame(
+  Pseudotime = cd4_pseudotime[ordered_cells]
+)
+rownames(annotation_col) <- colnames(hallmark_pathway_scores_zscore_top30)
+
+pheatmap(
+  hallmark_pathway_scores_zscore_top30,
+  cluster_rows = TRUE,  # 对通路进行聚类
+  cluster_cols = FALSE, # 不对细胞进行聚类（已按伪时间排序）
+  show_colnames = FALSE, # 不显示细胞名称
+  annotation_col = annotation_col,
+  color = colorRampPalette(c("blue", "white", "red"))(100),
+  scale = "none",  # 已经 Z-score 标准化，无需再次标准化
+  main = "Top 30 HALLMARK Pathway Score Dynamics Along Pseudotime"
+)
+
+
+
+
+# 将伪时间分为四个阶段
+cd4_pseudotime_stage <- cut(
+    cd4_pseudotime,
+    breaks = quantile(cd4_pseudotime, probs = seq(0, 1, length.out = 5), na.rm = TRUE),  # 忽略缺失值
+    include.lowest = TRUE,
+    labels = c("Stage1", "Stage2", "Stage3", "Stage4")
+)
+cd4_cells$pseudotime_stage <- cd4_pseudotime_stage
+
+# 设置 ident 为伪时间阶段
+Idents(cd4_cells) <- cd4_cells$pseudotime_stage
