@@ -100,36 +100,6 @@ if (!requireNamespace("BiocManager", quietly = TRUE))
 BiocManager::install("monocle")
 library(monocle)  #igraph版本不兼容，看看以后会不会更新🌚
 
-#use monocle3 for a try
-#In Monocle3, the default method of dimensionality reduction is UMAP or t-SNE, not DDRTree
-install.packages("devtools")
-devtools::install_github("cole-trapnell-lab/monocle3")
-
-# 提取表达矩阵
-expression_matrix <- LayerData(cd4_tcells, assay = "RNA", layer = "counts")
-
-# 提取细胞元数据
-cell_metadata <- cd4_tcells@meta.data
-
-# 提取基因注释信息
-gene_annotation <- data.frame(gene_short_name = rownames(cd4_tcells), row.names = rownames(cd4_tcells))
-
-library(monocle3)
-
-# 创建 cell_data_set 对象
-cds <- new_cell_data_set(
-  expression_matrix,
-  cell_metadata = cell_metadata,
-  gene_metadata = gene_annotation
-)
-
-cds <- preprocess_cds(cds, num_dim = 50)  # 使用前 50 个主成分
-cds <- reduce_dimension(cds)  # 默认使用 UMAP
-
-cds <- cluster_cells(cds)
-cds <- learn_graph(cds)
-plot_cells(cds, color_cells_by = "seurat_clusters", label_groups_by_cluster = FALSE)
-
 
 #Slightshot
 BiocManager::install("slingshot")
@@ -162,6 +132,45 @@ ggplot(umap_data, aes(x = umap_1, y = umap_2, color = response_status)) +
     legend.title = element_blank()  # 隐藏图例标题
   )
 
+#use monocle3 for a try
+#In Monocle3, the default method of dimensionality reduction is UMAP or t-SNE, not DDRTree
+install.packages("devtools")
+devtools::install_github("cole-trapnell-lab/monocle3")
+library(monocle3)
+
+#data preparation
+cd4_tcells <- subset(t_cells, idents = c("CD4+Tcm", "CD4+Treg"))
+expression_matrix <- LayerData(cd4_tcells, assay = "RNA", layer = "counts")
+cell_metadata <- cd4_tcells@meta.data
+gene_annotation <- data.frame(gene_short_name = rownames(cd4_tcells), row.names = rownames(cd4_tcells))
+
+#create cell_data_set obj
+cds <- new_cell_data_set(
+  expression_matrix,
+  cell_metadata = cell_metadata,
+  gene_metadata = gene_annotation
+)
+
+#standardize  and reduce dimension
+cds <- preprocess_cds(cds, num_dim = 50)  # 使用前 50 个主成分
+cds <- reduce_dimension(cds)  # 默认使用 UMAP
+
+#find clusters and learn curves
+cds <- cluster_cells(cds)
+cds <- learn_graph(cds)
+plot_cells(cds, color_cells_by = "seurat_clusters", label_groups_by_cluster = FALSE)
+
+#View Pseudo Time Distribution
+cds <- order_cells(cds)
+plot_cells(cds, color_cells_by = "pseudotime")
+
+#find genes relate to pseudotime
+pr_test_res <- graph_test(cds, neighbor_graph = "principal_graph", cores = 4)
+sig_genes <- subset(pr_test_res, q_value < 0.05)
+head(sig_genes[order(sig_genes$q_value), ])
+
+#visualize gene expression
+plot_cells(cds, genes = sig_genes$gene_short_name[1:6], show_trajectory_graph = FALSE)
 
 
 
