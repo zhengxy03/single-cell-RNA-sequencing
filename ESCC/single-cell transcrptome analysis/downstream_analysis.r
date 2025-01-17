@@ -98,7 +98,38 @@ DotPlot(t_cells, features = genes_to_plot, group.by = "seurat_clusters") +
 if (!requireNamespace("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 BiocManager::install("monocle")
-library(monocle)  #版本不兼容，看看以后会不会更新🌚
+library(monocle)  #igraph版本不兼容，看看以后会不会更新🌚
+
+#use monocle3 for a try
+#In Monocle3, the default method of dimensionality reduction is UMAP or t-SNE, not DDRTree
+install.packages("devtools")
+devtools::install_github("cole-trapnell-lab/monocle3")
+
+# 提取表达矩阵
+expression_matrix <- LayerData(cd4_tcells, assay = "RNA", layer = "counts")
+
+# 提取细胞元数据
+cell_metadata <- cd4_tcells@meta.data
+
+# 提取基因注释信息
+gene_annotation <- data.frame(gene_short_name = rownames(cd4_tcells), row.names = rownames(cd4_tcells))
+
+library(monocle3)
+
+# 创建 cell_data_set 对象
+cds <- new_cell_data_set(
+  expression_matrix,
+  cell_metadata = cell_metadata,
+  gene_metadata = gene_annotation
+)
+
+cds <- preprocess_cds(cds, num_dim = 50)  # 使用前 50 个主成分
+cds <- reduce_dimension(cds)  # 默认使用 UMAP
+
+cds <- cluster_cells(cds)
+cds <- learn_graph(cds)
+plot_cells(cds, color_cells_by = "seurat_clusters", label_groups_by_cluster = FALSE)
+
 
 #Slightshot
 BiocManager::install("slingshot")
