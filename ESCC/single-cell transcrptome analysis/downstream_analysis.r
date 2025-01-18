@@ -55,6 +55,7 @@ new.cluster.ids <- c("T cell", "Fibroblast", "Myeloid", "Endothelia cell", "Epit
 names(new.cluster.ids) <- levels(merged_seurat_obj)
 merged_seurat_obj <- RenameIdents(merged_seurat_obj, new.cluster.ids)
 DimPlot(merged_seurat_obj, reduction = "umap", label = TRUE, pt.size = 0.5)
+merged_seurat_obj@meta.data$ident <- Idents(merged_seurat_obj)
 
 #get T cells subset
 t_cells <- subset(merged_seurat_obj, subset = seurat_clusters == "0")
@@ -139,10 +140,10 @@ devtools::install_github("cole-trapnell-lab/monocle3")
 library(monocle3)
 
 #data preparation
-cd4_tcells <- subset(t_cells, idents = c("CD4+Tcm", "CD4+Treg"))
-expression_matrix <- LayerData(cd4_tcells, assay = "RNA", layer = "counts")
-cell_metadata <- cd4_tcells@meta.data
-gene_annotation <- data.frame(gene_short_name = rownames(cd4_tcells), row.names = rownames(cd4_tcells))
+CD8 <- subset(t_cells, subset = seurat_clusters %in% c(0, 1, 4, 5))
+expression_matrix <- LayerData(CD8, assay = "RNA", layer = "counts")
+cell_metadata <- CD8@meta.data
+gene_annotation <- data.frame(gene_short_name = rownames(CD8), row.names = rownames(CD8))
 
 #create cell_data_set obj
 cds <- new_cell_data_set(
@@ -164,13 +165,169 @@ plot_cells(cds, color_cells_by = "seurat_clusters", label_groups_by_cluster = FA
 cds <- order_cells(cds)
 plot_cells(cds, color_cells_by = "pseudotime")
 
-#find genes relate to pseudotime
-pr_test_res <- graph_test(cds, neighbor_graph = "principal_graph", cores = 4)
-sig_genes <- subset(pr_test_res, q_value < 0.05)
-head(sig_genes[order(sig_genes$q_value), ])
+#draw density plot
+#extract pseudotime info and sort
+pseudotime <- pseudotime(cds)
+cell_order <- order(pseudotime)
+#extract cluster info
+cluster_info <- CD8@meta.data$seurat_clusters
+#create dataframe
+plot_data <- data.frame(
+  pseudotime = pseudotime[cell_order],  # 按伪时间排序
+  cluster = cluster_info[cell_order]    # 按伪时间排序
+)
 
-#visualize gene expression
-plot_cells(cds, genes = sig_genes$gene_short_name[1:6], show_trajectory_graph = FALSE)
+ggplot(plot_data, aes(x = pseudotime, fill = cluster)) +
+  geom_density(alpha = 0.5, bw = 1) +  # 调整带宽参数
+  facet_wrap(~cluster, ncol = 1) +  # 按簇分面显示，每列一个簇
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),  # 隐藏网格线
+    axis.text.y = element_blank(),  # 隐藏纵坐标刻度
+    axis.ticks.y = element_blank(),  # 隐藏纵坐标刻度线
+    strip.text = element_blank()  # 隐藏分面标题
+  ) +
+  labs(
+    x = "Pseudotime",  # 横坐标标题
+    fill = "Cluster"   # 图例标题
+  ) +
+  scale_fill_viridis_d()  # 使用 viridis 调色板
+
+#draw pseudotime heatmap
+library(pheatmap)
+#find genes relate to time
+time_genes <- graph_test(cds, neighbor_graph = "principal_graph", cores = 4)
+
+#sort
+top_genes <- time_genes[order(time_genes$q_value), ][1:50, ]
+top_gene_names <- rownames(top_genes)
+
+#extract expression matrix and sort
+expression_matrix <- exprs(cds)[top_gene_names, ]
+expression_matrix <- expression_matrix[, order(pseudotime)]
+summary(scale(t(expression_matrix)))
+#-2~2
+# Set upper and lower limits (e.g. -3 to 3)
+expression_matrix_clipped <- expression_matrix
+expression_matrix_clipped[expression_matrix_clipped > 3] <- 3
+expression_matrix_clipped[expression_matrix_clipped < -3] <- -3
+
+heatmap_plot <- pheatmap(
+  expression_matrix_clipped,
+  scale = "row",
+  cluster_rows = TRUE,
+  cluster_cols = FALSE,
+  show_colnames = FALSE,
+  color = colorRampPalette(c("red", "white", "blue"))(100),
+  breaks = seq(-3, 3, length.out = 100)  # 设置颜色映射范围
+)
+library(viridis)
+heatmap_plot <- pheatmap(
+  expression_matrix_clipped,
+  scale = "row",
+  cluster_rows = TRUE,
+  cluster_cols = FALSE,
+  show_colnames = FALSE,
+  breaks = seq(-3, 3, length.out = 100)  # 使用 viridis 调色板
+)
+
+#Epi analysis
+Epi_cells <- subset(merged_seurat_obj, subset = ident == "Epithelia cell")
+#inferCNV
+BiocManager::install("infercnv")
+library(infercnv)
+
+#prepare the input data
+#expression matrix
+expression_matrix <- as.matrix(GetAssayData(Epi_cells, assay = "RNA", layer = "counts"))
+#cell annotation file
+cell_annotations <- data.frame(
+  cell_id = colnames(Epi_cells),
+  cell_type = "Epithelial"
+)
+#gene order file
+gtf_file <- "E:/project/ESCC/refgenome/refdata-gex-GRCh38-2024-A/genes/genes.gtf.gz"
+gtf <- rtracklayer::import(gtf_file)
+# 提取基因信息
+gene_info <- data.frame(
+  gene = gtf$gene_id,  # 基因名称
+  chr = as.character(seqnames(gtf)),  # 染色体名称
+  start = start(gtf),  # 起始位置
+  end = end(gtf)  # 终止位置
+)
+
+# 过滤掉非基因的行（确保 type 是 "gene"）
+gene_info <- gene_info[gtf$type == "gene", ]
+
+# 定义标准染色体名称
+standard_chromosomes <- paste0("chr", c(1:22, "X", "Y"))
+
+# 过滤标准染色体
+gene_info <- gene_info[gene_info$chr %in% standard_chromosomes, ]
+
+
+# 检查是否有缺失值
+if (any(is.na(gene_info$gene))) {
+  stop("Some genes in the expression matrix are missing in the GTF file.")
+}
+
+#将 gene_info 中的 Ensembl ID 转换为基因符号
+BiocManager::install("biomaRt")
+library(biomaRt)
+
+#connect to ensembl database
+ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+
+#extract Ensembl ID in gene_info$gene 
+ensembl_ids <- gene_info$gene
+
+#convert
+gene_symbols <- getBM(
+  attributes = c("ensembl_gene_id", "external_gene_name"),  # 需要提取的列
+  filters = "ensembl_gene_id",  # 过滤条件
+  values = ensembl_ids,  # 输入的 Ensembl ID
+  mart = ensembl  # 连接的数据库
+)
+gene_info$gene <- gene_symbols$external_gene_name[match(gene_info$gene, gene_symbols$ensembl_gene_id)]
+#find common genes
+common_genes <- intersect(rownames(expression_matrix), gene_info$gene)
+#save common genes
+expression_matrix <- expression_matrix[common_genes, ]
+gene_info <- gene_info[gene_info$gene %in% common_genes, ]
+gene_info <- gene_info[match(rownames(expression_matrix), gene_info$gene), ]
+
+
+#run infercnv
+#create infercnv obj
+expFile='expFile.txt'
+write.table(expression_matrix,file = expFile,sep = '\t',quote = F)
+groupFiles='groupFiles.txt'
+write.table(cell_annotations,file = groupFiles,sep = '\t',quote = F,col.names = F,row.names = F)
+geneFile='geneFile.txt'
+write.table(gene_info,file = geneFile,sep = '\t',quote = F,col.names = F,row.names = F)
+
+infercnv_obj = CreateInfercnvObject(raw_counts_matrix=expFile,
+                                    annotations_file=groupFiles,
+                                    delim="\t",
+                                    gene_order_file= geneFile,
+                                    ref_group_names=NULL) # 如果有正常细胞的话，把正常细胞的分组填进去
+
+​infercnv_obj = infercnv::run(infercnv_obj,
+                                 cutoff = 0.1,
+                                 out_dir = "./infercnv", 
+                                 cluster_by_groups = F,
+                                 k_obs_groups = 8,
+                                 HMM = FALSE,
+                                 denoise = TRUE,
+                                 write_expr_matrix = T,
+                                 num_threads = 8)
+
+
+
+
+
+
+
 
 
 
