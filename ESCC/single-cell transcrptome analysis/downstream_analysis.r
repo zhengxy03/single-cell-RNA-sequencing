@@ -322,9 +322,23 @@ infercnv_obj = CreateInfercnvObject(raw_counts_matrix=expFile,
                                  write_expr_matrix = T,
                                  num_threads = 8)
 
+#Calculate CNV scores
+# 读取 InferCNV 的输出文件
+cnv_results <- read.table("infercnv/infercnv.observations.txt", header = TRUE, row.names = 1)
 
+# 计算每个细胞的 CNV 评分（均值）
+cnv_scores <- colMeans(cnv_results)
 
+# 将 CNV 评分添加到细胞注释文件中
+cell_annotations$cell_id <- gsub("-", ".", cell_annotations$cell_id)
+cell_annotations$cnv_score <- cnv_scores[cell_annotations$cell_id]
 
+cell_annotations$cell_status <- ifelse(cell_annotations$cell_type == "Epithelial cells" & cell_annotations$cnv_score > 1000, "Malignant", "Normal")
+
+ggplot(cell_annotations, aes(x = cell_type, y = cnv_score, color = cell_status)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "CNV Scores by Cell Type", x = "Cell Type", y = "CNV Score")
 
 
 
