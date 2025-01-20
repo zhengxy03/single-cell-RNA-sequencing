@@ -363,11 +363,37 @@ library(NMF)
 #extract marker genes matrix
 marker_expression <- as.matrix(LayerData(Epi_cells, assay = "RNA", layer = "data")[rownames(significant_markers), ])
 
-#run nmf(extract 5 features) 
+#determine the optimal number of GEPs(gene expression programs)
+#Calculating stability and reconstruction errors for different values of K 
+k_values <- 2:19
+stability_scores <- numeric(length(k_values))
+reconstruction_errors <- numeric(length(k_values))
+
+for (i in seq_along(k_values)) {
+  k <- k_values[i]
+  nmf_result <- nmf(marker_expression, rank = k, method = "brunet", nrun = 50)
+  stability_scores[i] <- NMF::sparseness(nmf_result)
+  reconstruction_errors[i] <- NMF::residuals(nmf_result)
+}
+
+#Plotting stability and reconstruction error curves 
+plot(k_values, stability_scores, type = "b", col = "blue", xlab = "Number of Components (K)", ylab = "Stability Score")
+par(new = TRUE)
+plot(k_values, reconstruction_errors, type = "b", col = "red", xlab = "", ylab = "", axes = FALSE)
+axis(side = 4)
+mtext("Reconstruction Error", side = 4, line = 3)
+legend("topright", legend = c("Stability Score", "Reconstruction Error"), col = c("blue", "red"), lty = 1)
+
+#run nmf(extract 5 features)
+#rank according to numbers of GEPs
 nmf_result <- nmf(marker_expression, rank = 5, method = "brunet", nrun = 50)
-#extract features matrix
+
+#hierarchical clustering analysis
+#extract features matrix(metagenes)
 feature_matrix <- basis(nmf_result)  # 特征矩阵（基因 x 特征）
 coefficient_matrix <- coef(nmf_result)  # 系数矩阵（特征 x 细胞）
+hclust_result <- hclust(dist(t(feature_matrix)), method = "ward.D2")
+plot(hclust_result, main = "Hierarchical Clustering of Metagenes", xlab = "", sub = "")
 
 #enrichment analysis 
 library(clusterProfiler)
@@ -375,6 +401,11 @@ BiocManager::install("org.Hs.eg.db")
 library(org.Hs.eg.db)
 
 top_genes <- extractFeatures(nmf_result, 50)  # 每个特征提取 50 个 top 基因
+gene_symbols <- rownames(significant_markers)
+top_genes_symbols <- lapply(top_genes, function(indices) {
+  gene_symbols[indices]
+})
+
 #GO analysis
 go_results <- lapply(top_genes, function(genes) {
   enrichGO(gene = genes, 
@@ -385,6 +416,17 @@ go_results <- lapply(top_genes, function(genes) {
            pvalueCutoff = 0.05, 
            qvalueCutoff = 0.2)
 })
+#annote malignant features
+metagene_annotations <- lapply(go_results, function(result) {
+  if (is.null(result)) return(NA)
+  result@result$Description[1:5]  # 提取前 5 个显著功能
+})
+ 
+# 绘制第一个 metagene 的 GO 富集条形图
+barplot(go_results[[1]], showCategory = 20)
+DotPlot(go_results[[1]], showCategory = 20)
+
+
 
 #GSE196756
 #quality control
