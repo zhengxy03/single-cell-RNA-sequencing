@@ -242,7 +242,7 @@ library(infercnv)
 expression_matrix <- as.matrix(GetAssayData(Epi_cells, assay = "RNA", layer = "counts"))
 #cell annotation file
 cell_annotations <- data.frame(
-  cell_id = colnames(Epi_cells),
+  cell_id = colnames(Epi_cells), 
   cell_type = "Epithelial"
 )
 #gene order file
@@ -323,13 +323,10 @@ infercnv_obj = CreateInfercnvObject(raw_counts_matrix=expFile,
                                  num_threads = 8)
 
 #Calculate CNV scores
-# 读取 InferCNV 的输出文件
 cnv_results <- read.table("infercnv/infercnv.observations.txt", header = TRUE, row.names = 1)
-
-# 计算每个细胞的 CNV 评分（均值）
 cnv_scores <- colMeans(cnv_results)
 
-# 将 CNV 评分添加到细胞注释文件中
+#Adding CNV scores to cell annotation files
 cell_annotations$cell_id <- gsub("-", ".", cell_annotations$cell_id)
 cell_annotations$cnv_score <- cnv_scores[cell_annotations$cell_id]
 
@@ -340,10 +337,54 @@ ggplot(cell_annotations, aes(x = cell_type, y = cnv_score, color = cell_status))
   theme_minimal() +
   labs(title = "CNV Scores by Cell Type", x = "Cell Type", y = "CNV Score")
 
+#plot on umap
+umap_coords <- Embeddings(Epi_cells, reduction = "umap")
+umap_df <- as.data.frame(umap_coords)
+cell_annotations$cell_id <- colnames(Epi_cells)
+umap_df$cnv_score <- cell_annotations$cnv_score[match(rownames(umap_df), cell_annotations$cell_id)]
 
+ggplot(umap_df, aes(x = umap_1, y = umap_2, color = cnv_score)) +
+  geom_point(size = 1.5, alpha = 1) +
+  scale_color_gradient2(low = "blue", mid = "white", high = "red", midpoint = 1) +
+  theme_minimal() +
+  labs(title = "CNV Score on UMAP", x = "UMAP_1", y = "UMAP_2", color = "CNV Score")
 
+#NMF analysis
+Epi_cells@meta.data$cell_status <- cell_annotations$cell_status[match(colnames(Epi_cells), cell_annotations$cell_id)]
+Epi_cells <- SetIdent(Epi_cells, value = Epi_cells@meta.data$cell_status)
+markers <- FindMarkers(Epi_cells, 
+                       ident.1 = "Malignant",  
+                       ident.2 = "Normal", 
+                       min.pct = 0.25,  # 基因在至少 25% 的细胞中表达
+                       logfc.threshold = 0.25)
 
+install.packages("NMF")
+library(NMF)
+#extract marker genes matrix
+marker_expression <- as.matrix(LayerData(Epi_cells, assay = "RNA", layer = "data")[rownames(significant_markers), ])
 
+#run nmf(extract 5 features) 
+nmf_result <- nmf(marker_expression, rank = 5, method = "brunet", nrun = 50)
+#extract features matrix
+feature_matrix <- basis(nmf_result)  # 特征矩阵（基因 x 特征）
+coefficient_matrix <- coef(nmf_result)  # 系数矩阵（特征 x 细胞）
+
+#enrichment analysis 
+library(clusterProfiler)
+BiocManager::install("org.Hs.eg.db")
+library(org.Hs.eg.db)
+
+top_genes <- extractFeatures(nmf_result, 50)  # 每个特征提取 50 个 top 基因
+#GO analysis
+go_results <- lapply(top_genes, function(genes) {
+  enrichGO(gene = genes, 
+           OrgDb = org.Hs.eg.db,  # 人类基因组注释数据库
+           keyType = "SYMBOL", 
+           ont = "BP",  # 生物过程（Biological Process）
+           pAdjustMethod = "BH", 
+           pvalueCutoff = 0.05, 
+           qvalueCutoff = 0.2)
+})
 
 #GSE196756
 #quality control
