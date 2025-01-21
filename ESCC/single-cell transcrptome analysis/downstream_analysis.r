@@ -362,7 +362,7 @@ install.packages("NMF")
 library(NMF)
 #extract marker genes matrix
 marker_expression <- as.matrix(LayerData(Epi_cells, assay = "RNA", layer = "data")[rownames(significant_markers), ])
-
+write.csv(marker_expression, "marker_expression.csv")
 #determine the optimal number of GEPs(gene expression programs)
 #Calculating stability and reconstruction errors for different values of K 
 k_values <- 2:19
