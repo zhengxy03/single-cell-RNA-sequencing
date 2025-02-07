@@ -14,10 +14,15 @@ for (i in seq_along(dirs)) {
   print(paste("current_dir:", dir))
   counts_matrix <- Read10X(data.dir = dir)
   seurat_obj <- CreateSeuratObject(counts = counts_matrix, project = paste0("Sample", i))
+  
+  num_cells <- ncol(seurat_obj)
+
+  sample_type_vector <- rep(sample_types[i], num_cells)
+  sample_sources_vector <- rep(sample_sources[i], num_cells)
 
   seurat_obj <- AddMetaData(seurat_obj, metadata = data.frame(
-    sample_type = sample_types[i],
-    sample_sources = sample_sources[i]
+    sample_type = sample_type_vector,
+    sample_sources = sample_sources_vector
   ))
 
   seurat_objs[[i]] <- seurat_obj
