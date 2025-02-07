@@ -33,6 +33,10 @@ for (i in seq_along(dirs)) {
 merged_seurat_obj <- merge(seurat_objs[[1]], y = seurat_objs[-1], add.cell.ids = paste0("Sample", 1:length(dirs)))
 merged_seurat_obj <- JoinLayers(merged_seurat_obj)
 
+#average genes per cell
+genes_per_cell <- merged_seurat_obj$nFeature_RNA
+average_genes <- mean(genes_per_cell)
+
 merged_seurat_obj <- NormalizeData(merged_seurat_obj)
 merged_seurat_obj <- FindVariableFeatures(merged_seurat_obj, nfeatures = 2000)
 
