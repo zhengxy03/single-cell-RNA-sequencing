@@ -104,9 +104,13 @@ ggplot(proportion_data, aes(x = sample, y = proportion, fill = ident)) +
 proportion_data2 <- merged_seurat_obj@meta.data %>%
   group_by(sample_type, ident) %>% summarise(count = n()) %>% mutate(proportion = count / sum(count))
 
-ggplot(proportion_data2, aes(x = "", y = count, fill = ident)) +
-  geom_bar(stat = "identity", width = 1) +
-  coord_polar("y", start = 0) +
-  facet_wrap(~ sample_type, nrow = 2) +  # 根据样本进行分面，可调整 nrow 参数
-  theme_void() +
-  labs(title = "不同样本的细胞组成饼图")
+ggplot(proportion_data2, aes(x = "", y = proportion, fill = ident)) +
+  geom_bar(stat = "identity", width = 1) +  # 堆叠柱状图
+  coord_polar(theta = "y") +  # 转换为极坐标，生成饼图
+  labs(title = "Proportion of Cell Types", fill = "Cell Type") +  # 设置标题和图例标题
+  theme_void() +  # 使用空白主题
+  theme(
+    legend.position = "right",  # 设置图例位置
+    plot.title = element_text(hjust = 0.5)  # 设置标题居中
+  ) +
+  facet_wrap(~ sample_type, ncol = 2)
