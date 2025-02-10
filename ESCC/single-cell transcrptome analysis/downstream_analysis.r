@@ -81,7 +81,7 @@ t_significant_markers <- subset(t_cell_markers, p_val_adj < 0.05)
 write.csv(t_significant_markers, "t_all_marker.csv")
 
 #t cells annotation
-new.cluster.ids <- c("CD8+Tem", "CD8+Tex", "CD4+Tcm", "CD4+Treg", "CD8+Tex", "CD8+Tex", "Cycling T", "Cycling T", "Cycling T", "NK")
+new.cluster.ids <- c("CD8+Tem", "CD8+Tex", "CD8+Tcm", "CD4+Treg", "CD8+Tex", "CD8+Tex", "Cycling T", "Cycling T", "Cycling T", "NK")
 names(new.cluster.ids) <- levels(t_cells)
 t_cells <- RenameIdents(t_cells, new.cluster.ids)
 DimPlot(t_cells, reduction = "umap", label = TRUE, pt.size = 0.5)
