@@ -84,8 +84,24 @@ DoHeatmap(merged_seurat_obj, features = genes_to_plot,
           group.by = "ident", group.bar.height = 0.01, size = 3, angle = 90, hjust = 0, label = TRUE) + scale_fill_gradient2(low = "blue", mid = "white", high = "red")
 
 #cell proportion
-sample <- c("S133T", "S133N", "S134T", "S134N", "S135T", "S135N", "S149T", "S149N", "S150T", "S150N", "S158T", "S158N", "S159T", "S159N")
-merged_seurat_obj@meta.data$sample <- sample[as.numeric(factor(merged_seurat_obj@meta.data$orig.ident))]
+identity_mapping <- c(
+  "Sample1" = "S133T",
+  "Sample2" = "S133N",
+  "Sample3" = "S134T",
+  "Sample4" = "S134N",
+  "Sample5" = "S135T",
+  "Sample6" = "S135N",
+  "Sample7" = "S149T",
+  "Sample8" = "S149N",
+  "Sample9" = "S150T",
+  "Sample10" = "S150N",
+  "Sample11" = "S158T",
+  "Sample12" = "S158N",
+  "Sample13" = "S159T",
+  "Sample14" = "S159N"
+)
+sample <- identity_mapping[merged_seurat_obj@meta.data$orig.ident]
+merged_seurat_obj@meta.data$sample <- sample
 
 proportion_data <- merged_seurat_obj@meta.data %>%
   group_by(sample, ident) %>% summarise(count = n()) %>% mutate(proportion = count / sum(count))
@@ -114,3 +130,34 @@ ggplot(proportion_data2, aes(x = "", y = proportion, fill = ident)) +
     plot.title = element_text(hjust = 0.5)  # 设置标题居中
   ) +
   facet_wrap(~ sample_type, ncol = 2)
+
+cell_counts <- merged_seurat_obj@meta.data %>%
+  group_by(sample, ident) %>%
+  summarise(count = n()) %>%
+  ungroup()
+
+cell_counts <- cell_counts %>%
+  mutate(sample_type = ifelse(grepl("T$", sample), "Tumor", "Normal"))
+
+sample_totals <- cell_counts %>%
+  group_by(sample) %>%
+  summarise(total = sum(count)) %>%
+  ungroup()
+
+cell_proportion <- cell_counts %>%
+  left_join(sample_totals, by = "sample") %>%
+  mutate(proportion = count / total)
+
+ggplot(cell_proportion, aes(x = ident, y = proportion, fill = sample_type)) +
+  geom_boxplot() +  # 绘制箱线图
+  labs(x = "Cell Type", y = "Proportion", fill = "Sample Type") +  # 设置坐标轴和图例标题
+  theme_classic() +  # 使用经典主题
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),  # 调整横轴标签角度
+    axis.line = element_line(color = "black"),  # 设置坐标轴颜色
+    panel.grid.major = element_blank(),  # 移除主要网格线
+    panel.grid.minor = element_blank(),  # 移除次要网格线
+    legend.position = "right"  # 设置图例位置在底部
+  ) +
+  scale_fill_manual(values = c("Tumor" = "red", "Normal" = "blue"))
+
