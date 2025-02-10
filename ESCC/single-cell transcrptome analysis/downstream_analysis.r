@@ -104,14 +104,14 @@ library(monocle)  #igraph版本不兼容，看看以后会不会更新🌚
 
 #Slightshot
 BiocManager::install("slingshot")
-library(slightshot)
+library(slingshot)
 
 CD8 <- subset(t_cells, subset = seurat_clusters %in% c(0, 1, 4, 5))
 CD4 <- subset(t_cells, subset = seurat_clusters %in% c(2,3))
 #convert Seurat_obj to SingleCellExperiment_obj
 cd8_sce <- as.SingleCellExperiment(CD8)
 
-#Run slightshot
+#Run slingshot
 cd8_sce <- slingshot(cd8_sce, clusterLabels = "seurat_clusters", reducedDim = "UMAP")
 trajectories <- slingCurves(cd8_sce)
 

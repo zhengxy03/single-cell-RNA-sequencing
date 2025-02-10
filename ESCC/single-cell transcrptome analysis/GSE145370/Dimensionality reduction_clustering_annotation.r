@@ -160,4 +160,3 @@ ggplot(cell_proportion, aes(x = ident, y = proportion, fill = sample_type)) +
     legend.position = "right"  # 设置图例位置在底部
   ) +
   scale_fill_manual(values = c("Tumor" = "red", "Normal" = "blue"))
-
