@@ -236,3 +236,45 @@ ggplot(plot_data, aes(x = pseudotime, fill = cluster)) +
     fill = "Cluster"   # 图例标题
   ) +
   scale_fill_viridis_d()  # 使用 viridis 调色板
+
+
+
+#heatmap
+gene_list <- c("HAVCR2", "LAG3", "PDCD1", 
+               "IL2RA", "FOXP3", "IL32",
+               "JUNB", "KLF2", "IL7R",
+               "ANXA1", "LMNA", "GZMK",
+               "KLRD1", "KLRC1",
+               "ITGB2", "CREM", 
+               "CD4", "CD8A", "CD8B")
+DoHeatmap(t_cells, features = gene_list, 
+          group.by = "types", group.bar.height = 0.01, size = 3, angle = 90, hjust = 0, label = TRUE) + scale_fill_gradient2(low = "blue", mid = "white", high = "red")
+
+library(pheatmap)
+library(tibble)
+expr_matrix <- GetAssayData(t_cells, assay = "RNA", slot = "data")[gene_list, ]
+cell_types <- t_cells$types
+expr_df <- as.data.frame(t(expr_matrix))
+expr_df$Cell_Type <- cell_types
+mean_expr <- expr_df %>%
+  group_by(Cell_Type) %>%
+  summarise(across(all_of(gene_list), mean)) %>%
+  column_to_rownames(var = "Cell_Type") %>%
+  t()
+scaled_expr <- t(scale(t(mean_expr)))
+annotation_col <- data.frame(Cell_Type = rownames(scaled_expr))
+rownames(annotation_col) <- rownames(scaled_expr)
+unique_cell_types <- unique(annotation_col$Cell_Type)
+pheatmap(
+  expr_matrix,
+  scale = "row",  # 按行进行缩放
+  annotation_col = annotation_col,  # 添加列注释（细胞类型）
+  annotation_colors = list(Cell_Type = rainbow(length(unique(cell_types)))),  # 为不同细胞类型设置颜色
+  color = colorRampPalette(c("blue", "white", "red"))(100),  # 设置颜色渐变
+  show_rownames = TRUE,  # 显示行名（基因名）
+  show_colnames = FALSE,  # 不显示列名（细胞名）
+  angle_col = 90,  # 列标签旋转角度
+  fontsize_row = 8,  # 行标签字体大小
+  fontsize_col = 8,  # 列标签字体大小
+  border_color = NA  # 不显示边框
+)

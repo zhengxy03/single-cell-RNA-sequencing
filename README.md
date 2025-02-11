@@ -3,7 +3,7 @@
 # 目录
 
 
-# 0 介绍
+
 单细胞测序技术，简单来说，是一种在单个细胞水平上对基因组、转录组及表观基因组进行测序分析的技术。与传统的测序方法相比，单细胞测序提供了对细胞异质性（即细胞之间的差异）的信息。
 测序工作流程：
 * 单细胞解离：通过一个称为单细胞解离的过程生成单细胞悬浮液，在这个过程中组织被消化。
@@ -12,6 +12,35 @@
 * 测序：文库构建后，细胞cDNA文库被标记为细胞条形码，根据协议，还可能加上UMI。这些文库被汇集在一起（多重）进行测序。测序产生读取数据，这些数据经过质量控制，根据分配的条形码进行分组（解复用）以及在读取处理流程中的比对。对于基于UMI的协议，读取数据可以进一步解复用，以产生捕获的mRNA分子的计数（计数数据）。
 * 数据分析：对测序数据进行处理，包括质量控制、去除低质量数据、基因表达定量、数据标准化和细胞聚类分析等
 目前单细胞测序获取细胞的方法主要有两种：
+
+# 0 软件下载
+* cellranger
+```
+mkdir -p biosoft
+cd ~/biosoft
+curl -o cellranger-9.0.1.tar.gz "https://cf.10xgenomics.com/releases/cell-exp/cellranger-9.0.1.tar.gz?Expires=1739306000&Key-Pair-Id=APKAI7S6A5RYOXBWRPDA&Signature=J2do2WJYqchx29tS0FzkCC1wY1hvX2ucCOWcI-bH0MjTpve0UQZ54p1X6jF16jg5ojBPdiBI47zYFpFiJiJfFj07d8bbPZGXSi59G4fXzpw0ZDZMAV3Hoq0gHd7D8SFZLqo407W-K4VvEqTkVk7YNKuaHttRLftq3cW7E6ESw5VEzX5T6h33A7HLHiN1-1H9GlCVjZBCKqYfDctMc-f6B6Rm2E~Zyaq1azXoUKbGt8HZL-rJhC4gip1XZyCeX2mksC~fc95Na4CzdwwaOl9pNvJegynvSauyqdOWzUifVkwg7VZCTMjrWisPNY5c1UJ81w1ei-LCGIG3kFnyetTZLg__"
+
+tar xvfz cellranger-9.0.1.tar.gz
+cd ~/biosoft/cellranger-9.0.1/bin
+export PATH="$(pwd):$PATH"
+```
+* R > 4.0
+* R packages
+```
+#cran packages
+cran_packages <- c("Seurat", "dplyr", "tibble", "ggplot2", "pheatmap", "ggsci", "ggrepel", "viridis", "devtools", "NMF", "tidyr")
+install.packages(cran_packages)
+
+#biocmanager packages
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+    install.packages("BiocManager")
+}
+bioc_packages <- c("monocle", "slingshot", "clusterProfiler", "org.Hs.eg.db", "GSVA", "GSEABase", "rtracklayer", "biomaRt", "harmony", "infercnv")
+BiocManager::install(bioc_packages)
+
+#others
+devtools::install_github("cole-trapnell-lab/monocle3")  #monocle3
+```
 
 # 1 上游数据获取与分析
 ## 1.1 实验数据下载
