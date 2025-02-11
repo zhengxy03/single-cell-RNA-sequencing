@@ -28,7 +28,7 @@ export PATH="$(pwd):$PATH"
 * R packages
 ```
 #cran packages
-cran_packages <- c("Seurat", "dplyr", "tibble", "ggplot2", "pheatmap", "ggsci", "ggrepel", "viridis", "devtools", "NMF", "tidyr")
+cran_packages <- c("Seurat", "dplyr", "tibble", "ggplot2", "pheatmap", "ggsci", "ggrepel", "viridis", "devtools", "NMF", "tidyr", "clustree", "patchwork")
 install.packages(cran_packages)
 
 #biocmanager packages
