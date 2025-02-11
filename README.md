@@ -17,11 +17,11 @@
 * cellranger
 ```
 mkdir -p biosoft
-cd ~/biosoft
+cd biosoft
 curl -o cellranger-9.0.1.tar.gz "https://cf.10xgenomics.com/releases/cell-exp/cellranger-9.0.1.tar.gz?Expires=1739306000&Key-Pair-Id=APKAI7S6A5RYOXBWRPDA&Signature=J2do2WJYqchx29tS0FzkCC1wY1hvX2ucCOWcI-bH0MjTpve0UQZ54p1X6jF16jg5ojBPdiBI47zYFpFiJiJfFj07d8bbPZGXSi59G4fXzpw0ZDZMAV3Hoq0gHd7D8SFZLqo407W-K4VvEqTkVk7YNKuaHttRLftq3cW7E6ESw5VEzX5T6h33A7HLHiN1-1H9GlCVjZBCKqYfDctMc-f6B6Rm2E~Zyaq1azXoUKbGt8HZL-rJhC4gip1XZyCeX2mksC~fc95Na4CzdwwaOl9pNvJegynvSauyqdOWzUifVkwg7VZCTMjrWisPNY5c1UJ81w1ei-LCGIG3kFnyetTZLg__"
 
 tar xvfz cellranger-9.0.1.tar.gz
-cd ~/biosoft/cellranger-9.0.1/bin
+cd cellranger-9.0.1/bin
 export PATH="$(pwd):$PATH"
 ```
 * R > 4.0
