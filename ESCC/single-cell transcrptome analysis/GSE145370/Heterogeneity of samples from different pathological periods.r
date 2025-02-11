@@ -88,27 +88,151 @@ DimPlot(t_cells, reduction = "umap", group.by = "types", label = TRUE, pt.size =
 
 library(slingshot)
 library(ggsci)
-#convert Seurat_obj to SingleCellExperiment_obj
-tumor_sce <- as.SingleCellExperiment(tumor)
 
-#Run slightshot
-tumor_sce <- slingshot(tumor_sce, clusterLabels = "seurat_clusters", reducedDim = "UMAP")
-trajectories <- slingCurves(tumor_sce)
+CD8 <- subset(t_cells, subset = seurat_clusters %in% c(0, 1, 2, 3, 6, 7, 9, 11, 13))
+#convert Seurat_obj to SingleCellExperiment_obj
+cd8_sce <- as.SingleCellExperiment(CD8)
+
+#Run slingshot
+cd8_sce <- slingshot(cd8_sce, clusterLabels = "seurat_clusters", reducedDim = "UMAP")
+trajectories <- slingCurves(cd8_sce)
+length(trajectories)
 
 #plot
-umap_data <- as.data.frame(Embeddings(tumor, reduction = "umap"))
-umap_data$period <- tumor$period
+umap_data <- as.data.frame(Embeddings(CD8, reduction = "umap"))
+umap_data$types <- CD8$types
 curve_data <- as.data.frame(trajectories[[1]]$s[trajectories[[1]]$ord, ])
 
-ggplot(umap_data, aes(x = umap_1, y = umap_2, color = period)) +
-  geom_point(size = 1, alpha = 0.8, shape = 16) +
+ggplot(umap_data, aes(x = umap_1, y = umap_2, color = types)) +
+  geom_point(size = 2, alpha = 0.8, shape = 16) +
   geom_path(data = curve_data, aes(x = umap_1, y = umap_2), 
             color = "black", size = 1.5, linetype = "solid") +
   scale_color_npg() +  # 使用 Nature Publishing Group 配色
   theme_classic() +
-  ggtitle("Trajectory Analysis of Tumor Samples") +
+  ggtitle("Trajectory Analysis of CD8 T Cells") +
   theme(
     plot.title = element_text(hjust = 0.5, size = 14, face = "bold"), 
     legend.position = "right",
     legend.title = element_blank()  # 隐藏图例标题
-  )
+  ) +
+  xlab("UMAP_1") +
+  ylab("UMAP_2") +
+  ggtitle(NULL) +
+  guides(color = guide_legend(title = NULL))
+
+#all curves
+curve_data_list <- lapply(trajectories, function(traj) {
+  as.data.frame(traj$s[traj$ord, ])
+})
+curve_data <- do.call(rbind, curve_data_list)
+curve_data$trajectory <- rep(seq_along(trajectories), sapply(curve_data_list, nrow))
+
+ggplot() +
+  # 绘制单细胞散点图
+  geom_point(data = umap_data, aes(x = umap_1, y = umap_2, color = types), 
+             size = 2, alpha = 0.8, shape = 16) +
+  # 绘制六条轨迹，指定轨迹颜色为黑色
+  geom_path(data = curve_data, aes(x = umap_1, y = umap_2, group = trajectory), 
+            color = "black", size = 1.5, linetype = "solid") +
+  # 设置细胞类型的颜色比例尺（可根据需要调整）
+  scale_color_npg() +
+  # 使用经典主题
+  theme_classic() +
+  # 设置主题相关属性
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"), 
+    legend.position = "right",
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  ) +
+  # 设置坐标轴标签
+  xlab("UMAP_1") +
+  ylab("UMAP_2") +
+  # 设置图形标题
+  ggtitle("Trajectory Analysis of CD8 T Cells")
+
+#types
+cd8_sce <- slingshot(cd8_sce, clusterLabels = "types", reducedDim = "UMAP")
+trajectories <- slingCurves(cd8_sce)
+length(trajectories)
+
+umap_data <- as.data.frame(Embeddings(CD8, reduction = "umap"))
+umap_data$types <- CD8$types
+curve_data_list <- lapply(trajectories, function(traj) {
+  as.data.frame(traj$s[traj$ord, ])
+})
+curve_data <- do.call(rbind, curve_data_list)
+curve_data$trajectory <- rep(seq_along(trajectories), sapply(curve_data_list, nrow))
+
+ggplot() +
+  # 绘制单细胞散点图
+  geom_point(data = umap_data, aes(x = umap_1, y = umap_2, color = types), 
+             size = 2, alpha = 0.8, shape = 16) +
+  # 绘制六条轨迹，指定轨迹颜色为黑色
+  geom_path(data = curve_data, aes(x = umap_1, y = umap_2, group = trajectory), 
+            color = "black", size = 1.5, linetype = "solid") +
+  # 设置细胞类型的颜色比例尺（可根据需要调整）
+  scale_color_npg() +
+  # 使用经典主题
+  theme_classic() +
+  # 设置主题相关属性
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"), 
+    legend.position = "right",
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  ) +
+  # 设置坐标轴标签
+  xlab("UMAP_1") +
+  ylab("UMAP_2") +
+  # 设置图形标题
+  ggtitle("Trajectory Analysis of CD8 T Cells")
+
+
+
+#monocle3
+cds_data <- GetAssayData(CD8, assay = "RNA", layer = "counts")
+meta_data <- CD8@meta.data
+gene_ann <- data.frame(gene_short_name = rownames(cds_data), row.names = rownames(cds_data))
+
+cds <- new_cell_data_set(
+  cds_data,
+  cell_metadata = meta_data,
+  gene_metadata = gene_ann
+)
+cds <- preprocess_cds(cds, num_dim = 50)  # 使用前 50 个主成分
+cds <- reduce_dimension(cds)
+
+cds <- cluster_cells(cds)
+cds <- learn_graph(cds)
+plot_cells(cds, color_cells_by = "seurat_clusters", label_groups_by_cluster = FALSE)
+
+#View Pseudo Time Distribution
+cds <- order_cells(cds)
+plot_cells(cds, color_cells_by = "pseudotime")
+
+pseudotime <- pseudotime(cds)
+cell_order <- order(pseudotime)
+#extract cluster info
+cluster_info <- CD8@meta.data$seurat_clusters
+#create dataframe
+plot_data <- data.frame(
+  pseudotime = pseudotime[cell_order],  # 按伪时间排序
+  cluster = cluster_info[cell_order]    # 按伪时间排序
+)
+
+ggplot(plot_data, aes(x = pseudotime, fill = cluster)) +
+  geom_density(alpha = 0.5, bw = 1) +  # 调整带宽参数
+  facet_wrap(~cluster, ncol = 1) +  # 按簇分面显示，每列一个簇
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),  # 隐藏网格线
+    axis.text.y = element_blank(),  # 隐藏纵坐标刻度
+    axis.ticks.y = element_blank(),  # 隐藏纵坐标刻度线
+    strip.text = element_blank()  # 隐藏分面标题
+  ) +
+  labs(
+    x = "Pseudotime",  # 横坐标标题
+    fill = "Cluster"   # 图例标题
+  ) +
+  scale_fill_viridis_d()  # 使用 viridis 调色板
