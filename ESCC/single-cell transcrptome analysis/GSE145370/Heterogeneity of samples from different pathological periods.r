@@ -220,7 +220,7 @@ plot_data <- data.frame(
   pseudotime = pseudotime[cell_order],  # 按伪时间排序
   cluster = cluster_info[cell_order]    # 按伪时间排序
 )
-
+zoMiqTCfXg3faQTc
 ggplot(plot_data, aes(x = pseudotime, fill = cluster)) +
   geom_density(alpha = 0.5, bw = 1) +  # 调整带宽参数
   facet_wrap(~cluster, ncol = 1) +  # 按簇分面显示，每列一个簇
