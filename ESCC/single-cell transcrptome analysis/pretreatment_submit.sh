@@ -5,8 +5,5 @@
 #BSUB -o seurat_analysis.out  # 标准输出文件
 #BSUB -e seurat_analysis.err  # 标准错误文件
 
-# 加载 R 环境
-module load R
-
 # 运行 R 脚本
 Rscript pretreatment.R
