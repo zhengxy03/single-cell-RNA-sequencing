@@ -3,16 +3,19 @@ library(Seurat)
 base_dir <- "/share/home/wangq/zxy/ESCC/treatment"
 dirs <- list.dirs(base_dir, full.names = TRUE, recursive = FALSE)
 
-sample_types <- c("tumor", "normal", "normal", "tumor", 
-                  "tumor", "normal", "tumor", "normal", 
+sample_types <- c("tumor", "tumor", "normal", "normal", 
+                  "tumor", "normal", "normal", "tumor", 
                   "tumor", "tumor", "normal", "tumor", 
                   "normal", "tumor", "tumor", "normal", 
-                  "tumor", "normal", "tumor", "normal", 
+                  "tumor", "normal", "tumor", "tumor", 
                   "normal", "tumor", "normal", "tumor", 
-                  "normal", "tumor", "tumor", "normal")
-sample_sources <- c("GSE160269", "GSE160269", "GSE160269", "GSE160269",
+                  "normal", "normal", "tumor", "normal",
+                  "tumor", "normal", "tumor", "tumor",
+                  "normal")
+sample_sources <- c("GSE145370", "GSE145370", "GSE145370", "GSE145370",
                     "GSE160269", "GSE160269", "GSE160269", "GSE160269",
-                    "GSE160269", "PRJNA777911", "PRJNA777911", "PRJNA777911",
+                    "GSE160269", "GSE160269", "GSE160269", "GSE160269",
+                    "GSE160269", "GSE160269", "PRJNA777911", "PRJNA777911", "PRJNA777911",
                     "PRJNA777911", "PRJNA777911", "PRJNA777911", "PRJNA777911",
                     "PRJNA777911", "PRJNA777911", "PRJNA777911", "PRJNA777911",
                     "PRJNA777911", "PRJNA777911", "PRJNA777911", "PRJNA777911",
