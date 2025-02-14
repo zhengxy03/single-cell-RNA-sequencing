@@ -41,7 +41,7 @@ BiocManager::install(bioc_packages)
 #others
 devtools::install_github("cole-trapnell-lab/monocle3")  #monocle3
 devtools::install_github('chris-mcginnis-ucsf/DoubletFinder') #DoubleFinder
-devtools::install_github('immunogenomics/presto')
+devtools::install_github('immunogenomics/presto') #presto
 ```
 
 # 1 上游数据获取与分析
