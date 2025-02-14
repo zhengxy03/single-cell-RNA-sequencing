@@ -1,6 +1,7 @@
 library(Seurat)
 
 base_dir <- "/share/home/wangq/zxy/ESCC/treatment"
+#base_dir <- "E:/project/ESCC/treatment"
 dirs <- list.dirs(base_dir, full.names = TRUE, recursive = FALSE)
 
 sample_types <- c("tumor", "tumor", "normal", "normal", 
@@ -71,8 +72,12 @@ for (i in seq_along(dirs)) {
   seurat_obj <- CreateSeuratObject(counts = counts_matrix, project = paste0("Sample", sample_num))
   
   seurat_obj[["percent.mt"]] <- PercentageFeatureSet(seurat_obj, pattern = "^MT-")
-  seurat_obj <- subset(seurat_obj, subset = nFeature_RNA > 400 & percent.mt < 10)
-
+  
+  seurat_obj <- subset(seurat_obj, subset = nFeature_RNA >= 400 & nFeature_RNA <= 7500 & 
+                                     percent.mt < 10 & 
+                                     nCount_RNA >= 500 & nCount_RNA <= 50000 &
+                                     log10(nFeature_RNA / nCount_RNA) > 0.8)
+  
   num_cells <- ncol(seurat_obj)
 
   sample_type_vector <- rep(sample_types[i], num_cells)
@@ -96,6 +101,14 @@ cell_ids <- sapply(dirs, function(dir) {
 merged_seurat_obj <- merge(seurat_objs[[1]], y = seurat_objs[-1], add.cell.ids = paste0("Sample", 1:length(dirs)))
 merged_seurat_obj <- JoinLayers(merged_seurat_obj)
 
+# 基因过滤
+expressed_cells_per_gene <- Matrix::rowSums(merged_seurat_obj@assays$RNA@counts > 0)
+min_cell_percentage <- 0.001
+min_cell_count <- 10
+keep_genes <- expressed_cells_per_gene >= min_cell_percentage * ncol(merged_seurat_obj) & 
+              expressed_cells_per_gene >= min_cell_count
+merged_seurat_obj <- merged_seurat_obj[keep_genes, ]
+
 #average genes per cell
 genes_per_cell <- merged_seurat_obj$nFeature_RNA
 average_genes <- mean(genes_per_cell)
@@ -106,6 +119,22 @@ merged_seurat_obj <- FindVariableFeatures(merged_seurat_obj, nfeatures = 2000)
 hvgs <- VariableFeatures(merged_seurat_obj)
 merged_seurat_obj <- ScaleData(merged_seurat_obj, features = hvgs)
 merged_seurat_obj <- RunPCA(merged_seurat_obj, features = hvgs, npcs = 20)
+
+# 双细胞检测和去除
+# 确定最佳的 pK 值
+sweep.res.list <- paramSweep_v3(merged_seurat_obj, PCs = 1:20, sct = FALSE)
+sweep.stats <- summarizeSweep(sweep.res.list, GT = FALSE)
+bcmvn <- find.pK(sweep.stats)
+
+# 估计双细胞比例
+nExp_poi <- round(0.075 * ncol(merged_seurat_obj)) 
+
+# 进行双细胞检测
+merged_seurat_obj <- doubletFinder_v3(merged_seurat_obj, PCs = 1:20, pN = 0.25, pK = as.numeric(as.character(bcmvn$pK[which.max(bcmvn$BCmetric)])), nExp = nExp_poi, reuse.pANN = FALSE, sct = FALSE)
+
+# 去除双细胞
+doublet_col <- colnames(merged_seurat_obj@meta.data)[grep("DF.classification", colnames(merged_seurat_obj@meta.data))]
+merged_seurat_obj <- subset(merged_seurat_obj, subset = get(doublet_col) == "Singlet")
 
 library(harmony)
 merged_seurat_obj <- RunHarmony(merged_seurat_obj, "orig.ident")
