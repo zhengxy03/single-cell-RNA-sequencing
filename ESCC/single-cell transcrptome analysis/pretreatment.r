@@ -75,8 +75,7 @@ for (i in seq_along(dirs)) {
   
   seurat_obj <- subset(seurat_obj, subset = nFeature_RNA >= 400 & nFeature_RNA <= 7500 & 
                                      percent.mt < 10 & 
-                                     nCount_RNA >= 500 & nCount_RNA <= 50000 &
-                                     log10(nFeature_RNA / nCount_RNA) > 0.8)
+                                     nCount_RNA >= 500 & nCount_RNA <= 50000)
   
   num_cells <- ncol(seurat_obj)
 
@@ -102,7 +101,9 @@ merged_seurat_obj <- merge(seurat_objs[[1]], y = seurat_objs[-1], add.cell.ids =
 merged_seurat_obj <- JoinLayers(merged_seurat_obj)
 
 # 基因过滤
-expressed_cells_per_gene <- Matrix::rowSums(merged_seurat_obj@assays$RNA@counts > 0)
+counts_matrix <- GetAssayData(merged_seurat_obj, slot = "counts", assay = "RNA")
+expressed_cells_per_gene <- Matrix::rowSums(counts_matrix > 0)
+
 min_cell_percentage <- 0.001
 min_cell_count <- 10
 keep_genes <- expressed_cells_per_gene >= min_cell_percentage * ncol(merged_seurat_obj) & 
@@ -122,7 +123,8 @@ merged_seurat_obj <- RunPCA(merged_seurat_obj, features = hvgs, npcs = 20)
 
 # 双细胞检测和去除
 # 确定最佳的 pK 值
-sweep.res.list <- paramSweep_v3(merged_seurat_obj, PCs = 1:20, sct = FALSE)
+library(DoubletFinder)
+sweep.res.list <- paramSweep(merged_seurat_obj, PCs = 1:20, sct = FALSE)
 sweep.stats <- summarizeSweep(sweep.res.list, GT = FALSE)
 bcmvn <- find.pK(sweep.stats)
 
@@ -130,7 +132,7 @@ bcmvn <- find.pK(sweep.stats)
 nExp_poi <- round(0.075 * ncol(merged_seurat_obj)) 
 
 # 进行双细胞检测
-merged_seurat_obj <- doubletFinder_v3(merged_seurat_obj, PCs = 1:20, pN = 0.25, pK = as.numeric(as.character(bcmvn$pK[which.max(bcmvn$BCmetric)])), nExp = nExp_poi, reuse.pANN = FALSE, sct = FALSE)
+merged_seurat_obj <- doubletFinder(merged_seurat_obj, PCs = 1:20, pN = 0.25, pK = as.numeric(as.character(bcmvn$pK[which.max(bcmvn$BCmetric)])), nExp = nExp_poi, reuse.pANN = FALSE, sct = FALSE)
 
 # 去除双细胞
 doublet_col <- colnames(merged_seurat_obj@meta.data)[grep("DF.classification", colnames(merged_seurat_obj@meta.data))]
