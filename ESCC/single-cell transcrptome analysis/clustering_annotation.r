@@ -69,7 +69,7 @@ identity_mapping <- c(
   "12" = "Epithelial cell",
   "13" = "Proliferating cell",
   "14" = "Pericyte",
-  "15" = "T cell",
+  "15" = "NK cell",
   "16" = "T cell",
   "17" = "Fibroblast",
   "18" = "T cell",
@@ -217,18 +217,22 @@ ggplot(proportion_data, aes(x = sample_sources, y = proportion, fill = cell_type
 
 #smaple source proportion
 proportion_data <- merged_seurat_obj@meta.data %>%
-  group_by(sample_type, cell_type) %>% summarise(count = n()) %>% mutate(proportion = count / sum(count))
+  group_by(sample_sources) %>% summarise(count = n()) %>% mutate(proportion = count / sum(count))
 
-ggplot(proportion_data, aes(x = "", y = proportion, fill = cell_type)) +
+ggplot(proportion_data, aes(x = "", y = proportion, fill = sample_sources)) +
   geom_bar(stat = "identity", width = 1) +  # 堆叠柱状图
-  coord_polar(theta = "y") +  # 转换为极坐标，生成饼图
-  labs(title = "Proportion of Cell Types", fill = "Cell Type") +  # 设置标题和图例标题
-  theme_void() +  # 使用空白主题
-  theme(
-    legend.position = "right",  # 设置图例位置
-    plot.title = element_text(hjust = 0.5)  # 设置标题居中
+  coord_polar(theta = "y") +                # 转换为饼图
+  labs(
+    title = "Sample Source Proportions",
+    fill = "Sample Source",
+    x = NULL,
+    y = NULL
   ) +
-  facet_wrap(~ sample_type, ncol = 2)
+  theme_void() +                           # 移除坐标轴和背景
+  theme(
+    plot.title = element_text(hjust = 0.5),  # 标题居中
+    legend.position = "right"               # 图例在右侧
+  )
 
 #箱线图
 library(ggpubr)
