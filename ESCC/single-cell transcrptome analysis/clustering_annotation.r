@@ -43,15 +43,15 @@ DimPlot(merged_seurat_obj, reduction = "umap", label = TRUE, pt.size = 1) +
 #significant_markers <- subset(markers, myAUC > 0.7)
 #write.csv(significant_markers,"marker.csv")
 
-markers2 <- FindAllMarkers(merged_seurat_obj, 
+markers <- FindAllMarkers(merged_seurat_obj, 
                           only.pos = TRUE, 
                           min.pct = 0.25, 
                           logfc.threshold = 0.25, 
                           test.use = "wilcox")
 #significant markers
-significant_markers2 <- subset(markers2, p_val_adj < 0.05)
-significant_markers2 <- significant_markers2 %>% group_by(cluster) %>% top_n(n = 20, wt = avg_log2FC)
-write.csv(significant_markers2,"marker_top.csv")
+significant_markers <- subset(markers, p_val_adj < 0.05)
+significant_markers <- significant_markers %>% group_by(cluster) %>% top_n(n = 20, wt = avg_log2FC)
+write.csv(significant_markers,"marker_top.csv")
 
 identity_mapping <- c(
   "0" = "T cell",
@@ -69,7 +69,7 @@ identity_mapping <- c(
   "12" = "Epithelial cell",
   "13" = "Proliferating cell",
   "14" = "Pericyte",
-  "15" = "NK cell",
+  "15" = "T cell",
   "16" = "T cell",
   "17" = "Fibroblast",
   "18" = "T cell",
@@ -78,6 +78,33 @@ identity_mapping <- c(
   "21" = "Proliferating cell",
   "22" = "Epithelial cell"
 )
+
+identity_mapping <- c(
+  "0" = "T cell",
+  "1" = "B cell",
+  "2" = "T cell",
+  "3" = "Fibroblast",
+  "4" = "Plasma",
+  "5" = "Macrophage",
+  "6" = "Dendritic cell",
+  "7" = "Endothelial cell",
+  "8" = "Monocyte",
+  "9" = "Epithelial cell",
+  "10" = "Fibroblast",
+  "11" = "Mast cell",
+  "12" = "Epithelial cell",
+  "13" = "Proliferating cell",
+  "14" = "Pericyte",
+  "15" = "T cell",
+  "16" = "T cell",
+  "17" = "Fibroblast",
+  "18" = "T cell",
+  "19" = "Plasma",
+  "20" = "Plasma",
+  "21" = "Proliferating cell",
+  "22" = "Epithelial cell"
+)
+
 cell_type <- identity_mapping[merged_seurat_obj@meta.data$seurat_clusters]
 merged_seurat_obj@meta.data$cell_type <- cell_type
 
