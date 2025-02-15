@@ -82,15 +82,15 @@ identity_mapping <- c(
 identity_mapping <- c(
   "0" = "T cell",
   "1" = "B cell",
-  "2" = "T cell",
-  "3" = "Fibroblast",
-  "4" = "Plasma",
-  "5" = "Macrophage",
-  "6" = "Dendritic cell",
-  "7" = "Endothelial cell",
-  "8" = "Monocyte",
-  "9" = "Epithelial cell",
-  "10" = "Fibroblast",
+  "2" = "Fibroblast",
+  "3" = "Plasma",
+  "4" = "Fibroblast",
+  "5" = "Dendritic cell",
+  "6" = "Macrophage",
+  "7" = "Monocyte",
+  "8" = "Endothelial cell",
+  "9" = "T cell",
+  "10" = "Epithelial cell",
   "11" = "Mast cell",
   "12" = "Epithelial cell",
   "13" = "Proliferating cell",
@@ -99,10 +99,11 @@ identity_mapping <- c(
   "16" = "T cell",
   "17" = "Fibroblast",
   "18" = "T cell",
-  "19" = "Plasma",
+  "19" = "Neurons",
   "20" = "Plasma",
   "21" = "Proliferating cell",
-  "22" = "Epithelial cell"
+  "22" = "Epithelial cell",
+  "23" = "Proliferating cell"
 )
 
 cell_type <- identity_mapping[merged_seurat_obj@meta.data$seurat_clusters]
