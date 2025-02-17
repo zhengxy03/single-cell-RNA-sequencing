@@ -138,6 +138,60 @@ merged_seurat_obj <- doubletFinder(merged_seurat_obj, PCs = 1:20, pN = 0.25, pK 
 doublet_col <- colnames(merged_seurat_obj@meta.data)[grep("DF.classification", colnames(merged_seurat_obj@meta.data))]
 merged_seurat_obj <- subset(merged_seurat_obj, subset = get(doublet_col) == "Singlet")
 
+#分批处理
+batch_size <- 5000  # 可以根据实际情况调整批次大小
+num_cells <- ncol(merged_seurat_obj)
+num_batches <- ceiling(num_cells / batch_size)
+
+# 初始化一个列表来存储每个批次的结果
+batch_results <- list()
+
+# 分批次处理数据
+for (i in 1:num_batches) {
+  start_idx <- (i - 1) * batch_size + 1
+  end_idx <- min(i * batch_size, num_cells)
+  
+  # 提取当前批次的细胞
+  batch_cells <- merged_seurat_obj[, start_idx:end_idx]
+  
+  # 对当前批次的数据进行预处理
+  batch_cells <- NormalizeData(batch_cells)
+  batch_cells <- FindVariableFeatures(batch_cells, nfeatures = 2000)
+  hvgs <- VariableFeatures(batch_cells)
+  batch_cells <- ScaleData(batch_cells, features = hvgs)
+  batch_cells <- RunPCA(batch_cells, features = hvgs, npcs = 20)
+  
+  # 确定 pK 值
+  sweep.res.list <- paramSweep_v3(batch_cells, PCs = 1:20, sct = FALSE)
+  sweep.stats <- summarizeSweep(sweep.res.list, GT = FALSE)
+  bcmvn <- find.pK(sweep.stats)
+  
+  # 估计双细胞比例
+  nExp_poi <- round(0.075 * ncol(batch_cells))  # 假设双细胞比例为 7.5%，可根据实际情况调整
+  
+  # 检测双细胞
+  batch_cells <- doubletFinder_v3(batch_cells, PCs = 1:20, pN = 0.25, pK = as.numeric(as.character(bcmvn$pK[which.max(bcmvn$BCmetric)])), nExp = nExp_poi, reuse.pANN = FALSE, sct = FALSE)
+  
+  # 提取双细胞检测结果
+  doublet_col <- grep("DF.classifications", colnames(batch_cells@meta.data), value = TRUE)
+  batch_results[[i]] <- batch_cells@meta.data[[doublet_col]]
+  
+  # 释放当前批次的内存
+  rm(batch_cells)
+  gc()
+}
+
+# 合并所有批次的结果
+all_results <- unlist(batch_results)
+
+# 将双细胞检测结果添加到原始的 Seurat 对象中
+merged_seurat_obj@meta.data$DF.classifications <- all_results
+
+# 去除双细胞
+merged_seurat_obj <- subset(merged_seurat_obj, subset = DF.classifications == "Singlet")
+
+
+
 library(harmony)
 merged_seurat_obj <- RunHarmony(merged_seurat_obj, "orig.ident")
 

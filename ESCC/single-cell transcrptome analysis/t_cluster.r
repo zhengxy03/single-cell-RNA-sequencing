@@ -32,28 +32,25 @@ write.csv(t_significant_markers, "t_all_marker.csv")
 t_significant_markers <- t_significant_markers %>% group_by(cluster) %>% top_n(n = 50, wt = avg_log2FC)
 write.csv(t_significant_markers, "t_top_marker.csv")
 
+b_cluster_ids <- c(6, 9, 10)
+t_cells <- subset(t_cells, idents = setdiff(levels(Idents(t_cells)), b_cluster_ids))
+
 identity_mapping <- c(
-  "0" = "Th17",
-  "1" = "CD8+Tem", #GZMK+Tem
-  "2" = "Th1", 
-  "3" = "Tn",
+  "0" = "Tn",
+  "1" = "CD8+Tem",
+  "2" = "Treg", 
+  "3" = "CD8+Teff",
   "4" = "CD8+Teff",
-  "5" = "Treg",
-  "6" = "Treg",
+  "5" = "CD8+Tex",
+  "6" = "TNK",
   "7" = "TNK",
-  "8" = "CD+Tn",
-  "9" = "Tfh",
-  "10" = "Teff",
-  "11" = "Treg",
-  "12" = "Tfh",
-  "13" = "Tex", #ITGAE+Tex
-  "14" = "Tfh",
-  "15" = "Tex"
+  "8" = "CD4+Tex",
+  "9" = "Th17"
 )
 cell_type <- identity_mapping[t_cells@meta.data$seurat_clusters]
 t_cells@meta.data$cell_type <- cell_type
 
-DimPlot(t_cells, reduction = "umap", label = TRUE, pt.size = 1, group.by = "cell_type") +
+DimPlot(t_cells, reduction = "umap", label = TRUE, group.by = "cell_type") +
   xlab("UMAP_1") +
   ylab("UMAP_2") +
   ggtitle(NULL) +

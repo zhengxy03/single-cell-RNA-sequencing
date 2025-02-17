@@ -33,6 +33,24 @@ DimPlot(merged_seurat_obj, reduction = "umap", label = TRUE, pt.size = 1) +
     legend.text = element_text(size = 8), # 图例文本字体大小
     legend.title = element_text(size = 8) # 图例标题字体大小（如果有标题的话，这里原代码设置为NULL）
   )
+#plot on samples
+DimPlot(merged_seurat_obj, reduction = "umap", label = FALSE, pt.size = 1, group.by = "orig.ident") +
+    xlab("UMAP_1") +
+    ylab("UMAP_2") +
+    ggtitle(NULL) +
+    guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
+    theme(
+        text = element_text(size = 8, face = "bold"),
+        axis.text.x = element_text(size = 12), 
+        axis.text.y = element_text(size = 12), 
+        axis.title.x = element_text(size = 12), 
+        axis.title.y = element_text(size = 12), 
+        plot.title = element_text(size = 12),
+        legend.text = element_text(size = 8), # 图例文本字体大小
+        legend.title = element_text(size = 8) # 图例标题字体大小（如果有标题的话，这里原代码设置为NULL）
+    )
+
+
 #annotation
 #markers <- FindAllMarkers(object = merged_seurat_obj, 
                                   test.use = "roc", 
@@ -49,35 +67,10 @@ markers <- FindAllMarkers(merged_seurat_obj,
                           logfc.threshold = 0.25, 
                           test.use = "wilcox")
 #significant markers
+library(dplyr)
 significant_markers <- subset(markers, p_val_adj < 0.05)
 significant_markers <- significant_markers %>% group_by(cluster) %>% top_n(n = 20, wt = avg_log2FC)
 write.csv(significant_markers,"marker_top.csv")
-
-identity_mapping <- c(
-  "0" = "T cell",
-  "1" = "B cell",
-  "2" = "T cell",
-  "3" = "Fibroblast",
-  "4" = "Plasma",
-  "5" = "Macrophage",
-  "6" = "Dendritic cell",
-  "7" = "Endothelial cell",
-  "8" = "Monocyte",
-  "9" = "Epithelial cell",
-  "10" = "Fibroblast",
-  "11" = "Mast cell",
-  "12" = "Epithelial cell",
-  "13" = "Proliferating cell",
-  "14" = "Pericyte",
-  "15" = "T cell",
-  "16" = "T cell",
-  "17" = "Fibroblast",
-  "18" = "T cell",
-  "19" = "Plasma",
-  "20" = "Plasma",
-  "21" = "Proliferating cell",
-  "22" = "Epithelial cell"
-)
 
 identity_mapping <- c(
   "0" = "T cell",
