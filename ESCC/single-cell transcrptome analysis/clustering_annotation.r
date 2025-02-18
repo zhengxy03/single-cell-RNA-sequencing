@@ -33,6 +33,7 @@ DimPlot(merged_seurat_obj, reduction = "umap", label = TRUE, pt.size = 1) +
     legend.text = element_text(size = 8), # 图例文本字体大小
     legend.title = element_text(size = 8) # 图例标题字体大小（如果有标题的话，这里原代码设置为NULL）
   )
+ggsave("clusters.png", plot = p1, width = 8, height = 6, units = "in", dpi = 300)
 #plot on samples
 DimPlot(merged_seurat_obj, reduction = "umap", label = FALSE, pt.size = 1, group.by = "orig.ident") +
     xlab("UMAP_1") +
@@ -73,30 +74,29 @@ significant_markers <- significant_markers %>% group_by(cluster) %>% top_n(n = 2
 write.csv(significant_markers,"marker_top.csv")
 
 identity_mapping <- c(
-  "0" = "T cell",
-  "1" = "B cell",
-  "2" = "Fibroblast",
-  "3" = "Plasma",
-  "4" = "Fibroblast",
-  "5" = "Dendritic cell",
-  "6" = "Macrophage",
-  "7" = "Monocyte",
-  "8" = "Endothelial cell",
-  "9" = "T cell",
-  "10" = "Epithelial cell",
-  "11" = "Mast cell",
-  "12" = "Epithelial cell",
-  "13" = "Proliferating cell",
-  "14" = "Pericyte",
-  "15" = "T cell",
-  "16" = "T cell",
-  "17" = "Fibroblast",
-  "18" = "T cell",
-  "19" = "Neurons",
-  "20" = "Plasma",
-  "21" = "Proliferating cell",
-  "22" = "Epithelial cell",
-  "23" = "Proliferating cell"
+    "0" = "T cell",
+    "1" = "B cell",
+    "2" = "T cell",
+    "3" = "Fibroblast",
+    "4" = "Plasma",
+    "5" = "Monocyte",
+    "6" = "Endothelial cell",
+    "7" = "Macrophage",
+    "8" = "Dendritic cell",
+    "9" = "Fibroblast",
+    "10" = "Epithelial cell",
+    "11" = "Mast cell",
+    "12" = "Epithelial cell",
+    "13" = "Pericyte",
+    "14" = "Proliferating cell",
+    "15" = "T cell",
+    "16" = "NK cell",
+    "17" = "Fibroblast",
+    "18" = "T cell",
+    "19" = "T cell",
+    "20" = "Plasma",
+    "21" = "Plasma",
+    "22" = "Epithelial cell"
 )
 
 cell_type <- identity_mapping[merged_seurat_obj@meta.data$seurat_clusters]
@@ -291,3 +291,36 @@ ggplot(cell_proportion, aes(x = cell_type, y = proportion, fill = sample_type)) 
     legend.position = "right"  # 设置图例位置在右侧
   ) +
   scale_fill_manual(values = c("tumor" = "red", "normal" = "blue"))
+
+identity_mapping <- c(
+  "Sample1" = "Ⅲb",
+  "Sample2" = "Ⅱa",
+  "Sample3" = "Ⅲb",
+  "Sample4" = "Ⅱa",
+  "Sample5" = "Ⅰa",
+  "Sample6" = "Ⅱa",
+  "Sample7" = "Ⅲb",
+  "Sample8" = "Ⅱa",
+  "Sample9" = "Ⅲb",
+  "Sample10" = "Ⅱb",
+  "Sample11" = "Ⅱb",
+  "Sample12" = "Ⅱb",
+  "Sample13" = "Ⅱb",
+  "Sample14" = "Ⅲa",
+  "Sample15" = "Ⅰb",
+  "Sample16" = "Ⅰb",
+  "Sample17" = "Ⅰb",
+  "Sample18" = "Ⅰb",
+  "Sample19" = "Ⅲc",
+  "Sample20" = "Ⅲc",
+  "Sample21" = "Ⅲa",
+  "Sample22" = "Ⅲc",
+  "Sample23" = "Ⅲc",
+  "Sample24" = "Ⅲa",
+  "Sample25" = "Ⅲa",
+  "Sample26" = "Ⅰa",
+  "Sample27" = "0",
+  "Sample28" = "0"
+)
+period <- identity_mapping[merged_seurat_obj@meta.data$orig.ident]
+merged_seurat_obj@meta.data$period <- period
