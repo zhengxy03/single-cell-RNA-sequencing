@@ -32,6 +32,11 @@ fibroblast_significant_markers <- subset(fibroblast_markers, p_val_adj < 0.05)
 fibroblast_significant_markers <- fibroblast_significant_markers %>% group_by(cluster) %>% top_n(n = 50, wt = avg_log2FC)
 write.csv(fibroblast_significant_markers, "fibroblast_top_marker.csv")
 
+neg_fibroblast_significant_markers <- fibroblast_significant_markers %>% 
+  group_by(cluster) %>% 
+  top_n(n = -50, wt = avg_log2FC)
+write.csv(neg_fibroblast_significant_markers, "neg_fibroblast_top_marker.csv")
+
 immune_cluster_ids <- c(9)
 fibroblasts <- subset(fibroblasts, idents = setdiff(levels(Idents(fibroblasts)), immune_cluster_ids))
 
