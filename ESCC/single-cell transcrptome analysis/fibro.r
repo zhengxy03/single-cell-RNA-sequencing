@@ -45,8 +45,25 @@ fibro_T <- subset(fibroblasts, subset = sample_type == "tumor")
 fibro_N <- subset(fibroblasts, subset = sample_type == "normal")
 
 identity_mapping <- c(
-    "0" = "CAF1",
-    "1" = "CAF2",
+    "0" = "C0-iCAFs",
+    "1" = "C1-",
+    "2" = "Pericyte",
+    "3" = "Pericyte",
+    "4" = "CAF3",
+    "5" = "CAF4",
+    "6" = "Pericyte",
+    "7" = "NAF1",
+    "8" = "myCAF5",
+    "9" = "apCAF6",
+    "10" = "mCAF7",
+    "11" = "NAF2",
+    "12" = "NAF3",
+    "13" = "NAF4"
+)
+
+identity_mapping <- c(
+    "0" = "",
+    "1" = "C1-",
     "2" = "Pericyte",
     "3" = "Pericyte",
     "4" = "CAF3",
@@ -99,8 +116,8 @@ curve_data <- as.data.frame(trajectories[[1]]$s[trajectories[[1]]$ord, ])
 ggplot(umap_data, aes(x = umap_1, y = umap_2, color = cell_type)) +
   geom_point(size = 2, alpha = 0.8, shape = 16) +
   geom_path(data = curve_data, aes(x = umap_1, y = umap_2), 
-            color = "black", size = 1.5, linetype = "solid") +
-  scale_color_npg() +  # 使用 Nature Publishing Group 配色
+            color = "black", linewidth = 1.5, linetype = "solid") +
+  scale_color_brewer(palette = "Set3") +  # 使用能处理更多颜色的调色板
   theme_classic() +
   ggtitle("Trajectory Analysis of Fibroblast Cells") +
   theme(
@@ -127,7 +144,7 @@ ggplot() +
   geom_path(data = curve_data, aes(x = umap_1, y = umap_2, group = trajectory), 
             color = "black", size = 1.5, linetype = "solid") +
   # 设置细胞类型的颜色比例尺（可根据需要调整）
-  scale_color_npg() +
+  scale_color_brewer(palette = "Set3") +
   # 使用经典主题
   theme_classic() +
   # 设置主题相关属性
@@ -144,18 +161,3 @@ ggplot() +
   ggtitle("Trajectory Analysis of CD8 T Cells")
 
 
-ggplot(umap_data, aes(x = umap_1, y = umap_2, color = cell_type)) +
-  geom_point(size = 2, alpha = 0.8, shape = 16) +
-  geom_path(data = curve_data, aes(x = umap_1, y = umap_2), 
-            color = "black", linewidth = 1.5, linetype = "solid") +
-  scale_color_brewer(palette = "Set3") +  # 使用能处理更多颜色的调色板
-  theme_classic() +
-  ggtitle("Trajectory Analysis of Fibroblast Cells") +
-  theme(
-    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"), 
-    legend.position = "right",
-    legend.title = element_blank()  # 隐藏图例标题
-  ) +
-  xlab("UMAP_1") +
-  ylab("UMAP_2") +
-  guides(color = guide_legend(title = NULL))

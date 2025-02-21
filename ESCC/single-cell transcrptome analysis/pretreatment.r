@@ -195,5 +195,18 @@ merged_seurat_obj <- subset(merged_seurat_obj, subset = DF.classifications == "S
 library(harmony)
 merged_seurat_obj <- RunHarmony(merged_seurat_obj, "orig.ident")
 
+
+samples <- unique(merged_seurat_obj@meta.data$orig.ident)
+sample_numbers <- as.numeric(gsub("[^0-9]", "", samples))
+samples_ordered <- samples[order(sample_numbers)]
+non_numeric_samples <- samples[is.na(sample_numbers)]  # 提取没有数字部分的样本名称
+samples_ordered <- c(samples_ordered, non_numeric_samples)
+
+merged_seurat_obj@meta.data$orig.ident <- factor(
+  merged_seurat_obj@meta.data$orig.ident,
+  levels = samples_ordered  # 按数字顺序设置水平
+)
+
+
 # 保存 merged_seurat_obj 对象
 saveRDS(merged_seurat_obj, file = "merged_seurat_obj.rds")
