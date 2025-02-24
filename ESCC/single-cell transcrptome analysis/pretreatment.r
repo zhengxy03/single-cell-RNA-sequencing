@@ -162,7 +162,7 @@ for (i in 1:num_batches) {
   batch_cells <- RunPCA(batch_cells, features = hvgs, npcs = 20)
   
   # 确定 pK 值
-  sweep.res.list <- paramSweep_v3(batch_cells, PCs = 1:20, sct = FALSE)
+  sweep.res.list <- paramSweep(batch_cells, PCs = 1:20, sct = FALSE)
   sweep.stats <- summarizeSweep(sweep.res.list, GT = FALSE)
   bcmvn <- find.pK(sweep.stats)
   
@@ -170,7 +170,7 @@ for (i in 1:num_batches) {
   nExp_poi <- round(0.075 * ncol(batch_cells))  # 假设双细胞比例为 7.5%，可根据实际情况调整
   
   # 检测双细胞
-  batch_cells <- doubletFinder_v3(batch_cells, PCs = 1:20, pN = 0.25, pK = as.numeric(as.character(bcmvn$pK[which.max(bcmvn$BCmetric)])), nExp = nExp_poi, reuse.pANN = FALSE, sct = FALSE)
+  batch_cells <- doubletFinder(batch_cells, PCs = 1:20, pN = 0.25, pK = as.numeric(as.character(bcmvn$pK[which.max(bcmvn$BCmetric)])), nExp = nExp_poi, reuse.pANN = FALSE, sct = FALSE)
   
   # 提取双细胞检测结果
   doublet_col <- grep("DF.classifications", colnames(batch_cells@meta.data), value = TRUE)
