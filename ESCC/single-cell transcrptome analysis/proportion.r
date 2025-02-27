@@ -181,27 +181,61 @@ cell_counts <- merged_seurat_obj@meta.data %>%
   summarise(count = n()) %>%
   ungroup()
 
-
 sample_totals <- cell_counts %>%
   group_by(orig.ident) %>%
   summarise(total = sum(count)) %>%
   ungroup()
 
-cell_proportion <- cell_counts %>%
-  left_join(sample_totals, by = "orig.ident") %>%
-  mutate(proportion = count / total)
+# 将样本类型（sample_type）和细胞类型（cell_type）分开
+cell_counts <- cell_counts %>%
+  left_join(sample_totals, by = "orig.ident")
 
-png("箱图.png", width = 6000, height = 3000, res = 300)
-ggplot(cell_proportion, aes(x = cell_type, y = proportion, fill = sample_type)) +
+# 对每个细胞类型构建列联表并进行卡方检验
+chisq_results <- cell_counts %>%
+  group_by(cell_type) %>%
+  summarise(
+    p_value = {
+      # 提取正常样本和肿瘤样本的细胞数量和总细胞数
+      normal_count = sum(count[sample_type == "normal"])
+      tumor_count = sum(count[sample_type == "tumor"])
+      normal_total = sum(total[sample_type == "normal"])
+      tumor_total = sum(total[sample_type == "tumor"])
+      
+      # 构建 2x2 列联表
+      cont_table <- matrix(
+        c(normal_count, tumor_count, normal_total - normal_count, tumor_total - tumor_count),
+        nrow = 2
+      )
+      
+      # 进行卡方检验
+      chisq.test(cont_table)$p.value
+    }
+  ) %>%
+  ungroup()
+
+# 添加显著性标记
+chisq_results <- chisq_results %>%
+  mutate(
+    significance = case_when(
+      p_value < 0.001 ~ "***",
+      p_value < 0.01 ~ "**",
+      p_value < 0.05 ~ "*",
+      TRUE ~ "ns"
+    )
+  )
+
+# 绘制基于 count 的箱线图并添加显著性标记
+png("箱图_count.png", width = 6000, height = 3000, res = 300)
+ggplot(cell_counts, aes(x = cell_type, y = count, fill = sample_type)) +
   geom_boxplot() +  # 绘制箱线图
-  stat_compare_means(  # 添加显著性标记
-    aes(group = sample_type),  # 按 sample_type 分组比较
-    method = "wilcox.test",    # 使用 Wilcoxon 检验
-    label = "p.signif",        # 显示显著性符号（如 *）
-    label.y = 0.6,             # 调整标签的垂直位置
-    size = 12                   # 标签字体大小
-  ) +
-  labs(x = "", y = "Proportion", fill = "Sample Type") +  # 设置坐标轴和图例标题
+  geom_text(
+    data = chisq_results, 
+    aes(x = cell_type, y = max(cell_counts$count) * 0.9, label = significance),  # 调整 y 值
+    size = 12, 
+    vjust = 0.5,  # 调整 vjust 参数
+    inherit.aes = FALSE  # 忽略父图层的 aes 映射
+  ) +  # 添加显著性标记
+  labs(x = "", y = "Cell Count", fill = "Sample Type") +  # 设置坐标轴和图例标题
   theme_classic() +  # 使用经典主题
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1, size = 28),  # 调整横轴标签角度
@@ -215,36 +249,9 @@ ggplot(cell_proportion, aes(x = cell_type, y = proportion, fill = sample_type)) 
     legend.position = "right"  # 设置图例位置在右侧
   ) +
   scale_fill_npg() +
-  scale_y_continuous(limits = c(0, 0.6)) 
+  scale_y_continuous(limits = c(0, 6500)) 
 dev.off()
 
-
-png("count_箱图.png", width = 6000, height = 3000, res = 300)
-ggplot(cell_proportion, aes(x = cell_type, y = count, fill = sample_type)) +
-    geom_boxplot() +  # 绘制箱线图
-    stat_compare_means(  # 添加显著性标记
-        aes(group = sample_type),  # 按 sample_type 分组比较
-        method = "wilcox.test",    # 使用 Wilcoxon 检验
-        label = "p.signif",        # 显示显著性符号（如 *）
-    # 调整标签的垂直位置
-        size = 12                   # 标签字体大小
-    ) +
-    labs(x = "", y = "Count", fill = "Sample Type") +  # 设置坐标轴和图例标题
-    theme_classic() +  # 使用经典主题
-    theme(
-        axis.text.x = element_text(angle = 45, hjust = 1, size = 28),  # 调整横轴标签角度
-        axis.text.y = element_text(size = 28),
-        axis.title.y = element_text(size = 40),
-        axis.line = element_line(color = "black"),  # 设置坐标轴颜色
-        panel.grid.major = element_blank(),  # 移除主要网格线
-        panel.grid.minor = element_blank(),  # 移除次要网格线
-        legend.text = element_text(size = 36),         # 图例文本字体大小
-        legend.title = element_text(size = 40),
-        legend.position = "right"  # 设置图例位置在右侧
-    ) +
-    scale_fill_npg() +
-    scale_y_continuous(limits = c(0, 4000)) 
-dev.off()
 
 identity_mapping <- c(
   "Sample1" = "Ⅲb",
