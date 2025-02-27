@@ -1,11 +1,12 @@
 library(Seurat)
 
 base_dir <- "/share/home/wangq/zxy/ESCC/treatment"
-#base_dir <- "E:/project/ESCC/treatment"
+base_dir <- "E:/project/ESCC/treatment"
+setwd("E:/project/ESCC/treatment")
 dirs <- list.dirs(base_dir, full.names = TRUE, recursive = FALSE)
 
-sample_types <- c("tumor", "tumor", "normal", "normal", 
-                  "tumor", "normal", "normal", "tumor", 
+sample_types <- c("tumor", "tumor", "tumor", "normal", 
+                  "normal", "tumor", "tumor", "tumor", 
                   "tumor", "tumor", "normal", "tumor", 
                   "normal", "tumor", "tumor", "normal", 
                   "tumor", "normal", "tumor", "tumor", 
@@ -13,7 +14,7 @@ sample_types <- c("tumor", "tumor", "normal", "normal",
                   "normal", "normal", "tumor", "normal",
                   "tumor", "normal", "tumor", "tumor",
                   "normal")
-sample_sources <- c("GSE145370", "GSE145370", "GSE145370", "GSE145370",
+sample_sources <- c("GSE160269", "GSE160269", "GSE160269", "GSE160269",
                     "GSE160269", "GSE160269", "GSE160269", "GSE160269",
                     "GSE160269", "GSE160269", "GSE160269", "GSE160269",
                     "GSE160269", "GSE160269", "PRJNA777911", "PRJNA777911", "PRJNA777911",
@@ -23,39 +24,39 @@ sample_sources <- c("GSE145370", "GSE145370", "GSE145370", "GSE145370",
                     "PRJNA777911", "PRJNA777911", "PRJNA777911", "PRJNA777911")
 
 mapping <- c(
-  "SRR11094242" = 1,
-  "SRR11094244" = 2,
-  "SRR11094253" = 3,
-  "SRR11094255" = 4,
-  "SRR15093496" = 5,
-  "SRR15093530" = 6,
-  "SRR15093533" = 7,
-  "SRR15093535" = 8,
-  "SRR15093537" = 9,
-  "SRR15093563" = 5,
-  "SRR15093585" = 6,
-  "SRR15093589" = 8,
-  "SRR15093591" = 7,
-  "SRR15093592" = 9,
-  "SRR16796861" = 10,
-  "SRR16796862" = 11,
-  "SRR16796863" = 12,
-  "SRR16796865" = 13,
-  "SRR16796868" = 14,
-  "SRR16796871" = 15,
-  "SRR16796872" = 16,
-  "SRR16796874" = 17,
-  "SRR16796875" = 18,
-  "SRR16796876" = 19,
-  "SRR16796877" = 20,
-  "SRR16796879" = 21,
-  "SRR16796880" = 22,
-  "SRR16796881" = 23,
-  "SRR16796884" = 24,
-  "SRR16796885" = 25,
-  "SRR16796886" = 26,
-  "SRR16796890" = 27,
-  "SRR16796891" = 28
+  "SRR15093493" = 1,
+  "SRR15093496" = 2,
+  "SRR15093498" = 3,
+  "SRR15093530" = 4,
+  "SRR15093533" = 5,
+  "SRR15093535" = 6,
+  "SRR15093537" = 7,
+  "SRR15093559" = 1,
+  "SRR15093563" = 2,
+  "SRR15093565" = 3,
+  "SRR15093585" = 4,
+  "SRR15093589" = 6,
+  "SRR15093591" = 5,
+  "SRR15093592" = 7,
+  "SRR16796861" = 8,
+  "SRR16796862" = 9,
+  "SRR16796863" = 10,
+  "SRR16796865" = 11,
+  "SRR16796868" = 12,
+  "SRR16796871" = 13,
+  "SRR16796872" = 14,
+  "SRR16796874" = 15,
+  "SRR16796875" = 16,
+  "SRR16796876" = 17,
+  "SRR16796877" = 18,
+  "SRR16796879" = 19,
+  "SRR16796880" = 20,
+  "SRR16796881" = 21,
+  "SRR16796884" = 22,
+  "SRR16796885" = 23,
+  "SRR16796886" = 24,
+  "SRR16796890" = 25,
+  "SRR16796891" = 26
 )
 
 seurat_objs <- list()
@@ -110,9 +111,7 @@ keep_genes <- expressed_cells_per_gene >= min_cell_percentage * ncol(merged_seur
               expressed_cells_per_gene >= min_cell_count
 merged_seurat_obj <- merged_seurat_obj[keep_genes, ]
 
-#average genes per cell
-genes_per_cell <- merged_seurat_obj$nFeature_RNA
-average_genes <- mean(genes_per_cell)
+
 
 merged_seurat_obj <- NormalizeData(merged_seurat_obj)
 merged_seurat_obj <- FindVariableFeatures(merged_seurat_obj, nfeatures = 2000)
@@ -129,58 +128,46 @@ sweep.stats <- summarizeSweep(sweep.res.list, GT = FALSE)
 bcmvn <- find.pK(sweep.stats)
 
 # 估计双细胞比例
-nExp_poi <- round(0.075 * ncol(merged_seurat_obj)) 
+#nExp_poi <- round(0.075 * ncol(merged_seurat_obj)) 
 
 # 进行双细胞检测
-merged_seurat_obj <- doubletFinder(merged_seurat_obj, PCs = 1:20, pN = 0.25, pK = as.numeric(as.character(bcmvn$pK[which.max(bcmvn$BCmetric)])), nExp = nExp_poi, reuse.pANN = FALSE, sct = FALSE)
+#merged_seurat_obj <- doubletFinder(merged_seurat_obj, PCs = 1:20, pN = 0.25, pK = as.numeric(as.character(bcmvn$pK[which.max(bcmvn$BCmetric)])), nExp = nExp_poi, reuse.pANN = FALSE, sct = FALSE)
 
 # 去除双细胞
-doublet_col <- colnames(merged_seurat_obj@meta.data)[grep("DF.classification", colnames(merged_seurat_obj@meta.data))]
-merged_seurat_obj <- subset(merged_seurat_obj, subset = get(doublet_col) == "Singlet")
+#doublet_col <- colnames(merged_seurat_obj@meta.data)[grep("DF.classification", colnames(merged_seurat_obj@meta.data))]
+#merged_seurat_obj <- subset(merged_seurat_obj, subset = get(doublet_col) == "Singlet")
 
-#分批处理
-batch_size <- 5000  # 可以根据实际情况调整批次大小
+pK_value <- as.numeric(as.character(bcmvn$pK[which.max(bcmvn$BCmetric)]))
+
+# 分批处理
+batch_size <- 10000
 num_cells <- ncol(merged_seurat_obj)
 num_batches <- ceiling(num_cells / batch_size)
 
-# 初始化一个列表来存储每个批次的结果
 batch_results <- list()
 
-# 分批次处理数据
 for (i in 1:num_batches) {
   start_idx <- (i - 1) * batch_size + 1
   end_idx <- min(i * batch_size, num_cells)
   
   # 提取当前批次的细胞
-  batch_cells <- merged_seurat_obj[, start_idx:end_idx]
-  
-  # 对当前批次的数据进行预处理
-  batch_cells <- NormalizeData(batch_cells)
-  batch_cells <- FindVariableFeatures(batch_cells, nfeatures = 2000)
-  hvgs <- VariableFeatures(batch_cells)
-  batch_cells <- ScaleData(batch_cells, features = hvgs)
-  batch_cells <- RunPCA(batch_cells, features = hvgs, npcs = 20)
-  
-  # 确定 pK 值
-  sweep.res.list <- paramSweep(batch_cells, PCs = 1:20, sct = FALSE)
-  sweep.stats <- summarizeSweep(sweep.res.list, GT = FALSE)
-  bcmvn <- find.pK(sweep.stats)
-  
-  # 估计双细胞比例
-  nExp_poi <- round(0.075 * ncol(batch_cells))  # 假设双细胞比例为 7.5%，可根据实际情况调整
+  batch_cells <- subset(merged_seurat_obj, cells = colnames(merged_seurat_obj)[start_idx:end_idx])
   
   # 检测双细胞
-  batch_cells <- doubletFinder(batch_cells, PCs = 1:20, pN = 0.25, pK = as.numeric(as.character(bcmvn$pK[which.max(bcmvn$BCmetric)])), nExp = nExp_poi, reuse.pANN = FALSE, sct = FALSE)
+  nExp_poi <- round(0.075 * ncol(batch_cells))  # 假设双细胞比例为 7.5%
+  batch_cells <- doubletFinder(batch_cells, PCs = 1:20, pN = 0.25, pK = pK_value, nExp = nExp_poi, reuse.pANN = FALSE, sct = FALSE)
   
   # 提取双细胞检测结果
   doublet_col <- grep("DF.classifications", colnames(batch_cells@meta.data), value = TRUE)
   batch_results[[i]] <- batch_cells@meta.data[[doublet_col]]
   
-  # 释放当前批次的内存
+  # 释放内存
   rm(batch_cells)
   gc()
 }
 
+# 合并所有批次的结果
+#all_results <- do.call(rbind, batch_results)
 # 合并所有批次的结果
 all_results <- unlist(batch_results)
 
@@ -190,6 +177,10 @@ merged_seurat_obj@meta.data$DF.classifications <- all_results
 # 去除双细胞
 merged_seurat_obj <- subset(merged_seurat_obj, subset = DF.classifications == "Singlet")
 
+
+#average genes per cell
+genes_per_cell <- merged_seurat_obj$nFeature_RNA
+average_genes <- mean(genes_per_cell)
 
 
 library(harmony)

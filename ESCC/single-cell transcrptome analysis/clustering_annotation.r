@@ -20,7 +20,7 @@ merged_seurat_obj <- FindClusters(merged_seurat_obj, resolution = 0.5)
 merged_seurat_obj <- RunUMAP(merged_seurat_obj, reduction = "harmony", dims = 1:20)
 
 npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(23)
+npg_extended <- colorRampPalette(npg_pal)(21)
 
 # 获取图例的个数和名称长度
 seurat_clusters <- as.character(unique(merged_seurat_obj@meta.data$seurat_clusters))  # 转换为字符向量
@@ -127,26 +127,26 @@ write.csv(significant_markers,"marker_top.csv")
 
 identity_mapping <- c(
     "0" = "T cell",
-    "1" = "B cell",
-    "2" = "T cell",
-    "3" = "Fibroblast",
-    "4" = "Plasma",
-    "5" = "Epithelial cell",
-    "6" = "Monocyte",
-    "7" = "Macrophage",
-    "8" = "Endothelial cell",
-    "9" = "Dendritic cell",
-    "10" = "Fibroblast",
+    "1" = "T cell",
+    "2" = "Fibroblast",
+    "3" = "B cell",
+    "4" = "Fibroblast",
+    "5" = "Plasma",
+    "6" = "Epithelial cell",
+    "7" = "Endothelial cell",
+    "8" = "Myeloid cell",
+    "9" = "Macrophage",
+    "10" = "Myeloid cell",
     "11" = "Mast cell",
-    "12" = "Pericyte",
-    "13" = "Proliferating cell",
-    "14" = "T cell",
-    "15" = "NK cell",
-    "16" = "Epithelial cell",
+    "12" = "Epithelial cell",
+    "13" = "Pericyte",
+    "14" = "Proliferating cell",
+    "15" = "T cell",
+    "16" = "T cell",
     "17" = "Fibroblast",
-    "18" = "Plasma",
+    "18" = "Neuron",
     "19" = "Plasma",
-    "20" = "Epithelial cell"
+    "20" = "Fibroblast"
 )
 
 cell_type <- identity_mapping[merged_seurat_obj@meta.data$seurat_clusters]
@@ -209,13 +209,13 @@ genes_to_plot <- c(
     # 淋巴细胞系
     "CD3D", "CD3E", "NKG7",          # T细胞
     "BANK1", "CD79A", "MS4A1",        # B细胞
-    "GNLY", "KLRC1", "KLRB1",       # NK细胞
+
     "IGHG1", "IGHG3", "JCHAIN",      # 浆细胞
     
     # 髓系免疫细胞
     "C1QA", "C1QB", "APOC1",         # 巨噬细胞
-    "FCN1", "CD300E", "SLC11A1",          # 单核细胞
-    "CD86", "PKIB", "CLEC10A",      # 树突细胞（修正HAL-DRA为HLA-DRA）
+
+    "CD86", "LYZ", "PKIB",      # 树突细胞（修正HAL-DRA为HLA-DRA）
     
     # 结构细胞
     "SFN", "KRT19", "KRT17",       # 上皮细胞
