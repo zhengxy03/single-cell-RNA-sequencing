@@ -70,18 +70,19 @@ t_significant_markers <- t_significant_markers %>% group_by(cluster) %>% top_n(n
 write.csv(t_significant_markers, "t_top_marker.csv")
 
 identity_mapping <- c(
-  "0" = "CCR7+ Tn ",
-  "1" = "Treg",
-  "2" = "FOSB+ Tcm", 
-  "3" = "GZMK+ CD8+Tem",
-  "4" = "IFNG CD8+Teff",
-  "5" = "KLRK1+ CD8+Teff",
-  "6" = "TNK KLF2+ Tn",
-  "7" = "DNT",
+  "0" = "GZMK+ CD8+Teff",
+  "1" = "FOSB+ Tcm",
+  "2" = "FOXP3+ Treg", 
+  "3" = "Th17",
+  "4" = "LEF1+ Tn",
+  "5" = "PRF1+ CD8+Teff",
+  "6" = "STAT5B+ Activated T",
+  "7" = "TNK",
   "8" = "HAVCR2+ CD8+Tex",
   "9" = "TOX+ CD4+Tex",
-  "10" = "MHC-Ⅱ APC-like Th17",
-  "11" = "TAM-like Treg"
+  "10" = "Mast cell/T cell hybrid",
+  "11" = "IL2RA+ Treg",
+  "12" = "MHC-Ⅱ APC-like Th17"
 )
 
 
@@ -131,7 +132,7 @@ dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_la
 
 # 保存图片
 png("t_annotation.png", width = dynamic_width, height = base_height, res = 300)
-DimPlot(t_cells, reduction = "umap", label = TRUE, pt.size = 2, label.size = 8, group.by = "cell_type") +
+DimPlot(t_cells, reduction = "umap", label = TRUE, pt.size = 3, label.size = 8, group.by = "cell_type") +
     xlab("UMAP_1") +
     ylab("UMAP_2") +
     ggtitle(NULL) +
@@ -159,7 +160,7 @@ DimPlot(t_cells, reduction = "umap", label = TRUE, pt.size = 2, label.size = 8, 
         axis.line.y = element_line(color = "black", linewidth = 0.5),
         aspect.ratio = 1,
         plot.margin = margin(10, 50, 10, 10)
-    )
+    ) + scale_x_continuous(limits = c(-11.5, 7.5))
 dev.off()
 
 
@@ -201,6 +202,7 @@ png("combined_period_umap.png", width = 6000, height =3000, res = 300)
 print(combined_plot)
 dev.off()
 
+saveRDS(t_cells, file = "t_cells.rds")
 
 t_tumor <- subset(t_cells, subset = sample_type == "tumor")
 t_normal <- subset(t_cells, subset = sample_type == "normal")
@@ -255,7 +257,7 @@ DimPlot(t_tumor, reduction = "umap", label = TRUE, pt.size = 2, label.size = 8, 
     )
 dev.off()
 
-CD8 <- subset(t_cells, subset = seurat_clusters %in% c(2, 3, 5, 7))
+CD8 <- subset(t_cells, subset = seurat_clusters %in% c(0,5,8))
 #convert Seurat_obj to SingleCellExperiment_obj
 cd8_sce <- as.SingleCellExperiment(CD8)
 
@@ -316,3 +318,36 @@ ggplot() +
   ylab("UMAP_2") +
   # 设置图形标题
   ggtitle("Trajectory Analysis of CD8 T Cells")
+
+
+traj
+
+expression_matrix <- LayerData(CD8, assay = "RNA", layer = "data")
+# 提取细胞元数据
+cell_metadata <- CD8@meta.data
+
+# 提取基因元数据
+gene_annotation <- data.frame(gene_short_name = rownames(expression_matrix))
+rownames(gene_annotation) <- rownames(expression_matrix)
+cds <- newCellDataSet(expression_matrix,
+                      phenoData = new("AnnotatedDataFrame", data = cell_metadata),
+                      featureData = new("AnnotatedDataFrame", data = gene_annotation),
+                      lowerDetectionLimit = 0.5,
+                      expressionFamily = negbinomial.size())
+cds <- estimateSizeFactors(cds)
+cds <- estimateDispersions(cds)
+
+# 选择高变基因
+cds <- detectGenes(cds, min_expr = 0.1)
+expressed_genes <- row.names(subset(fData(cds), num_cells_expressed >= 10))
+
+# 选择用于轨迹分析的基因
+diff_test_res <- differentialGeneTest(cds[expressed_genes, ], fullModelFormulaStr = "~Cluster")
+ordering_genes <- row.names(subset(diff_test_res, qval < 0.01))
+
+# 设置用于轨迹分析的基因
+cds <- setOrderingFilter(cds, ordering_genes)
+
+# 降维和轨迹构建
+cds <- reduceDimension(cds, max_components = 2, method = 'DDRTree')
+cds <- orderCells(cds)

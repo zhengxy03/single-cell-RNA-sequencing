@@ -5,26 +5,59 @@ hvgs <- VariableFeatures(fibroblasts)
 fibroblasts <- ScaleData(fibroblasts, features = hvgs)
 fibroblasts <- RunPCA(fibroblasts, features = hvgs, npcs = 20)
 
-fibroblasts <- RunHarmony(fibroblasts, "sample_sources")
+fibroblasts <- RunHarmony(fibroblasts, "orig.ident")
 fibroblasts <- RunUMAP(fibroblasts, dims = 1:15, reduction = "harmony")
 fibroblasts <- FindNeighbors(fibroblasts, dims = 1:15, reduction = "harmony")
 fibroblasts <- FindClusters(fibroblasts, resolution = 0.3)
 
-DimPlot(fibroblasts, reduction = "umap", label = TRUE) +
-  xlab("UMAP_1") +
-  ylab("UMAP_2") +
-  ggtitle(NULL) +
-  guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
-  theme(
-    text = element_text(size = 8, face = "bold"),
-    axis.text.x = element_text(size = 12), 
-    axis.text.y = element_text(size = 12), 
-    axis.title.x = element_text(size = 12), 
-    axis.title.y = element_text(size = 12), 
-    plot.title = element_text(size = 12),
-    legend.text = element_text(size = 8), # 图例文本字体大小
-    legend.title = element_text(size = 8) # 图例标题字体大小（如果有标题的话，这里原代码设置为NULL）
-  )
+# 获取图例的个数和名称长度
+seurat_clusters <- as.character(unique(fibroblasts@meta.data$seurat_clusters))  # 转换为字符向量
+num_legend_items <- length(seurat_clusters)  # 图例的个数
+max_label_length <- max(nchar(seurat_clusters))  # 图例名称的最大长度
+
+# 动态计算图片尺寸
+base_width <- 3000  # 基础宽度
+base_height <- 3000  # 基础高度
+legend_width_factor <- 100  # 每个图例项增加的宽度
+label_length_factor <- 10  # 每个字符增加的宽度
+
+# 计算动态宽度
+dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
+
+npg_pal <- pal_npg()(10)
+npg_extended <- colorRampPalette(npg_pal)(14)
+png("fibro_clusters.png", width = dynamic_width, height = base_height, res = 300)
+DimPlot(fibroblasts, reduction = "umap", label = TRUE, pt.size = 2, label.size = 8) +
+    xlab("UMAP_1") +
+    ylab("UMAP_2") +
+    ggtitle(NULL) +
+    scale_color_manual(values = npg_extended) +
+    coord_fixed(ratio = 1) +
+    guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
+    theme(
+        text = element_text(size = 12, face = "bold"),
+        axis.text.x = element_text(size = 28, color = "black"),
+        axis.text.y = element_text(size = 28, color = "black"),
+        axis.title.x = element_text(size = 36, face = "bold", color = "black"),
+        axis.title.y = element_text(size = 36, face = "bold", color = "black", margin = margin(r = 20)),  # 增加右侧间距
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        legend.text = element_text(size = 28, face = "bold", color = "black"),
+        legend.title = element_text(size = 28, face = "bold", color = "black"),
+        legend.position = "right",
+        legend.box.margin = margin(0, 0, 0, 0),
+        legend.key = element_blank(),
+        legend.background = element_blank(),
+        panel.background = element_rect(fill = "white", color = NA),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.line.x = element_line(color = "black", linewidth = 0.5),
+        axis.line.y = element_line(color = "black", linewidth = 0.5),
+        aspect.ratio = 1,
+        plot.margin = margin(10, 50, 10, 10)
+    )
+dev.off()
+
 
 fibroblast_markers <- FindAllMarkers(fibroblasts, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use = "wilcox")
 fibroblast_significant_markers <- subset(fibroblast_markers, p_val_adj < 0.05)
@@ -44,58 +77,168 @@ FeaturePlot(merged_seurat_obj, features = "CXCL5")
 fibro_T <- subset(fibroblasts, subset = sample_type == "tumor")
 fibro_N <- subset(fibroblasts, subset = sample_type == "normal")
 
-identity_mapping <- c(
-    "0" = "C0-iCAFs",
-    "1" = "C1-",
-    "2" = "Pericyte",
-    "3" = "Pericyte",
-    "4" = "CAF3",
-    "5" = "CAF4",
-    "6" = "Pericyte",
-    "7" = "NAF1",
-    "8" = "myCAF5",
-    "9" = "apCAF6",
-    "10" = "mCAF7",
-    "11" = "NAF2",
-    "12" = "NAF3",
-    "13" = "NAF4"
-)
+
+# 获取图例的个数和名称长度
+seurat_clusters <- as.character(unique(fibro_T@meta.data$seurat_clusters))  # 转换为字符向量
+num_legend_items <- length(seurat_clusters)  # 图例的个数
+max_label_length <- max(nchar(seurat_clusters))  # 图例名称的最大长度
+
+# 动态计算图片尺寸
+base_width <- 3000  # 基础宽度
+base_height <- 3000  # 基础高度
+legend_width_factor <- 100  # 每个图例项增加的宽度
+label_length_factor <- 10  # 每个字符增加的宽度
+
+# 计算动态宽度
+dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
+
+npg_pal <- pal_npg()(10)
+npg_extended <- colorRampPalette(npg_pal)(14)
+png("fibro_T_clusters.png", width = dynamic_width, height = base_height, res = 300)
+DimPlot(fibro_T, reduction = "umap", label = TRUE, pt.size = 2, label.size = 8) +
+    xlab("UMAP_1") +
+    ylab("UMAP_2") +
+    ggtitle(NULL) +
+    scale_color_manual(values = npg_extended) +
+    coord_fixed(ratio = 1) +
+    guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
+    theme(
+        text = element_text(size = 12, face = "bold"),
+        axis.text.x = element_text(size = 28, color = "black"),
+        axis.text.y = element_text(size = 28, color = "black"),
+        axis.title.x = element_text(size = 36, face = "bold", color = "black"),
+        axis.title.y = element_text(size = 36, face = "bold", color = "black", margin = margin(r = 20)),  # 增加右侧间距
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        legend.text = element_text(size = 28, face = "bold", color = "black"),
+        legend.title = element_text(size = 28, face = "bold", color = "black"),
+        legend.position = "right",
+        legend.box.margin = margin(0, 0, 0, 0),
+        legend.key = element_blank(),
+        legend.background = element_blank(),
+        panel.background = element_rect(fill = "white", color = NA),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.line.x = element_line(color = "black", linewidth = 0.5),
+        axis.line.y = element_line(color = "black", linewidth = 0.5),
+        aspect.ratio = 1,
+        plot.margin = margin(10, 50, 10, 10)
+    )
+dev.off()
+
+
+
+
+
+unique_periods <- sort(unique(fibroblasts@meta.data$period))  # 按字母顺序排序
+# 如果需要手动指定顺序，可以这样做：
+# unique_periods <- c("period_A", "period_B", "period_C", "period_D", "period_E", "period_F")
+
+# 创建一个空列表，用于存储每个 period 的图
+plot_list <- list()
+
+# 遍历每个 period，生成单独的图
+for (period in unique_periods) {
+    # 创建颜色映射：当前 period 为 npg 红色，其他为灰色
+    color_mapping <- setNames(
+        ifelse(unique_periods == period, pal_npg()(1), "gray"),  # npg 红色
+        unique_periods
+    )
+    
+    # 绘制 DimPlot
+    p <- DimPlot(fibroblasts, reduction = "umap", label = FALSE, pt.size = 1, group.by = "period") +
+        scale_color_manual(values = color_mapping) +  # 使用自定义颜色映射
+        ggtitle(period) +  # 设置标题为当前 period
+        theme(
+            legend.position = "none",  # 隐藏图例
+            plot.title = element_text(size = 24, face = "bold", hjust = 0.5),  # 标题样式
+            axis.title.x = element_text(size = 20, face = "bold", color = "black"),  # X 轴标题
+            axis.title.y = element_text(size = 20, face = "bold", color = "black"),  # Y 轴标题
+            axis.text.x = element_text(size = 16, color = "black"),  # X 轴刻度
+            axis.text.y = element_text(size = 16, color = "black")   # Y 轴刻度
+        )
+    
+    # 将图添加到列表中
+    plot_list[[period]] <- p
+}
+
+# 使用 patchwork 将图形排列在一起（每行三个）
+combined_plot <- wrap_plots(plot_list, ncol = 4)  # 每行三个图
+png("fibro_period_umap.png", width = 6000, height =3000, res = 300)
+print(combined_plot)
+dev.off()
+
+
+
 
 identity_mapping <- c(
-    "0" = "",
-    "1" = "C1-",
-    "2" = "Pericyte",
-    "3" = "Pericyte",
-    "4" = "CAF3",
-    "5" = "CAF4",
-    "6" = "Pericyte",
-    "7" = "NAF1",
-    "8" = "myCAF5",
-    "9" = "apCAF6",
-    "10" = "mCAF7",
-    "11" = "NAF2",
-    "12" = "NAF3",
-    "13" = "NAF4"
+    "0" = "PI16+ Fib progenitors",
+    "1" = "IL6+ iCAFs",
+    "2" = "MMP1+ mCAFs",
+    "3" = "HLA-DPB1+ apCAFs",
+    "4" = "COL11A1+ myCAFs",
+    "5" = "PI16+ Fib progenitors",
+    "6" = "CD74+ apCAFs",
+    "7" = "Immune-modulatory Fib"
 )
 
-cell_type <- identity_mapping[fibroblasts@meta.data$seurat_clusters]
+cell_type <- identity_mapping[as.character(fibroblasts@meta.data$seurat_clusters)]
 fibroblasts@meta.data$cell_type <- cell_type
 
-DimPlot(fibroblasts, reduction = "umap", label = TRUE, group.by = "cell_type") +
-  xlab("UMAP_1") +
-  ylab("UMAP_2") +
-  ggtitle(NULL) +
-  guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
-  theme(
-    text = element_text(size = 8, face = "bold"),
-    axis.text.x = element_text(size = 12), 
-    axis.text.y = element_text(size = 12), 
-    axis.title.x = element_text(size = 12), 
-    axis.title.y = element_text(size = 12), 
-    plot.title = element_text(size = 12),
-    legend.text = element_text(size = 8), # 图例文本字体大小
-    legend.title = element_text(size = 8) # 图例标题字体大小（如果有标题的话，这里原代码设置为NULL）
-  )
+# 提取 identity_mapping 中的值作为因子的水平
+factor_levels <- unname(identity_mapping)
+
+# 去除重复的水平
+factor_levels <- unique(factor_levels)
+
+# 将 cell_type 列转换为因子，并指定顺序
+fibroblasts@meta.data$cell_type <- factor(fibroblasts@meta.data$cell_type, levels = factor_levels)
+
+
+num_legend_items <- length(cell_types)  # 图例的个数
+max_label_length <- max(nchar(cell_types))  # 图例名称的最大长度
+
+# 动态计算图片尺寸
+base_width <- 5000  # 基础宽度
+base_height <- 5000  # 基础高度
+legend_width_factor <- 100  # 每个图例项增加的宽度
+label_length_factor <- 10  # 每个字符增加的宽度
+
+# 计算动态宽度
+dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
+
+# 保存图片
+png("fibro_annotation.png", width = dynamic_width, height = base_height, res = 300)
+DimPlot(fibroblasts, reduction = "umap", label = TRUE, pt.size = 3, label.size = 8, group.by = "cell_type") +
+    xlab("UMAP_1") +
+    ylab("UMAP_2") +
+    ggtitle(NULL) +
+    scale_color_manual(values = npg_extended) +
+    coord_fixed(ratio = 1) +
+    guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
+    theme(
+        text = element_text(size = 12, face = "bold"),
+        axis.text.x = element_text(size =40, color = "black"),
+        axis.text.y = element_text(size = 40, color = "black"),
+        axis.title.x = element_text(size = 56, face = "bold", color = "black"),
+        axis.title.y = element_text(size = 56, face = "bold", color = "black", margin = margin(r = 20)),  # 增加右侧间距
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        legend.text = element_text(size = 32, face = "bold", color = "black"),
+        legend.title = element_text(size = 40, face = "bold", color = "black"),
+        legend.position = "right",
+        legend.box.margin = margin(0, 0, 0, 0),
+        legend.key = element_blank(),
+        legend.background = element_blank(),
+        panel.background = element_rect(fill = "white", color = NA),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.line.x = element_line(color = "black", linewidth = 0.5),
+        axis.line.y = element_line(color = "black", linewidth = 0.5),
+        aspect.ratio = 1,
+        plot.margin = margin(10, 50, 10, 10)
+    ) + scale_x_continuous(limits = c(-12, 11.5))
+dev.off()
 
 #trajectory
 fibroblast_sce <- as.SingleCellExperiment(fibroblasts)
