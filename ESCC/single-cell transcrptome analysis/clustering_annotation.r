@@ -1,4 +1,7 @@
-ElbowPlot(merged_seurat_obj)
+png("elbowplot", width = 800, height = 600)
+elbowplot <- ElbowPlot(merged_seurat_obj)
+dev.off()
+
 merged_seurat_obj <- FindNeighbors(merged_seurat_obj, reduction = "harmony", dims = 1:20)
 #seq <- seq(0.3, 1.5, by = 0.1)
 #for (res in seq){
@@ -20,7 +23,7 @@ merged_seurat_obj <- FindClusters(merged_seurat_obj, resolution = 0.5)
 merged_seurat_obj <- RunUMAP(merged_seurat_obj, reduction = "harmony", dims = 1:20)
 
 npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(21)
+npg_extended <- colorRampPalette(npg_pal)(29)
 
 # 获取图例的个数和名称长度
 seurat_clusters <- as.character(unique(merged_seurat_obj@meta.data$seurat_clusters))  # 转换为字符向量
