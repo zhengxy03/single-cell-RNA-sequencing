@@ -72,6 +72,7 @@ DimPlot(merged_seurat_obj, reduction = "umap", label = TRUE, pt.size = 1, label.
     )
 dev.off()
 
+
 #plot on samples
 npg_extended <- colorRampPalette(npg_pal)(28)
 png("sample.png", width = 3000, height = 3000, res = 300)  # 设置高分辨率和尺寸
@@ -116,7 +117,7 @@ dev.off()
 
 #significant_markers <- subset(markers, myAUC > 0.7)
 #write.csv(significant_markers,"marker.csv")
-
+merged_seurat_obj <- FindClusters(merged_seurat_obj, resolution = 0.3)
 markers <- FindAllMarkers(merged_seurat_obj, 
                           only.pos = TRUE, 
                           min.pct = 0.25, 
@@ -204,7 +205,44 @@ DimPlot(merged_seurat_obj, reduction = "umap", label = TRUE, pt.size = 1, group.
     )
 dev.off()
 
+#sample_sources
+unique_sources <- sort(unique(merged_seurat_obj@meta.data$sample_sources))  # 按字母顺序排序
+# 如果需要手动指定顺序，可以这样做：
+# unique_periods <- c("period_A", "period_B", "period_C", "period_D", "period_E", "period_F")
 
+# 创建一个空列表，用于存储每个 period 的图
+plot_list <- list()
+
+# 遍历每个 period，生成单独的图
+for (source in unique_sources) {
+    # 创建颜色映射：当前 period 为 npg 红色，其他为灰色
+    color_mapping <- setNames(
+        ifelse(unique_sources == source, pal_npg()(1), "gray"),  # npg 红色
+        unique_sources
+    )
+    
+    # 绘制 DimPlot
+    p <- DimPlot(merged_seurat_obj, reduction = "umap", label = FALSE, pt.size = 1, group.by = "sample_sources") +
+        scale_color_manual(values = color_mapping) +  # 使用自定义颜色映射
+        ggtitle(source) +  # 设置标题为当前 period
+        theme(
+            legend.position = "none",  # 隐藏图例
+            plot.title = element_text(size = 24, face = "bold", hjust = 0.5),  # 标题样式
+            axis.title.x = element_text(size = 20, face = "bold", color = "black"),  # X 轴标题
+            axis.title.y = element_text(size = 20, face = "bold", color = "black"),  # Y 轴标题
+            axis.text.x = element_text(size = 16, color = "black"),  # X 轴刻度
+            axis.text.y = element_text(size = 16, color = "black")   # Y 轴刻度
+        )
+    
+    # 将图添加到列表中
+    plot_list[[source]] <- p
+}
+
+# 使用 patchwork 将图形排列在一起（每行三个）
+combined_plot <- wrap_plots(plot_list, ncol = 2)  # 每行三个图
+png("combined_source_umap.png", width = 6000, height =3000, res = 300)
+print(combined_plot)
+dev.off()
 
 #DEGs
 

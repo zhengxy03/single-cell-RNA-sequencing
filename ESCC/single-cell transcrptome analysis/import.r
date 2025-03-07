@@ -84,3 +84,11 @@ merged_seurat_obj@meta.data$DF.classifications <- all_results
 
 # 去除双细胞
 merged_seurat_obj <- subset(merged_seurat_obj, subset = DF.classifications == "Singlet")
+
+
+
+#remove period 0
+merged_seurat_obj <- subset(merged_seurat_obj, subset = period1 != 0)
+
+library(harmony)
+merged_seurat_obj <- RunHarmony(merged_seurat_obj, "orig.ident")
