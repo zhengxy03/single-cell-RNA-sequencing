@@ -5,10 +5,10 @@ hvgs <- VariableFeatures(fibroblasts)
 fibroblasts <- ScaleData(fibroblasts, features = hvgs)
 fibroblasts <- RunPCA(fibroblasts, features = hvgs, npcs = 20)
 
-fibroblasts <- RunHarmony(fibroblasts, "orig.ident")
-fibroblasts <- RunUMAP(fibroblasts, dims = 1:15, reduction = "harmony")
-fibroblasts <- FindNeighbors(fibroblasts, dims = 1:15, reduction = "harmony")
-fibroblasts <- FindClusters(fibroblasts, resolution = 0.3)
+fibroblasts <- RunHarmony(fibroblasts, "sample_sources")
+fibroblasts <- RunUMAP(fibroblasts, dims = 1:20, reduction = "harmony")
+fibroblasts <- FindNeighbors(fibroblasts, dims = 1:20, reduction = "harmony")
+fibroblasts <- FindClusters(fibroblasts, resolution = 0.5)
 
 # 获取图例的个数和名称长度
 seurat_clusters <- as.character(unique(fibroblasts@meta.data$seurat_clusters))  # 转换为字符向量
@@ -25,7 +25,7 @@ label_length_factor <- 10  # 每个字符增加的宽度
 dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
 
 npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(14)
+npg_extended <- colorRampPalette(npg_pal)(15)
 png("fibro_clusters.png", width = dynamic_width, height = base_height, res = 300)
 DimPlot(fibroblasts, reduction = "umap", label = TRUE, pt.size = 2, label.size = 8) +
     xlab("UMAP_1") +
@@ -61,7 +61,7 @@ dev.off()
 
 fibroblast_markers <- FindAllMarkers(fibroblasts, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use = "wilcox")
 fibroblast_significant_markers <- subset(fibroblast_markers, p_val_adj < 0.05)
-#write.csv(fibroblast_significant_markers, "fibroblast_all_marker.csv")
+write.csv(fibroblast_significant_markers, "fibroblast_all_marker.csv")
 fibroblast_significant_markers <- fibroblast_significant_markers %>% group_by(cluster) %>% top_n(n = 50, wt = avg_log2FC)
 write.csv(fibroblast_significant_markers, "fibroblast_top_marker.csv")
 

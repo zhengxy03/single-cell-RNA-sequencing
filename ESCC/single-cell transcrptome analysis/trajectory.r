@@ -1,6 +1,7 @@
 library(Seurat)
 library(monocle)
 library(ggplot2)
+trace('project2MST', edit = T, where = asNamespace("monocle"))
 setwd("/share/home/wangq/zxy/ESCC")
 t_cells <- readRDS("t_cells.rds")
 CD8 <- subset(t_cells, subset = seurat_clusters %in% c(0, 5, 8))

@@ -78,7 +78,7 @@ identity_mapping <- c(
   "5" = "TOX+ CD4+Tex",
   "6" = "Activited T",
   "7" = "FCGR3A+ TNK",
-  "8" = "GZMK+ CD8+Tem",
+  "8" = "CRTAM+ CD8+Tem",
   "9" = "MHC-Ⅱ APC-like Tfh"
 )
 
@@ -89,10 +89,10 @@ identity_mapping <- c(
 b_cluster_ids <- c(6, 8, 9)
 t_cells <- subset(t_cells, idents = setdiff(levels(Idents(t_cells)), b_cluster_ids))
 
-png("t_fature.png", width = dynamic_width, height = base_height, res = 300)
-FeaturePlot(t_cells, features = c("CD4", "CD8A", "KLRB1", "FOSB", "FOXP3", 
-                  "CRTAM", "ITGA1", 
-                  "KLRF1", "KLF2", "HAVCR2", "CXCL13", "GZMH")) 
+png("t_feature.png", width = dynamic_width, height = base_height, res = 300)
+FeaturePlot(t_cells, features = c("CD4", "CD8A", "GZMK", "FOSB", "FOXP3", 
+                  "CRTAM", "CCR7", 
+                  "FCER1G", "TOX", "HAVCR2", "FCGR3A")) 
 dev.off()
 
 identity_mapping <- c(
@@ -129,7 +129,7 @@ dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_la
 
 # 保存图片
 png("t_annotation.png", width = dynamic_width, height = base_height, res = 300)
-DimPlot(t_cells, reduction = "umap", label = TRUE, pt.size = 3, label.size = 8, group.by = "cell_type") +
+DimPlot(t_cells, reduction = "umap", label = TRUE, pt.size = 1, label.size = 8, group.by = "cell_type") +
     xlab("UMAP_1") +
     ylab("UMAP_2") +
     ggtitle(NULL) +
@@ -157,7 +157,7 @@ DimPlot(t_cells, reduction = "umap", label = TRUE, pt.size = 3, label.size = 8, 
         axis.line.y = element_line(color = "black", linewidth = 0.5),
         aspect.ratio = 1,
         plot.margin = margin(10, 50, 10, 10)
-    )
+    ) +scale_x_continuous(limits = c(-13,8))
 dev.off()
 
 
@@ -195,9 +195,13 @@ for (period in unique_periods) {
 
 # 使用 patchwork 将图形排列在一起（每行三个）
 combined_plot <- wrap_plots(plot_list, ncol = 4)  # 每行三个图
-png("combined_period_umap.png", width = 6000, height =3000, res = 300)
+png("combined_t_period_umap.png", width = 6000, height =3000, res = 300)
 print(combined_plot)
 dev.off()
+
+
+
+
 
 saveRDS(t_cells, file = "t_cells.rds")
 
