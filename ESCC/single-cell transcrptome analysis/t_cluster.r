@@ -7,7 +7,7 @@ t_cells <- RunPCA(t_cells, features = hvgs, npcs = 20)
 t_cells <- RunHarmony(t_cells, "orig.ident")
 t_cells <- RunUMAP(t_cells, dims = 1:20, reduction = "harmony")
 t_cells <- FindNeighbors(t_cells, dims = 1:20, reduction = "harmony")
-t_cells <- FindClusters(t_cells, resolution = 0.4)
+t_cells <- FindClusters(t_cells, resolution = 0.3)
 
 
 
@@ -160,7 +160,7 @@ DimPlot(t_cells, reduction = "umap", label = TRUE, pt.size = 3, label.size = 8, 
         axis.line.y = element_line(color = "black", linewidth = 0.5),
         aspect.ratio = 1,
         plot.margin = margin(10, 50, 10, 10)
-    ) + scale_x_continuous(limits = c(-11.5, 7.5))
+    )
 dev.off()
 
 
