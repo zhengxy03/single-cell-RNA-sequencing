@@ -91,4 +91,4 @@ merged_seurat_obj <- subset(merged_seurat_obj, subset = DF.classifications == "S
 merged_seurat_obj <- subset(merged_seurat_obj, subset = period1 != 0)
 
 library(harmony)
-merged_seurat_obj <- RunHarmony(merged_seurat_obj, "orig.ident")
+merged_seurat_obj <- RunHarmony(merged_seurat_obj, "sample_sources")
