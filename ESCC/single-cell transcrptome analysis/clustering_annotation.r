@@ -1,5 +1,6 @@
-png("elbowplot", width = 800, height = 600)
+png("elbowplot.png", width = 800, height = 600)
 elbowplot <- ElbowPlot(merged_seurat_obj)
+print(elbowplot)
 dev.off()
 
 merged_seurat_obj <- FindNeighbors(merged_seurat_obj, reduction = "harmony", dims = 1:20)
