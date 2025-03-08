@@ -1,6 +1,5 @@
-png("elbowplot.png", width = 800, height = 600)
+png("elbowplot", width = 800, height = 600)
 elbowplot <- ElbowPlot(merged_seurat_obj)
-print(elbowplot)
 dev.off()
 
 merged_seurat_obj <- FindNeighbors(merged_seurat_obj, reduction = "harmony", dims = 1:20)
@@ -249,9 +248,8 @@ genes_to_plot <- c(
     "IGHG1", "IGHG3", "JCHAIN",      # 浆细胞
     
     # 髓系免疫细胞
-    "C1QA", "C1QB", "APOC1",         # 巨噬细胞
+    "C1QA", "AIF1", "LYZ",         # 巨噬细胞
 
-    "CD86", "LYZ", "PKIB",      # 树突细胞（修正HAL-DRA为HLA-DRA）
     
     # 结构细胞
     "SFN", "KRT19", "KRT17",       # 上皮细胞
@@ -261,7 +259,8 @@ genes_to_plot <- c(
     
     # 特殊功能细胞
     "CPA3", "TPSAB1", "TPSB2",       # 肥大细胞
-    "TOP2A", "STMN1", "MKI67"         # 增殖细胞
+    "TOP2A", "STMN1", "MKI67",         # 增殖细胞
+    "SPRR1B", "SPRR2A", "SPRR1A"
 )
 png("dotplot.png", width = 8000, height = 3000, res = 300)  # 设置高分辨率和尺寸
 
@@ -287,3 +286,91 @@ DotPlot(merged_seurat_obj,
 dev.off()
 
 FeaturePlot(merged_seurat_obj, features = genes_to_plot)
+
+
+
+#period1
+# 获取唯一的 period1 值，并按字母顺序排序
+unique_periods <- sort(unique(merged_seurat_obj@meta.data$period1))  # 按字母顺序排序
+
+# 如果需要手动指定顺序，可以这样做：
+# unique_periods <- c("period_A", "period_B", "period_C", "period_D", "period_E", "period_F")
+
+# 创建一个空列表，用于存储每个 period1 的图
+plot_list <- list()
+
+# 遍历每个 period1，生成单独的图
+for (period in unique_periods) {
+    # 创建颜色映射：当前 period1 为 npg 红色，其他为灰色
+    color_mapping <- setNames(
+        ifelse(unique_periods == period, pal_npg()(1), "gray"),  # npg 红色
+        unique_periods
+    )
+    
+    # 绘制 DimPlot
+    p <- DimPlot(merged_seurat_obj, reduction = "umap", label = FALSE, pt.size = 1, group.by = "period1") +
+        scale_color_manual(values = color_mapping) +  # 使用自定义颜色映射
+        ggtitle(period) +  # 设置标题为当前 period1
+        theme(
+            legend.position = "none",  # 隐藏图例
+            plot.title = element_text(size = 24, face = "bold", hjust = 0.5),  # 标题样式
+            axis.title.x = element_text(size = 20, face = "bold", color = "black"),  # X 轴标题
+            axis.title.y = element_text(size = 20, face = "bold", color = "black"),  # Y 轴标题
+            axis.text.x = element_text(size = 16, color = "black"),  # X 轴刻度
+            axis.text.y = element_text(size = 16, color = "black")   # Y 轴刻度
+        )
+    
+    # 将图添加到列表中
+    plot_list[[period]] <- p
+}
+
+# 使用 patchwork 将图形排列在一起（每行三个）
+combined_plot <- wrap_plots(plot_list, ncol = 3)  # 每行三个图
+
+# 保存为 PNG 文件
+png("combined_period1_umap.png", width = 9000, height = 3000, res = 300)
+print(combined_plot)
+dev.off()
+
+#period2
+# 获取唯一的 period2 值，并按字母顺序排序
+unique_periods <- sort(unique(merged_seurat_obj@meta.data$period2))  # 按字母顺序排序
+
+# 如果需要手动指定顺序，可以这样做：
+# unique_periods <- c("period_A", "period_B", "period_C", "period_D", "period_E", "period_F")
+
+# 创建一个空列表，用于存储每个 period2 的图
+plot_list <- list()
+
+# 遍历每个 period2，生成单独的图
+for (period in unique_periods) {
+    # 创建颜色映射：当前 period2 为 npg 红色，其他为灰色
+    color_mapping <- setNames(
+        ifelse(unique_periods == period, pal_npg()(1), "gray"),  # npg 红色
+        unique_periods
+    )
+    
+    # 绘制 DimPlot
+    p <- DimPlot(merged_seurat_obj, reduction = "umap", label = FALSE, pt.size = 1, group.by = "period2") +
+        scale_color_manual(values = color_mapping) +  # 使用自定义颜色映射
+        ggtitle(period) +  # 设置标题为当前 period2
+        theme(
+            legend.position = "none",  # 隐藏图例
+            plot.title = element_text(size = 24, face = "bold", hjust = 0.5),  # 标题样式
+            axis.title.x = element_text(size = 20, face = "bold", color = "black"),  # X 轴标题
+            axis.title.y = element_text(size = 20, face = "bold", color = "black"),  # Y 轴标题
+            axis.text.x = element_text(size = 16, color = "black"),  # X 轴刻度
+            axis.text.y = element_text(size = 16, color = "black")   # Y 轴刻度
+        )
+    
+    # 将图添加到列表中
+    plot_list[[period]] <- p
+}
+
+# 使用 patchwork 将图形排列在一起（每行四个）
+combined_plot <- wrap_plots(plot_list, ncol = 4)  # 每行四个图
+
+# 保存为 PNG 文件
+png("combined_period2_umap.png", width = 6000, height = 3000, res = 300)
+print(combined_plot)
+dev.off()

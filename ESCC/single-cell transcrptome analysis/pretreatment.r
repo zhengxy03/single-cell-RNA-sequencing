@@ -131,11 +131,11 @@ bcmvn <- find.pK(sweep.stats)
 #nExp_poi <- round(0.075 * ncol(merged_seurat_obj)) 
 
 # 进行双细胞检测
-#merged_seurat_obj <- doubletFinder(merged_seurat_obj, PCs = 1:20, pN = 0.25, pK = as.numeric(as.character(bcmvn$pK[which.max(bcmvn$BCmetric)])), nExp = nExp_poi, reuse.pANN = FALSE, sct = FALSE)
+merged_seurat_obj <- doubletFinder(merged_seurat_obj, PCs = 1:20, pN = 0.25, pK = as.numeric(as.character(bcmvn$pK[which.max(bcmvn$BCmetric)])), nExp = nExp_poi, reuse.pANN = FALSE, sct = FALSE)
 
 # 去除双细胞
-#doublet_col <- colnames(merged_seurat_obj@meta.data)[grep("DF.classification", colnames(merged_seurat_obj@meta.data))]
-#merged_seurat_obj <- subset(merged_seurat_obj, subset = get(doublet_col) == "Singlet")
+#doublet_col <- colnames(merged_seurat_obj@meta.data)[grep("DF.classification_0.25_0.29_2544", colnames(merged_seurat_obj@meta.data))]
+#merged_seurat_obj <- subset(merged_seurat_obj, subset = DF.classifications_0.25_0.29_2544 == "Singlet")
 
 pK_value <- as.numeric(as.character(bcmvn$pK[which.max(bcmvn$BCmetric)]))
 

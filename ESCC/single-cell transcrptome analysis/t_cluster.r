@@ -4,7 +4,7 @@ t_cells <- FindVariableFeatures(t_cells, nfeatures = 2000)
 hvgs <- VariableFeatures(t_cells)
 t_cells <- ScaleData(t_cells, features = hvgs)
 t_cells <- RunPCA(t_cells, features = hvgs, npcs = 20)
-t_cells <- RunHarmony(t_cells, "orig.ident")
+t_cells <- RunHarmony(t_cells, "sample_sources")
 t_cells <- RunUMAP(t_cells, dims = 1:20, reduction = "harmony")
 t_cells <- FindNeighbors(t_cells, dims = 1:20, reduction = "harmony")
 t_cells <- FindClusters(t_cells, resolution = 0.3)
@@ -29,7 +29,7 @@ dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_la
 npg_pal <- pal_npg()(10)
 npg_extended <- colorRampPalette(npg_pal)(14)
 png("t_clusters.png", width = dynamic_width, height = base_height, res = 300)
-DimPlot(t_cells, reduction = "umap", label = TRUE, pt.size = 2, label.size = 8) +
+DimPlot(t_cells, reduction = "umap", label = TRUE, pt.size = 1, label.size = 8) +
     xlab("UMAP_1") +
     ylab("UMAP_2") +
     ggtitle(NULL) +
@@ -70,19 +70,16 @@ t_significant_markers <- t_significant_markers %>% group_by(cluster) %>% top_n(n
 write.csv(t_significant_markers, "t_top_marker.csv")
 
 identity_mapping <- c(
-  "0" = "GZMK+ CD8+Teff",
-  "1" = "FOSB+ Tcm",
-  "2" = "FOXP3+ Treg", 
-  "3" = "Th17",
-  "4" = "LEF1+ Tn",
-  "5" = "PRF1+ CD8+Teff",
-  "6" = "STAT5B+ Activated T",
-  "7" = "TNK",
-  "8" = "HAVCR2+ CD8+Tex",
-  "9" = "TOX+ CD4+Tex",
-  "10" = "Mast cell/T cell hybrid",
-  "11" = "IL2RA+ Treg",
-  "12" = "MHC-Ⅱ APC-like Th17"
+  "0" = "GZMK+ CD8+Tem",
+  "1" = "FOXP3+ Treg", 
+  "2" = "CCR7+ Tn",
+  "3" = "HAVCR2+ CD8+Tex",
+  "4" = "FCER1G+ TNK",
+  "5" = "TOX+ CD4+Tex",
+  "6" = "Activited T",
+  "7" = "FCGR3A+ TNK",
+  "8" = "GZMK+ CD8+Tem",
+  "9" = "MHC-Ⅱ APC-like Tfh"
 )
 
 

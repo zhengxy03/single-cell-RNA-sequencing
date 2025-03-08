@@ -63,11 +63,11 @@ count_data <- left_join(count_data, sample_type_info, by = "orig.ident")
 
 # 分离肿瘤和正常样本的 orig.ident 并确定顺序
 tumor_orig_ident <- count_data %>% 
-  filter(sample_type == "tumor") %>% 
+  filter(sample_type == "Tumor") %>% 
   pull(orig.ident) %>% 
   unique()
 normal_orig_ident <- count_data %>% 
-  filter(sample_type == "normal") %>% 
+  filter(sample_type == "Normal") %>% 
   pull(orig.ident) %>% 
   unique()
 new_order <- c(tumor_orig_ident, normal_orig_ident)
@@ -247,10 +247,10 @@ chisq_results <- cell_counts %>%
   summarise(
     p_value = {
       # 提取正常样本和肿瘤样本的细胞数量和总细胞数
-      normal_count = sum(count[sample_type == "normal"])
-      tumor_count = sum(count[sample_type == "tumor"])
-      normal_total = sum(total[sample_type == "normal"])
-      tumor_total = sum(total[sample_type == "tumor"])
+      normal_count = sum(count[sample_type == "Normal"])
+      tumor_count = sum(count[sample_type == "Tumor"])
+      normal_total = sum(total[sample_type == "Normal"])
+      tumor_total = sum(total[sample_type == "Tumor"])
       
       # 构建 2x2 列联表
       cont_table <- matrix(
@@ -281,7 +281,7 @@ ggplot(cell_counts, aes(x = cell_type, y = count, fill = sample_type)) +
   geom_boxplot() +  # 绘制箱线图
   geom_text(
     data = chisq_results, 
-    aes(x = cell_type, y = max(cell_counts$count) * 0.9, label = significance),  # 调整 y 值
+    aes(x = cell_type, y = max(cell_counts$count) * 1.0, label = significance),  # 调整 y 值
     size = 12, 
     vjust = 0.5,  # 调整 vjust 参数
     inherit.aes = FALSE  # 忽略父图层的 aes 映射
@@ -300,7 +300,7 @@ ggplot(cell_counts, aes(x = cell_type, y = count, fill = sample_type)) +
     legend.position = "right"  # 设置图例位置在右侧
   ) +
   scale_fill_npg() +
-  scale_y_continuous(limits = c(0, 6500)) 
+  scale_y_continuous(limits = c(0, 4000)) 
 dev.off()
 
 
