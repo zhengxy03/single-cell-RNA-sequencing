@@ -23,7 +23,7 @@ merged_seurat_obj <- FindClusters(merged_seurat_obj, resolution = 0.5)
 merged_seurat_obj <- RunUMAP(merged_seurat_obj, reduction = "harmony", dims = 1:20)
 
 npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(29)
+npg_extended <- colorRampPalette(npg_pal)(15)
 
 # 获取图例的个数和名称长度
 seurat_clusters <- as.character(unique(merged_seurat_obj@meta.data$seurat_clusters))  # 转换为字符向量
@@ -132,31 +132,25 @@ write.csv(significant_markers,"marker_top.csv")
 identity_mapping <- c(
     "0" = "T cell",
     "1" = "T cell",
-    "2" = "Fibroblast",
+    "2" = "Epithelial cell",
     "3" = "B cell",
-    "4" = "Fibroblast",
-    "5" = "Plasma",
-    "6" = "Epithelial cell",
-    "7" = "Endothelial cell",
-    "8" = "Myeloid cell",
-    "9" = "Macrophage",
-    "10" = "Myeloid cell",
-    "11" = "Mast cell",
-    "12" = "Epithelial cell",
-    "13" = "Pericyte",
-    "14" = "Proliferating cell",
-    "15" = "T cell",
-    "16" = "T cell",
-    "17" = "Fibroblast",
-    "18" = "Neuron",
-    "19" = "Plasma",
-    "20" = "Fibroblast"
+    "4" = "Myeloid cell",
+    "5" = "Fibroblast",
+    "6" = "Endothelial cell",
+    "7" = "Fibroblast",
+    "8" = "Plasma",
+    "9" = "Epithelial cell",
+    "10" = "Mast cell",
+    "11" = "Pericyte",
+    "12" = "Proliferating cell",
+    "13" = "Tumor cell",
+    "14" = "B cell"
 )
 
 cell_type <- identity_mapping[merged_seurat_obj@meta.data$seurat_clusters]
 merged_seurat_obj@meta.data$cell_type <- cell_type
 
-npg_extended <- colorRampPalette(npg_pal)(23)
+npg_extended <- colorRampPalette(npg_pal)(15)
 
 # 获取图例的个数和名称长度
 cell_types <- unique(merged_seurat_obj@meta.data$cell_type)
