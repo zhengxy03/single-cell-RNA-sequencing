@@ -5,8 +5,8 @@ hvgs <- VariableFeatures(t_cells)
 t_cells <- ScaleData(t_cells, features = hvgs)
 t_cells <- RunPCA(t_cells, features = hvgs, npcs = 20)
 t_cells <- RunHarmony(t_cells, "orig.ident")
-t_cells <- RunUMAP(t_cells, dims = 1:15, reduction = "harmony")
-t_cells <- FindNeighbors(t_cells, dims = 1:15, reduction = "harmony")
+t_cells <- RunUMAP(t_cells, dims = 1:20, reduction = "harmony")
+t_cells <- FindNeighbors(t_cells, dims = 1:20, reduction = "harmony")
 t_cells <- FindClusters(t_cells, resolution = 0.4)
 
 
