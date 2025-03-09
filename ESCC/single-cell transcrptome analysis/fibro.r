@@ -8,7 +8,7 @@ fibroblasts <- RunPCA(fibroblasts, features = hvgs, npcs = 20)
 fibroblasts <- RunHarmony(fibroblasts, "sample_sources")
 fibroblasts <- RunUMAP(fibroblasts, dims = 1:20, reduction = "harmony")
 fibroblasts <- FindNeighbors(fibroblasts, dims = 1:20, reduction = "harmony")
-fibroblasts <- FindClusters(fibroblasts, resolution = 0.5)
+fibroblasts <- FindClusters(fibroblasts, resolution = 0.3)
 
 # 获取图例的个数和名称长度
 seurat_clusters <- as.character(unique(fibroblasts@meta.data$seurat_clusters))  # 转换为字符向量
@@ -172,29 +172,31 @@ dev.off()
 
 
 identity_mapping <- c(
-    "0" = "PI16+ Fib progenitors",
-    "1" = "IL6+ iCAFs",
-    "2" = "MMP1+ mCAFs",
-    "3" = "HLA-DPB1+ apCAFs",
-    "4" = "COL11A1+ myCAFs",
-    "5" = "PI16+ Fib progenitors",
-    "6" = "CD74+ apCAFs",
-    "7" = "Immune-modulatory Fib"
+    "0" = "ACTG2+ myCAFs",
+    "1" = "CD34+ Fib progenitors",
+    "2" = "PI16+ Fib progenitors",
+    "3" = "IGF1+ inflammatory Fib",
+    "4" = "MMP1+ myCAFs",
+    "5" = "CXCL1+ iCAFs",
+    "6" = "CCL20+ iCAFs",
+    "7" = "COL6A5+ myCAFs",
+    "8" = "THBS4+ myCAFs",
+    "9" = "COL27A1+ myCAFs",
+    "10" = "TIMP1+ myCAFs",
+    "11" = "FRC-like Fib",
+    "12" = "Proliferative CAFs",
+    "13" = "EndMT CAFs"
 )
 
-cell_type <- identity_mapping[as.character(fibroblasts@meta.data$seurat_clusters)]
+# 假设 identity_mapping 已经定义
+cell_type <- identity_mapping[fibroblasts@meta.data$seurat_clusters]
 fibroblasts@meta.data$cell_type <- cell_type
 
-# 提取 identity_mapping 中的值作为因子的水平
-factor_levels <- unname(identity_mapping)
-
-# 去除重复的水平
-factor_levels <- unique(factor_levels)
-
 # 将 cell_type 列转换为因子，并指定顺序
-fibroblasts@meta.data$cell_type <- factor(fibroblasts@meta.data$cell_type, levels = factor_levels)
+fibroblasts@meta.data$cell_type <- factor(fibroblasts@meta.data$cell_type, levels = identity_mapping)
 
-
+# 获取唯一的细胞类型并转换为字符向量
+cell_types <- as.character(unique(fibroblasts@meta.data$cell_type))
 num_legend_items <- length(cell_types)  # 图例的个数
 max_label_length <- max(nchar(cell_types))  # 图例名称的最大长度
 
@@ -208,22 +210,50 @@ label_length_factor <- 10  # 每个字符增加的宽度
 dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
 
 # 保存图片
-png("fibro_annotation.png", width = dynamic_width, height = base_height, res = 300)
-DimPlot(fibroblasts, reduction = "umap", label = TRUE, pt.size = 3, label.size = 8, group.by = "cell_type") +
-    xlab("UMAP_1") +
-    ylab("UMAP_2") +
-    ggtitle(NULL) +
-    scale_color_manual(values = npg_extended) +
-    coord_fixed(ratio = 1) +
-    guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
+
+umap_data <- as.data.frame(fibroblasts@reductions$umap@cell.embeddings)
+umap_data$cell_type <- fibroblasts@meta.data$cell_type
+
+# 检查列名
+print(head(umap_data))
+
+# 确保列名正确
+colnames(umap_data) <- c("umap_1", "umap_2", "cell_type")
+
+# 计算每个细胞类型的中心点
+centroids <- umap_data %>%
+    group_by(cell_type) %>%
+    summarise(
+        umap_1 = median(umap_1),
+        umap_2 = median(umap_2)
+    )
+
+# 绘制 UMAP 图
+p <- DimPlot(fibroblasts, reduction = "umap", label = FALSE, pt.size = 2, group.by = "cell_type") +
+    geom_text_repel(
+        data = centroids,  # 使用中心点数据
+        aes(x = umap_1, y = umap_2, label = cell_type),  # 指定 x 和 y 的美学映射
+        size = 8,  # 标签字体大小
+        box.padding = 0.5,  # 标签与点之间的间距
+        point.padding = 0.5,  # 标签之间的间距
+        max.overlaps = Inf,  # 允许的最大重叠次数
+        force = 1,  # 调整标签的排斥力
+        min.segment.length = 0  # 强制显示所有标签的连接线
+    ) +
+    xlab("UMAP_1") +  # 添加 x 轴标签
+    ylab("UMAP_2") +  # 添加 y 轴标签
+    ggtitle(NULL) +  # 移除标题
+    scale_color_manual(values = npg_extended) +  # 使用自定义颜色
+    coord_fixed(ratio = 1) +  # 固定坐标轴比例
+    guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +  # 调整图例
     theme(
         text = element_text(size = 12, face = "bold"),
-        axis.text.x = element_text(size =40, color = "black"),
+        axis.text.x = element_text(size = 40, color = "black"),
         axis.text.y = element_text(size = 40, color = "black"),
         axis.title.x = element_text(size = 56, face = "bold", color = "black"),
-        axis.title.y = element_text(size = 56, face = "bold", color = "black", margin = margin(r = 20)),  # 增加右侧间距
+        axis.title.y = element_text(size = 56, face = "bold", color = "black", margin = margin(r = 20)),
         plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
-        legend.text = element_text(size = 32, face = "bold", color = "black"),
+        legend.text = element_text(size = 40, face = "bold", color = "black"),
         legend.title = element_text(size = 40, face = "bold", color = "black"),
         legend.position = "right",
         legend.box.margin = margin(0, 0, 0, 0),
@@ -237,8 +267,17 @@ DimPlot(fibroblasts, reduction = "umap", label = TRUE, pt.size = 3, label.size =
         axis.line.y = element_line(color = "black", linewidth = 0.5),
         aspect.ratio = 1,
         plot.margin = margin(10, 50, 10, 10)
-    ) + scale_x_continuous(limits = c(-12, 11.5))
+    ) + scale_x_continuous(limits = c(-10, 10.5))
+
+# 保存图片
+png("fibroblasts_annotation.png", width = dynamic_width, height = base_height, res = 300)
+print(p)
 dev.off()
+
+
+
+
+
 
 #trajectory
 fibroblast_sce <- as.SingleCellExperiment(fibroblasts)
