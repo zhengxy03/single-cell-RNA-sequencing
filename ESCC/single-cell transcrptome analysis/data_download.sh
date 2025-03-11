@@ -219,6 +219,31 @@ EOF
 #GSE197677
 
 cat <<EOF > source.csv
+SRR18245503,,Illumina NovaSeq 6000
+SRR18245504,,Illumina NovaSeq 6000
+SRR18245505,,Illumina NovaSeq 6000
+SRR18245506,,Illumina NovaSeq 6000
+SRR18245507,,Illumina NovaSeq 6000
+SRR18245508,,Illumina NovaSeq 6000
+SRR18245509,,Illumina NovaSeq 6000
+SRR18245510,,Illumina NovaSeq 6000
+SRR18245511,,Illumina NovaSeq 6000
+SRR18245512,,Illumina NovaSeq 6000
+SRR18245513,,Illumina NovaSeq 6000
+SRR18245514,,Illumina NovaSeq 6000
+SRR18245515,,Illumina NovaSeq 6000
+SRR18245516,,Illumina NovaSeq 6000
+SRR18245517,,Illumina NovaSeq 6000
+SRR18245518,,Illumina NovaSeq 6000
+SRR18245519,,Illumina NovaSeq 6000
+SRR18245520,,Illumina NovaSeq 6000
+SRR18245521,,Illumina NovaSeq 6000
+SRR18245522,,Illumina NovaSeq 6000
+SRR18245523,,Illumina NovaSeq 6000
+SRR18245524,,Illumina NovaSeq 6000
+SRR18245525,,Illumina NovaSeq 6000
+SRR18245526,,Illumina NovaSeq 6000
+
 SRR18245527,,Illumina NovaSeq 6000
 SRR18245531,,Illumina NovaSeq 6000
 SRR18245535,,Illumina NovaSeq 6000

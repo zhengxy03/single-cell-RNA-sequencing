@@ -29,10 +29,8 @@ localcores=24  # 设置使用的核心数
 
 # 循环处理每个样本
 for sample in "${samples[@]}"; do
-    # 生成作业脚本文件名
     job_script="job_${sample}.sh"
     
-    # 生成作业脚本内容
     cat << EOF > $job_script
 #!/bin/bash
 #BSUB -q mpi
