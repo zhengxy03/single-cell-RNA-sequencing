@@ -241,8 +241,15 @@ sample_totals <- cell_counts %>%
 cell_counts <- cell_counts %>%
   left_join(sample_totals, by = "orig.ident")
 
+cell_proportions <- merged_seurat_obj@meta.data %>%
+  group_by(orig.ident, cell_type, sample_type) %>%
+  summarise(count = n()) %>%  # 计算每种细胞类型的数量
+  ungroup() %>%
+  left_join(sample_totals, by = "orig.ident") %>%  # 合并样本总细胞数
+  mutate(proportion = count / total)  # 计算细胞类型比例
+
 # 对每个细胞类型构建列联表并进行卡方检验
-chisq_results <- cell_counts %>%
+chisq_results <- cell_proportions %>%
   group_by(cell_type) %>%
   summarise(
     p_value = {
@@ -275,18 +282,18 @@ chisq_results <- chisq_results %>%
     )
   )
 
-# 绘制基于 count 的箱线图并添加显著性标记
-png("箱图_count.png", width = 6000, height = 3000, res = 300)
-ggplot(cell_counts, aes(x = cell_type, y = count, fill = sample_type)) +
+# 绘制基于比例的箱线图并添加显著性标记
+png("箱图_proportion.png", width = 6000, height = 3000, res = 300)
+ggplot(cell_proportions, aes(x = cell_type, y = proportion, fill = sample_type)) +
   geom_boxplot() +  # 绘制箱线图
   geom_text(
     data = chisq_results, 
-    aes(x = cell_type, y = max(cell_counts$count) * 1.0, label = significance),  # 调整 y 值
+    aes(x = cell_type, y = max(cell_proportions$proportion) * 1.05, label = significance),  # 调整 y 值
     size = 12, 
     vjust = 0.5,  # 调整 vjust 参数
     inherit.aes = FALSE  # 忽略父图层的 aes 映射
   ) +  # 添加显著性标记
-  labs(x = "", y = "Cell Count", fill = "Sample Type") +  # 设置坐标轴和图例标题
+  labs(x = "", y = "Cell Proportion", fill = "Sample Type") +  # 设置坐标轴和图例标题
   theme_classic() +  # 使用经典主题
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1, size = 28),  # 调整横轴标签角度
@@ -299,8 +306,8 @@ ggplot(cell_counts, aes(x = cell_type, y = count, fill = sample_type)) +
     legend.title = element_text(size = 40),
     legend.position = "right"  # 设置图例位置在右侧
   ) +
-  scale_fill_npg() +
-  scale_y_continuous(limits = c(0, 4000)) 
+  scale_fill_npg() +  # 使用 npg 配色
+  scale_y_continuous(limits = c(0, 1))  # 设置 y 轴范围为 0 到 1
 dev.off()
 
 
