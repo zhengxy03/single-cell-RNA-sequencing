@@ -228,24 +228,26 @@ ggplot(proportion_data, aes(x = "", y = proportion, fill = sample_sources)) +
 #箱线图
 library(ggpubr)
 cell_counts <- merged_seurat_obj@meta.data %>%
-  group_by(orig.ident, cell_type, sample_type) %>%
+  group_by(patients, cell_type, sample_type) %>%
   summarise(count = n()) %>%
   ungroup()
 
+# 计算每个样本的总细胞数
 sample_totals <- cell_counts %>%
-  group_by(orig.ident) %>%
+  group_by(patients) %>%
   summarise(total = sum(count)) %>%
   ungroup()
 
-# 将样本类型（sample_type）和细胞类型（cell_type）分开
+# 将样本总细胞数合并到 cell_counts 中
 cell_counts <- cell_counts %>%
-  left_join(sample_totals, by = "orig.ident")
+  left_join(sample_totals, by = "patients")
 
+# 计算细胞类型比例
 cell_proportions <- merged_seurat_obj@meta.data %>%
-  group_by(orig.ident, cell_type, sample_type) %>%
+  group_by(patients, cell_type, sample_type) %>%
   summarise(count = n()) %>%  # 计算每种细胞类型的数量
   ungroup() %>%
-  left_join(sample_totals, by = "orig.ident") %>%  # 合并样本总细胞数
+  left_join(sample_totals, by = "patients") %>%  # 合并样本总细胞数
   mutate(proportion = count / total)  # 计算细胞类型比例
 
 # 对每个细胞类型构建列联表并进行卡方检验
@@ -380,7 +382,7 @@ proportion_data <- merged_seurat_obj@meta.data %>%
     group_by(period, cell_type) %>% summarise(count = n()) %>% mutate(proportion = count / sum(count))
 
 npg_extended <- colorRampPalette(npg_pal)(13)
-png("period_prop1.png", width = 6000, height = 3000, res = 300)  # 设置高分辨率和尺寸
+png("period1_prop1.png", width = 6000, height = 3000, res = 300)  # 设置高分辨率和尺寸
 ggplot(proportion_data, aes(x = "", y = proportion, fill = cell_type)) +
     geom_bar(stat = "identity", width = 1) +         # 堆叠柱状图
     coord_polar(theta = "y") +                       # 转换为饼图
@@ -407,13 +409,13 @@ ggplot(proportion_data, aes(x = "", y = proportion, fill = cell_type)) +
     )
 dev.off()
 
-png("period_prop2.png", width = 6000, height = 3000, res = 300)
+png("period1_prop2.png", width = 6000, height = 3000, res = 300)
 cell_counts <- merged_seurat_obj@meta.data %>%
-  group_by(orig.ident, cell_type, period) %>%
+  group_by(orig.ident, cell_type, period1) %>%
   summarise(count = n()) %>%
   ungroup()
 
-ggplot(cell_counts, aes(x = cell_type, y = count, fill = period)) +
+ggplot(cell_counts, aes(x = cell_type, y = count, fill = period1)) +
   geom_bar(stat = "identity", position = "stack") +  # 堆叠柱状图
   labs(x = "Cell Type", y = "Count", fill = "Stage") +  # 设置坐标轴和图例标题
   scale_fill_npg() +  # 使用ggsci的npg配色

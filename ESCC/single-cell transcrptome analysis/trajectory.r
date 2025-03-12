@@ -2,6 +2,7 @@ library(Seurat)
 library(monocle)
 library(ggplot2)
 trace('project2MST', edit = T, where = asNamespace("monocle"))
+
 setwd("/share/home/wangq/zxy/ESCC")
 t_cells <- readRDS("t_cells.rds")
 CD8 <- subset(t_cells, subset = seurat_clusters %in% c(0, 5, 8))
@@ -34,6 +35,46 @@ cds <- reduceDimension(cds, max_components = 2, method = 'DDRTree')
 
 # 轨迹推断
 cds <- orderCells(cds)
+cds <- orderCells(cds, root_state  = 4)
+
+
+
+
+#抽样
+expression_matrix <- LayerData(fibroblasts, assay = "RNA", layer = "data")
+cell_metadata <- fibroblasts@meta.data
+gene_annotation <- data.frame(gene_short_name = rownames(expression_matrix))
+rownames(gene_annotation) <- rownames(expression_matrix)
+
+# 随机选择部分细胞
+set.seed(123)
+subset_cells <- sample(colnames(expression_matrix), size = 20000)  # 选择 10,000 个细胞
+expression_matrix <- expression_matrix[, subset_cells]
+cell_metadata <- cell_metadata[subset_cells, ]
+
+# 创建 CellDataSet 对象
+cds <- newCellDataSet(expression_matrix,
+                      phenoData = new("AnnotatedDataFrame", data = cell_metadata),
+                      featureData = new("AnnotatedDataFrame", data = gene_annotation),
+                      lowerDetectionLimit = 0.5,
+                      expressionFamily = negbinomial.size())
+
+# 归一化并估计离散度
+cds <- estimateSizeFactors(cds)
+cds <- estimateDispersions(cds)
+
+# 检测基因并选择高变基因
+cds <- detectGenes(cds, min_expr = 0.1)
+disp_table <- dispersionTable(cds)
+ordering_genes <- subset(disp_table, mean_expression >= 0.1 & dispersion_empirical >= 1 * dispersion_fit)$gene_id
+cds <- setOrderingFilter(cds, ordering_genes)
+
+cds <- reduceDimension(cds, max_components = 2, method = 'DDRTree')
+
+# 轨迹推断
+cds <- orderCells(cds)
+
+
 
 # 绘制轨迹图
 p <- plot_cell_trajectory(cds, color_by = "seurat_clusters")
@@ -47,7 +88,8 @@ p3 <- plot_cell_trajectory(cds, color_by = "cell_type") + scale_color_manual(val
 
 p4 <- plot_cell_trajectory(cds, color_by = "cell_type") + facet_wrap("~cell_type", nrow = 2) + scale_color_manual(values = npg_extended)
 
-
+p <- plot_cell_trajectory(cds, color_by = "sample_type") +
+    scale_color_manual(values = npg_extended)
 
 # 保存为PNG文件
 ggsave("trajectory_plot_epi.png", plot = p, width = 8, height = 6, dpi = 300)
@@ -89,37 +131,24 @@ density_plot_split <- ggplot(df, aes(Pseudotime, colour = cell_type, fill = cell
     facet_wrap("~cell_type", nrow = 2)
 ggsave("cell_density_along_pseudotim_split.png", plot = density_plot_split, width = 16, height = 6, dpi = 300)
 
+#差异基因
+expressed_genes=row.names(subset(fData(cds),num_cells_expressed>=10)) #在部分基因里面找
+pseudotime_de <- differentialGeneTest(cds[expressed_genes,],
+                                      fullModelFormulaStr = "~sm.ns(Pseudotime)")
+pseudotime_de <- pseudotime_de[order(pseudotime_de$qval), ]
+states_de <- differentialGeneTest(cds[expressed_genes,],
+                                  fullModelFormulaStr = "~State")
+states_de <- states_de[order(states_de$qval), ]
 
-#抽样
-expression_matrix <- LayerData(fibroblasts, assay = "RNA", layer = "data")
-cell_metadata <- fibroblasts@meta.data
-gene_annotation <- data.frame(gene_short_name = rownames(expression_matrix))
-rownames(gene_annotation) <- rownames(expression_matrix)
+saveRDS(cds, file = "test_monocle.rds")
+write.table(pseudotime_de, file = "pseudotime_de.rds", quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE)
+write.table(states_de, file = "states_de.rds", quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE)
 
-# 随机选择部分细胞
-set.seed(123)
-subset_cells <- sample(colnames(expression_matrix), size = 20000)  # 选择 10,000 个细胞
-expression_matrix <- expression_matrix[, subset_cells]
-cell_metadata <- cell_metadata[subset_cells, ]
 
-# 创建 CellDataSet 对象
-cds <- newCellDataSet(expression_matrix,
-                      phenoData = new("AnnotatedDataFrame", data = cell_metadata),
-                      featureData = new("AnnotatedDataFrame", data = gene_annotation),
-                      lowerDetectionLimit = 0.5,
-                      expressionFamily = negbinomial.size())
-
-# 归一化并估计离散度
-cds <- estimateSizeFactors(cds)
-cds <- estimateDispersions(cds)
-
-# 检测基因并选择高变基因
-cds <- detectGenes(cds, min_expr = 0.1)
-disp_table <- dispersionTable(cds)
-ordering_genes <- subset(disp_table, mean_expression >= 0.1 & dispersion_empirical >= 1 * dispersion_fit)$gene_id
-cds <- setOrderingFilter(cds, ordering_genes)
-
-cds <- reduceDimension(cds, max_components = 2, method = 'DDRTree')
-
-# 轨迹推断
-cds <- orderCells(cds)
+#驱动基因
+beam_res <- BEAM(
+  cds, 
+  branch_point = 1,          # 分支点编号（通过plot_cell_trajectory确定）
+  cores = 4,                  # 多线程加速
+  progenitor_method = "duplicate"
+)
