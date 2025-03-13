@@ -146,6 +146,7 @@ write.table(states_de, file = "states_de.rds", quote = FALSE, sep = '\t', row.na
 
 
 #驱动基因
+trace('buildBranchCellDataSet', edit = T, where = asNamespace("monocle"))
 beam_res <- BEAM(
   cds, 
   branch_point = 1,          # 分支点编号（通过plot_cell_trajectory确定）
