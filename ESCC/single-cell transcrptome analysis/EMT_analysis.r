@@ -46,16 +46,20 @@ ggsave("emt-plot2.png", plot = p)
 #emt feature group
 emt_cells <- colnames(merged_seurat_obj)[merged_seurat_obj$EMT_Score1 > 0.5]  # 调整阈值
 emt_seurat_obj <- subset(merged_seurat_obj, cells = emt_cells)
+saveRDS(emt_seurat_obj, file = "emt_seurat_obj.rds")
 
 library(NMF)
-emt_expression_matrix <- as.matrix(GetAssayData(emt_seurat_obj, layer = "counts"))
-emt_expression_matrix <- emt_expression_matrix[rowSums(emt_expression_matrix) > 10, ]
-emt_expression_matrix <- emt_expression_matrix[rowSums(emt_expression_matrix > 0) >= 0.1 * ncol(emt_expression_matrix), ]
-nrow(emt_expression_matrix)
+#emt_expression_matrix <- as.matrix(GetAssayData(emt_seurat_obj, layer = "counts"))
+#emt_expression_matrix <- emt_expression_matrix[rowSums(emt_expression_matrix) > 10, ]
+#emt_expression_matrix <- emt_expression_matrix[rowSums(emt_expression_matrix > 0) >= 0.1 * ncol(emt_expression_matrix), ]
+#nrow(emt_expression_matrix)
 
 emt_seurat_obj <- FindVariableFeatures(emt_seurat_obj, nfeatures = 5000)
 emt_expression_matrix <- GetAssayData(emt_seurat_obj, layer = "counts")[VariableFeatures(emt_seurat_obj), ]
+summary(as.vector(emt_expression_matrix))
 emt_expression_matrix <- as.matrix(emt_expression_matrix)
+emt_expression_matrix <- log1p(emt_expression_matrix)
+
 
 set.seed(123)
 sampled_cells <- sample(colnames(emt_expression_matrix), 5000)
@@ -85,6 +89,8 @@ summary(nmf_result)
 
 #提取表达程序
 gene_weights <- basis(nmf_result)
+summary(as.vector(gene_weights))
+print(head(rownames(gene_weights)))
 cell_weights <- coef(nmf_result)
 head(gene_weights)
 head(cell_weights)
@@ -96,12 +102,85 @@ library(org.Hs.eg.db)
 
 hallmark_pathways <- read.gmt("h.all.v2024.1.Hs.symbols.gmt")
 hallmark_list <- split(hallmark_pathways$gene, hallmark_pathways$term)
+hallmark_pathways$term <- sub("^HALLMARK_", "", hallmark_pathways$term)
+unique(hallmark_pathways$term)
 head(hallmark_list)
 
 #功能富集
 top_genes_per_module <- apply(gene_weights, 2, function(x) {
   rownames(gene_weights)[order(x, decreasing = TRUE)][1:50]
 })
+print(top_genes_per_module)
+
+enrichment_results <- lapply(top_genes_per_module, function(genes) {
+  # 将基因符号转换为 Entrez ID
+  entrez_ids <- bitr(genes, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Hs.eg.db)$ENTREZID
+  
+  # 使用 GO 或 KEGG 进行富集分析
+  enrich_result <- enrichGO(
+    gene = entrez_ids,
+    OrgDb = org.Hs.eg.db,
+    keyType = "ENTREZID",
+    ont = "BP",  # 生物过程
+    pvalueCutoff = 0.05,
+    qvalueCutoff = 0.05
+  )
+  
+  return(enrich_result)
+})
+
+# 查看每个模块的富集结果
+for (i in 1:length(enrichment_results)) {
+  cat("Module", i, "Enrichment Results:\n")
+  print(head(enrichment_results[[i]]))
+  cat("\n")
+}
+
+
+module_similarity <- cor(gene_weights)
+hc <- hclust(as.dist(1 - module_similarity), method = "complete")
+plot(hc, main = "Module Hierarchical Clustering", xlab = "", sub = "")
+
+emt_pathway_genes <- hallmark_pathways$gene[hallmark_pathways$term == "EPITHELIAL_MESENCHYMAL_TRANSITION"]
+emt_core_genes <- lapply(top_genes_per_module, function(genes) {
+  intersect(genes, emt_pathway_genes)
+})
+
+
+结果：
+write.csv(gene_weights, file = "module_gene_weights.csv")
+write.csv(cell_weights, file = "module_cell_weights.csv")
+
+for (i in 1:length(enrichment_results)) {
+  write.csv(enrichment_results[[i]], file = paste0("module_", i, "_enrichment_results.csv"))
+}
+
+#plot
+library(pheatmap)
+zscore_gene_weights <- t(scale(t(gene_weights)))
+
+# 检查标准化后的值分布
+summary(as.vector(zscore_gene_weights))
+
+# 绘制热图
+pheatmap(
+  zscore_gene_weights,
+  clustering_method = "complete",
+  color = colorRampPalette(c("blue", "white", "red"))(100),
+  main = "Z-score Normalized Gene Weights per Module"
+)
+
+
+ordered_genes <- order(apply(gene_weights, 1, which.max))  # 按最大权重模块排序
+ordered_modules <- order(colnames(gene_weights))          # 按模块名称排序
+
+# 重新排列 gene_weights
+ordered_gene_weights <- gene_weights[ordered_genes, ordered_modules]
+
+
+
+
+
 gene_names <- rownames(gene_weights)
 top_genes_names <- lapply(top_genes_per_module, function(indices) {
   gene_names[indices]

@@ -263,8 +263,8 @@ genes_to_plot <- c(
     "TOP2A", "STMN1", "MKI67",         # 增殖细胞
     "SPRR1B", "SPRR2A", "SPRR1A"
 )
-png("dotplot.png", width = 8000, height = 3000, res = 300)  # 设置高分辨率和尺寸
 
+png("dotplot.png", width = 8000, height = 3000, res = 300)  # 设置高分辨率和尺寸
 DotPlot(merged_seurat_obj, 
         features = genes_to_plot, 
         group.by = "cell_type",
