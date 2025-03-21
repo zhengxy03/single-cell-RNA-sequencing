@@ -107,6 +107,77 @@ p5 <- plot_cell_trajectory(cds, color_by = "Pseudotime") +
 ggsave("trajectory_plot_fibro_pseudo.png", plot = p5, width = 16, height = 6, dpi = 300)
 
 
+p <- plot_cell_trajectory(cds, color_by = "period1") +
+    scale_color_manual(values = npg_extended)
+ggsave("trajectory_plot_fibro_period1.png", plot = p, width = 16, height = 6, dpi = 300)
+
+p <- plot_cell_trajectory(cds, color_by = "period1") + facet_wrap("~period1", nrow = 2) +
+    scale_color_manual(values = npg_extended)
+ggsave("trajectory_plot_fibro_period1_split.png", plot = p, width = 16, height = 6, dpi = 300)
+
+
+
+# 创建一个新的组合分组变量
+cds$combined_group <- paste(cds$period1, cds$sample_type, sep = "_")
+
+# 获取组合分组的唯一值
+unique_combined_groups <- unique(cds$combined_group)
+
+# 生成颜色映射
+n_colors <- length(unique_combined_groups)
+npg_extended <- pal_npg("nrc")(n_colors)
+color_mapping <- setNames(npg_extended, unique_combined_groups)
+
+# 绘制轨迹图
+p <- plot_cell_trajectory(cds, color_by = "combined_group") +
+  scale_color_manual(values = color_mapping) + facet_wrap("~combined_group", nrow = 3) +
+  ggtitle("Trajectory Plot by Period1 and Sample Type")
+
+# 保存图形
+ggsave("trajectory_plot_fibro_period1_sample_type_split.png", plot = p, width = 10, height = 6, dpi = 300)
+
+
+period_info <- pData(cds)$period1  # 假设分期信息在 "period2" 列，可按需修改
+unique_periods <- unique(period_info)
+
+# 创建一个空列表来存储每个分期的绘图
+plot_list <- list()
+
+# 遍历每个分期，绘制轨迹图
+for (period in unique_periods) {
+  # 筛选出当前分期的细胞
+  period_cds <- cds[, period_info == period]
+  
+  # 绘制轨迹图
+  p <- plot_cell_trajectory(period_cds, color_by = "Pseudotime") +
+    ggtitle(paste("Trajectory for Period", period))
+  
+  # 将图添加到列表中
+  plot_list[[as.character(period)]] <- p
+}
+for (period in unique_periods) {
+  # 筛选出当前分期的细胞
+  
+  # 绘制轨迹图
+  p <- plot_cell_trajectory(period_cds, color_by = "cell_type") +
+    ggtitle(paste("Trajectory for Period", period))
+  
+  # 将图添加到列表中
+  plot_list[[as.character(period)]] <- p
+}
+
+# 使用 patchwork 包将所有图组合在一起
+library(patchwork)
+combined_plot <- wrap_plots(plot_list, ncol = 2)  # 每行 2 个图，可按需调整
+
+# 保存组合后的图
+png("trajectory_by_fibro_period1_celltype.png", width = 1200, height = 800)
+print(combined_plot)
+dev.off()
+
+
+
+#密度图
 df <- pData(cds)
 density_plot <- ggplot(df, aes(Pseudotime, colour = cell_type, fill = cell_type)) +
   geom_density(bw = 0.5, size = 1, alpha = 0.5) +  # 密度图

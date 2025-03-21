@@ -174,8 +174,8 @@ dev.off()
 identity_mapping <- c(
     "0" = "ACTG2+ myCAFs",
     "1" = "CD34+ Fib progenitors",
-    "2" = "PI16+ Fib progenitors",
-    "3" = "IGF1+ inflammatory Fib",
+    "2" = "SLPI+ NMFs",
+    "3" = "IGF1+ inflammatory NAFs",
     "4" = "MMP1+ myCAFs",
     "5" = "CXCL1+ iCAFs",
     "6" = "CCL20+ iCAFs",
@@ -183,7 +183,7 @@ identity_mapping <- c(
     "8" = "THBS4+ myCAFs",
     "9" = "COL27A1+ myCAFs",
     "10" = "TIMP1+ myCAFs",
-    "11" = "FRC-like Fib",
+    "11" = "Immune-associated NAFs",
     "12" = "Proliferative CAFs",
     "13" = "EndMT CAFs"
 )

@@ -77,3 +77,28 @@ epi_significant_markers <- epi_significant_markers %>%
   group_by(cluster) %>% 
   top_n(n = 50, wt = avg_log2FC)
 write.csv(epi_significant_markers, "epi_top_marker.csv")
+
+Proliferative 
+identity_mapping <- c(
+    "0" = "Proliferative tumor BC",
+    "1" = "tumor differentiated SC",
+    "2" = "normal differentiated GC",
+    "3" = "tumor differentiated SC",
+    "4" = "Proliferative tumor Basal cells",
+    "5" = "tumor",
+    "6" = "tumor differentiated GC",
+    "7" = "invasive tumor KC",
+    "8" = "tumor",
+    "9" = "tumor differentiated SC",
+    "10" = "tumor differentiated GC",
+    "11" = "tumor differentiated",
+    "12" = "免疫细胞",
+    "13" = "normal BC",
+    "14" = "EMT-like Epi",
+    "15" = "分泌型腺上皮细胞 ",
+    "16" = "神经内分泌细胞" 
+)
+
+# 假设 identity_mapping 已经定义
+cell_type <- identity_mapping[epi@meta.data$seurat_clusters]
+epi@meta.data$cell_type <- cell_type

@@ -13,10 +13,12 @@ epi_expr_matrix <- epi_expr_matrix[common_genes, ]
 # 合并表达矩阵
 expression_matrix <- cbind(T_expr_matrix, epi_expr_matrix)
 
+epi_clusters <- epi$seurat_clusters
 # 生成注释文件
 annotations_file <- data.frame(
     cells = colnames(expression_matrix),  # 细胞名称
-    cell_type = ifelse(colnames(expression_matrix) %in% colnames(T_expr_matrix), "T cells", "Epithelial cells")  # 细胞类型
+    cell_type = ifelse(colnames(expression_matrix) %in% colnames(T_expr_matrix), "T cells", 
+                      paste0("Epi_Cluster_", epi_clusters[match(colnames(expression_matrix), colnames(epi_expr_matrix))]))  # 细胞类型
 )
 
 # 加载必要的库
@@ -74,19 +76,60 @@ infercnv_obj <- CreateInfercnvObject(
 
 infercnv_obj <- infercnv::run(
     infercnv_obj,  # infercnv 对象
-    cutoff = 0.1,  # 设置 cutoff 值（默认值为 0.1）
+    cutoff = 0.2,  # 设置 cutoff 值（默认值为 0.1）
     out_dir = "./infercnv",  # 输出目录
     cluster_by_groups = TRUE,  # 按组聚类
     denoise = TRUE,  # 去噪
     HMM = FALSE  # 使用 HMM 模型
 )
 
-​infercnv_obj <- infercnv::run(infercnv_obj,
-                                 cutoff = 0.1,
-                                 out_dir = "./infercnv", 
-                                 cluster_by_groups = TRUE,
-                                 k_obs_groups = 8,
-                                 HMM = FALSE,
-                                 denoise = TRUE,
-                                 write_expr_matrix = T,
-                                 num_threads = 8)
+
+
+#抽样
+set.seed(123)
+
+# 设置抽样数量（例如抽取 10,000 个细胞）
+n_samples <- 10000
+
+sampled_cells <- sample(colnames(expression_matrix), size = n_samples, replace = FALSE)
+
+sampled_expression_matrix <- expression_matrix[, sampled_cells]
+sampled_annotations_file <- annotations_file[annotations_file$cells %in% sampled_cells, ]
+
+groupFiles <- "sampled_groupFiles.txt"
+write.table(sampled_annotations_file, file = groupFiles, sep = "\t", quote = FALSE, col.names = FALSE, row.names = FALSE)
+
+geneFile <- "geneFile.txt"
+write.table(gene_location_ref, file = geneFile, sep = "\t", quote = FALSE, col.names = FALSE, row.names = FALSE)
+
+infercnv_obj <- CreateInfercnvObject(
+    raw_counts_matrix = sampled_expression_matrix,  # 直接使用表达矩阵
+    annotations_file = groupFiles,  # 注释文件路径
+    delim = "\t",  # 文件分隔符
+    gene_order_file = geneFile,  # 基因位置参考文件路径
+    ref_group_names = c("T cells")  # 以 T 细胞作为参考
+)
+
+infercnv_obj <- infercnv::run(
+    infercnv_obj,
+    cutoff = 0.2,  # 设置 cutoff 值
+    out_dir = "infercnv_output",  # 输出目录
+    cluster_by_groups = TRUE,  # 按组聚类
+    denoise = TRUE,  # 去噪
+    HMM = FALSE  # 是否使用 HMM 模型
+)
+
+#cnv score
+cnv_scores <- infercnv_obj@expr.data
+summary(as.vector(cnv_scores))
+cnv_threshold <- quantile(cell_cnv_scores, probs = 0.90)
+print(paste("CNV 得分 90% 分位数:", cnv_threshold))
+
+malignant_cells <- names(cell_cnv_scores[cell_cnv_scores > cnv_threshold])
+normal_cells <- names(cell_cnv_scores[cell_cnv_scores <= cnv_threshold])
+
+print(paste("恶性细胞数量:", length(malignant_cells)))
+print(paste("正常细胞数量:", length(normal_cells)))
+
+malignant_epithelial_cells <- malignant_cells[malignant_cells %in% sampled_annotations_file$cells[sampled_annotations_file$cell_type == "Epithelial cells"]]
+print(paste("恶性上皮细胞数量:", length(malignant_epithelial_cells)))

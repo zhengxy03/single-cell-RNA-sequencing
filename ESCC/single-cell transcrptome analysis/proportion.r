@@ -379,33 +379,64 @@ dev.off()
 
 
 proportion_data <- merged_seurat_obj@meta.data %>%
-    group_by(period, cell_type) %>% summarise(count = n()) %>% mutate(proportion = count / sum(count))
+    group_by(period1, sample_type, cell_type) %>% summarise(count = n()) %>% mutate(proportion = count / sum(count))
 
 npg_extended <- colorRampPalette(npg_pal)(13)
 png("period1_prop1.png", width = 6000, height = 3000, res = 300)  # 设置高分辨率和尺寸
 ggplot(proportion_data, aes(x = "", y = proportion, fill = cell_type)) +
-    geom_bar(stat = "identity", width = 1) +         # 堆叠柱状图
-    coord_polar(theta = "y") +                       # 转换为饼图
+    geom_bar(stat = "identity", width = 1) +  # 堆叠柱状图
+    coord_polar(theta = "y") +  # 转换为饼图
     scale_fill_manual(values = npg_extended) +
     labs(fill = "Cell Type") +
-    theme_void() +                                   # 空白背景
+    theme_void() +  # 空白背景
     theme(
-        legend.position = "right",                     # 图例放在右侧
-        plot.title = element_blank(),                  # 移除标题
+        legend.position = "right",  # 图例放在右侧
+        plot.title = element_blank(),  # 移除标题
         # 分面标签设置
-        strip.placement = "outside",                   # 标签放在绘图区域外
-        strip.text = element_text(                     # 标签样式
-            size = 40,                                   # 字体大小
-            face = "bold",                               # 加粗
-            margin = margin(b = 10)                      # 下方留白（避免与饼图重叠）
+        strip.placement = "outside",  # 标签放在绘图区域外
+        strip.text = element_text(  # 标签样式
+            size = 40,  # 字体大小
+            face = "bold",  # 加粗
+            margin = margin(b = 10)  # 下方留白（避免与饼图重叠）
         ),
-        legend.text = element_text(size = 36),         # 图例文本字体大小
+        legend.text = element_text(size = 36),  # 图例文本字体大小
         legend.title = element_text(size = 36)  
     ) +
-    facet_wrap(
-        ~ period,
-        ncol = 4,
-        strip.position = "bottom"                      # 标签放在下方
+    facet_grid(
+        sample_type ~ period1,  # 按 period1 和 sample_type 分面
+        switch = "y",  # 将 sample_type 标签放在左侧
+        labeller = label_value # 显示变量名和值
+    )
+dev.off()
+
+proportion_data <- merged_seurat_obj@meta.data %>%
+    group_by(period2, sample_type, cell_type) %>% summarise(count = n()) %>% mutate(proportion = count / sum(count))
+
+npg_extended <- colorRampPalette(npg_pal)(13)
+png("period2_prop1.png", width = 9000, height = 3000, res = 300)  # 设置高分辨率和尺寸
+ggplot(proportion_data, aes(x = "", y = proportion, fill = cell_type)) +
+    geom_bar(stat = "identity", width = 1) +  # 堆叠柱状图
+    coord_polar(theta = "y") +  # 转换为饼图
+    scale_fill_manual(values = npg_extended) +
+    labs(fill = "Cell Type") +
+    theme_void() +  # 空白背景
+    theme(
+        legend.position = "right",  # 图例放在右侧
+        plot.title = element_blank(),  # 移除标题
+        # 分面标签设置
+        strip.placement = "outside",  # 标签放在绘图区域外
+        strip.text = element_text(  # 标签样式
+            size = 40,  # 字体大小
+            face = "bold",  # 加粗
+            margin = margin(b = 10)  # 下方留白（避免与饼图重叠）
+        ),
+        legend.text = element_text(size = 36),  # 图例文本字体大小
+        legend.title = element_text(size = 36)  
+    ) +
+    facet_grid(
+        sample_type ~ period2,  # 按 period2 和 sample_type 分面
+        switch = "y",  # 将 sample_type 标签放在左侧
+        labeller = label_value # 显示变量名和值
     )
 dev.off()
 

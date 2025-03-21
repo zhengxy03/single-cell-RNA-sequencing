@@ -62,3 +62,99 @@ pheatmap(
   fontsize_col = 10
 )
 
+#fibroblasts
+#多核运行，limma比较差异性
+library(Seurat)
+library(GSVA)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(BiocParallel)
+library(parallel)
+library(doParallel)
+library(limma)
+library(pheatmap)
+fibroblasts <- readRDS("fibro_modify.rds")
+hallmark_pathways <- read.gmt("h.all.v2024.1.Hs.symbols.gmt")
+hallmark_list <- split(hallmark_pathways$gene, hallmark_pathways$term)
+
+expression_matrix <- GetAssayData(fibroblasts, layer = "data")
+param <- GSVA::gsvaParam(
+  exprData = expression_matrix,
+  geneSets = hallmark_list,
+  kcdf = "Gaussian"
+)
+
+
+bp <- MulticoreParam(workers = detectCores() - 1)
+
+gsva_results <- GSVA::gsva(param, BPPARAM = bp)
+
+saveRDS(gsva_results, file = "fibro_gsva_results.rds")
+rownames(gsva_results) <- gsub("HALLMARK_", "", rownames(gsva_results))
+gsva_matrix <- gsva_results  
+
+cluster_info <- fibroblasts@meta.data$seurat_clusters
+
+design <- model.matrix(~ 0 + factor(cluster_info))
+colnames(design) <- levels(factor(cluster_info))  # 设置列名为 cluster 名称
+
+
+fit <- lmFit(gsva_matrix, design)
+
+colnames(design) <- paste0("Fib_", levels(factor(cluster_info)))
+
+
+contrast_matrix <- makeContrasts(
+  contrasts = paste(colnames(design), collapse = "-"),
+  levels = design
+)
+# 计算对比
+fit2 <- contrasts.fit(fit, contrast_matrix)
+fit2 <- eBayes(fit2)
+
+
+
+diff_pathways <- topTable(fit2, number = 50, adjust.method = "BH", sort.by = "p")
+
+# 提取前50条差异通路的名称
+top50_pathways <- rownames(diff_pathways)[1:50]
+
+# 提取前50条差异通路的GSVA分数
+top50_gsva_matrix <- gsva_matrix[top50_pathways, ]
+
+# 转置矩阵，使行是样本，列是通路
+top50_gsva_matrix_transposed <- t(top50_gsva_matrix)
+library(tibble)
+
+gsva_df <- as.data.frame(top50_gsva_matrix_transposed)
+gsva_df$seurat_clusters <- fibroblasts@meta.data$seurat_clusters
+
+# 使用 tibble::rownames_to_column 将某一列设置为行名
+gsva_df <- rownames_to_column(gsva_df, var = "seurat_clusters")
+
+average_pathway_scores <- gsva_df %>%
+  group_by(seurat_clusters) %>%
+  summarise(across(everything(), mean, na.rm = TRUE))
+
+# 转置矩阵以便于绘制热图（行是通路，列是簇）
+average_pathway_scores_matrix <- t(average_pathway_scores)
+
+# 绘制热图
+png("top50_average_pathway_scores_heatmap.png", width = 2000, height = 2000, res = 300)
+pheatmap(
+  average_pathway_scores_matrix,
+  scale = "row",
+  clustering_method = "complete",
+  show_rownames = TRUE,
+  show_colnames = TRUE,
+  color = colorRampPalette(c("blue", "white", "red"))(100)
+)
+dev.off()
+
+
+
+
+
+# 保存结果
+write.csv(diff_pathways, file = "diff_pathways.csv")
+

@@ -144,7 +144,7 @@ identity_mapping <- c(
     "10" = "Mast cell",
     "11" = "Pericyte",
     "12" = "Proliferating cell",
-    "13" = "Tumor cell",
+    "13" = "Tumor Epithelial cell",
     "14" = "B cell"
 )
 
@@ -291,87 +291,104 @@ FeaturePlot(merged_seurat_obj, features = genes_to_plot)
 
 
 #period1
-# 获取唯一的 period1 值，并按字母顺序排序
-unique_periods <- sort(unique(merged_seurat_obj@meta.data$period1))  # 按字母顺序排序
+unique_periods <- sort(unique(merged_seurat_obj@meta.data$period1))
 
-# 如果需要手动指定顺序，可以这样做：
-# unique_periods <- c("period_A", "period_B", "period_C", "period_D", "period_E", "period_F")
+# 获取唯一的 sample_type 值，并按字母顺序排序
+unique_sample_types <- sort(unique(merged_seurat_obj@meta.data$sample_type))
 
-# 创建一个空列表，用于存储每个 period1 的图
-plot_list <- list()
+# 创建一个空列表，用于存储所有图
+all_plot_list <- list()
 
-# 遍历每个 period1，生成单独的图
+# 遍历每个 period1
 for (period in unique_periods) {
-    # 创建颜色映射：当前 period1 为 npg 红色，其他为灰色
-    color_mapping <- setNames(
-        ifelse(unique_periods == period, pal_npg()(1), "gray"),  # npg 红色
-        unique_periods
-    )
-    
-    # 绘制 DimPlot
-    p <- DimPlot(merged_seurat_obj, reduction = "umap", label = FALSE, pt.size = 1, group.by = "period1") +
-        scale_color_manual(values = color_mapping) +  # 使用自定义颜色映射
-        ggtitle(period) +  # 设置标题为当前 period1
-        theme(
-            legend.position = "none",  # 隐藏图例
-            plot.title = element_text(size = 24, face = "bold", hjust = 0.5),  # 标题样式
-            axis.title.x = element_text(size = 20, face = "bold", color = "black"),  # X 轴标题
-            axis.title.y = element_text(size = 20, face = "bold", color = "black"),  # Y 轴标题
-            axis.text.x = element_text(size = 16, color = "black"),  # X 轴刻度
-            axis.text.y = element_text(size = 16, color = "black")   # Y 轴刻度
+    # 遍历每个 sample_type
+    for (sample in unique_sample_types) {
+        # 创建一个辅助列，将 period1 和 sample_type 组合起来
+        merged_seurat_obj$combined_group <- paste(merged_seurat_obj@meta.data$period1, merged_seurat_obj@meta.data$sample_type, sep = "_")
+        current_group <- paste(period, sample, sep = "_")
+        
+        # 创建颜色映射：当前 period1 和 sample_type 组合为 npg 红色，其他为灰色
+        color_mapping <- setNames(
+            ifelse(merged_seurat_obj$combined_group == current_group, pal_npg()(1), "gray"),
+            merged_seurat_obj$combined_group
         )
-    
-    # 将图添加到列表中
-    plot_list[[period]] <- p
+
+        # 绘制 DimPlot
+        p <- DimPlot(merged_seurat_obj, reduction = "umap", label = FALSE, pt.size = 1, group.by = "combined_group") +
+            scale_color_manual(values = color_mapping) +
+            ggtitle(paste(period, sample, sep = " - ")) +
+            theme(
+                legend.position = "none",
+                plot.title = element_text(size = 24, face = "bold", hjust = 0.5),
+                axis.title.x = element_text(size = 20, face = "bold", color = "black"),
+                axis.title.y = element_text(size = 20, face = "bold", color = "black"),
+                axis.text.x = element_text(size = 16, color = "black"),
+                axis.text.y = element_text(size = 16, color = "black")
+            )
+
+        # 将图添加到总列表中
+        all_plot_list[[paste(period, sample, sep = "_")]] <- p
+    }
 }
 
-# 使用 patchwork 将图形排列在一起（每行三个）
-combined_plot <- wrap_plots(plot_list, ncol = 3)  # 每行三个图
+# 使用 patchwork 将图形排列在一起
+# 这里根据实际图形数量动态调整每行的图形数量
+
+combined_plot <- wrap_plots(all_plot_list, ncol = 2)
 
 # 保存为 PNG 文件
-png("combined_period1_umap.png", width = 9000, height = 3000, res = 300)
+png("merged_seurat_period1_sample_type_umap.png", width = 6000, height = 9000, res = 300)
 print(combined_plot)
 dev.off()
 
 #period2
 # 获取唯一的 period2 值，并按字母顺序排序
-unique_periods <- sort(unique(merged_seurat_obj@meta.data$period2))  # 按字母顺序排序
+# 获取唯一的 period2 值，并按字母顺序排序
+unique_periods <- sort(unique(merged_seurat_obj@meta.data$period2))
 
-# 如果需要手动指定顺序，可以这样做：
-# unique_periods <- c("period_A", "period_B", "period_C", "period_D", "period_E", "period_F")
+# 获取唯一的 sample_type 值，并按字母顺序排序
+unique_sample_types <- sort(unique(merged_seurat_obj@meta.data$sample_type))
 
-# 创建一个空列表，用于存储每个 period2 的图
-plot_list <- list()
+# 创建一个空列表，用于存储所有图
+all_plot_list <- list()
 
-# 遍历每个 period2，生成单独的图
+# 遍历每个 period2
 for (period in unique_periods) {
-    # 创建颜色映射：当前 period2 为 npg 红色，其他为灰色
-    color_mapping <- setNames(
-        ifelse(unique_periods == period, pal_npg()(1), "gray"),  # npg 红色
-        unique_periods
-    )
-    
-    # 绘制 DimPlot
-    p <- DimPlot(merged_seurat_obj, reduction = "umap", label = FALSE, pt.size = 1, group.by = "period2") +
-        scale_color_manual(values = color_mapping) +  # 使用自定义颜色映射
-        ggtitle(period) +  # 设置标题为当前 period2
-        theme(
-            legend.position = "none",  # 隐藏图例
-            plot.title = element_text(size = 24, face = "bold", hjust = 0.5),  # 标题样式
-            axis.title.x = element_text(size = 20, face = "bold", color = "black"),  # X 轴标题
-            axis.title.y = element_text(size = 20, face = "bold", color = "black"),  # Y 轴标题
-            axis.text.x = element_text(size = 16, color = "black"),  # X 轴刻度
-            axis.text.y = element_text(size = 16, color = "black")   # Y 轴刻度
+    # 遍历每个 sample_type
+    for (sample in unique_sample_types) {
+        # 创建一个辅助列，将 period2 和 sample_type 组合起来
+        merged_seurat_obj$combined_group <- paste(merged_seurat_obj@meta.data$period2, merged_seurat_obj@meta.data$sample_type, sep = "_")
+        current_group <- paste(period, sample, sep = "_")
+        
+        # 创建颜色映射：当前 period2 和 sample_type 组合为 npg 红色，其他为灰色
+        color_mapping <- setNames(
+            ifelse(merged_seurat_obj$combined_group == current_group, pal_npg()(1), "gray"),
+            merged_seurat_obj$combined_group
         )
-    
-    # 将图添加到列表中
-    plot_list[[period]] <- p
+
+        # 绘制 DimPlot
+        p <- DimPlot(merged_seurat_obj, reduction = "umap", label = FALSE, pt.size = 1, group.by = "combined_group") +
+            scale_color_manual(values = color_mapping) +
+            ggtitle(paste(period, sample, sep = " - ")) +
+            theme(
+                legend.position = "none",
+                plot.title = element_text(size = 24, face = "bold", hjust = 0.5),
+                axis.title.x = element_text(size = 20, face = "bold", color = "black"),
+                axis.title.y = element_text(size = 20, face = "bold", color = "black"),
+                axis.text.x = element_text(size = 16, color = "black"),
+                axis.text.y = element_text(size = 16, color = "black")
+            )
+
+        # 将图添加到总列表中
+        all_plot_list[[paste(period, sample, sep = "_")]] <- p
+    }
 }
 
-# 使用 patchwork 将图形排列在一起（每行四个）
-combined_plot <- wrap_plots(plot_list, ncol = 4)  # 每行四个图
+# 使用 patchwork 将图形排列在一起
+# 这里根据实际图形数量动态调整每行的图形数量
+combined_plot <- wrap_plots(all_plot_list, ncol = 4)
 
 # 保存为 PNG 文件
-png("combined_period2_umap.png", width = 6000, height = 3000, res = 300)
+png("merged_seurat_period2_sample_type_umap.png", width = 6000, height = 6000, res = 300)
 print(combined_plot)
 dev.off()
