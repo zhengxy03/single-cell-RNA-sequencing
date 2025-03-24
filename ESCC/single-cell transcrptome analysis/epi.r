@@ -99,6 +99,25 @@ identity_mapping <- c(
     "16" = "神经内分泌细胞" 
 )
 
+identity_mapping <- c(
+    "0" = "Basal cells",
+    "1" = "Invasive cells",
+    "2" = "Invasive cells",
+    "3" = "Invasive cells",emt
+    "4" = "Invasive cells",emt
+    "5" = "Invasive cells",
+    "6" = "Invasive cells",
+    "7" = "Differentiated cells",
+    "8" = "Proliferative cells",
+    "9" = "Differentiated cells",
+    "10" = "Basal cells",
+    "11" = "Proliferative cells",
+    "12" = "Immune-associated invasive cells",
+    "13" = "Basal cells",
+    "14" = "EMT-like Epi",
+    "15" = "Differentiated cells",
+    "16" = "Differentiated cells" 
+)
 # 假设 identity_mapping 已经定义
 cell_type <- identity_mapping[epi@meta.data$seurat_clusters]
 epi@meta.data$cell_type <- cell_type

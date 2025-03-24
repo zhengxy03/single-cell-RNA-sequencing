@@ -79,7 +79,7 @@ cds <- orderCells(cds)
 # 绘制轨迹图
 p <- plot_cell_trajectory(cds, color_by = "seurat_clusters")
 npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(15)
+npg_extended <- colorRampPalette(npg_pal)(25)
 p <- p + scale_color_manual(values = npg_extended)
 
 p2 <- plot_cell_trajectory(cds, color_by = "seurat_clusters") + facet_wrap("~seurat_clusters", nrow = 2) + scale_color_manual(values = npg_extended)
@@ -143,39 +143,54 @@ unique_periods <- unique(period_info)
 # 创建一个空列表来存储每个分期的绘图
 plot_list <- list()
 
-# 遍历每个分期，绘制轨迹图
 for (period in unique_periods) {
   # 筛选出当前分期的细胞
-  period_cds <- cds[, period_info == period]
+  period_cds <- cds[, pData(cds)$period1 == period]
   
-  # 绘制轨迹图
-  p <- plot_cell_trajectory(period_cds, color_by = "Pseudotime") +
-    ggtitle(paste("Trajectory for Period", period))
+  # 打印筛选后的数据维度
+  print(paste("Period:", period))
+  print(dim(period_cds))
   
-  # 将图添加到列表中
-  plot_list[[as.character(period)]] <- p
-}
-for (period in unique_periods) {
-  # 筛选出当前分期的细胞
+  # 重新进行降维
+  cat("Before reduceDimension:\n")
+  print(dim(period_cds))
+  period_cds <- reduceDimension(period_cds, max_components = 2, method = 'DDRTree')
+  cat("After reduceDimension:\n")
+  print(dim(period_cds))
   
-  # 绘制轨迹图
+  # 重新进行轨迹推断
+  cat("Before orderCells:\n")
+  print(dim(period_cds))
+  period_cds <- orderCells(period_cds)
+  cat("After orderCells:\n")
+  print(dim(period_cds))
+  
+  # 绘制轨迹图，按 cell_type 着色
   p <- plot_cell_trajectory(period_cds, color_by = "cell_type") +
-    ggtitle(paste("Trajectory for Period", period))
+    ggtitle(paste("Trajectory for Period", period)) +
+    scale_color_manual(values = npg_extended)
   
   # 将图添加到列表中
   plot_list[[as.character(period)]] <- p
 }
-
+plot_list <- list(plot_list[[2]], plot_list[[1]], plot_list[[3]])
 # 使用 patchwork 包将所有图组合在一起
 library(patchwork)
-combined_plot <- wrap_plots(plot_list, ncol = 2)  # 每行 2 个图，可按需调整
+combined_plot <- wrap_plots(plot_list, ncol = 3)  # 每行 2 个图，可按需调整
 
 # 保存组合后的图
-png("trajectory_by_fibro_period1_celltype.png", width = 1200, height = 800)
+png("trajectory_by_fibro_period1_celltype.png", width = 6000, height = 3000, res = 300)
 print(combined_plot)
 dev.off()
 
+combined_plot <- wrap_plots(lapply(plot_list, function(p) {
+  p + facet_wrap(~sample_type, nrow = 2)
+}), ncol = 2)
 
+# 保存组合后的图
+png("trajectory_by_fibro_period1_celltype_sampletype.png", width = 6000, height = 3000, res = 300)
+print(combined_plot)
+dev.off()
 
 #密度图
 df <- pData(cds)
