@@ -77,9 +77,11 @@ cds <- orderCells(cds)
 
 
 # 绘制轨迹图
+p <- plot_cell_trajectory(cds, color_by = "State")+
+  facet_wrap("~State", nrow = 2) + scale_color_manual(values = npg_extended)
 p <- plot_cell_trajectory(cds, color_by = "seurat_clusters")
 npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(25)
+npg_extended <- colorRampPalette(npg_pal)(15)
 p <- p + scale_color_manual(values = npg_extended)
 
 p2 <- plot_cell_trajectory(cds, color_by = "seurat_clusters") + facet_wrap("~seurat_clusters", nrow = 2) + scale_color_manual(values = npg_extended)
@@ -137,6 +139,7 @@ p <- plot_cell_trajectory(cds, color_by = "combined_group") +
 ggsave("trajectory_plot_fibro_period1_sample_type_split.png", plot = p, width = 10, height = 6, dpi = 300)
 
 
+#period and sampletype
 period_info <- pData(cds)$period1  # 假设分期信息在 "period2" 列，可按需修改
 unique_periods <- unique(period_info)
 
@@ -173,24 +176,65 @@ for (period in unique_periods) {
   # 将图添加到列表中
   plot_list[[as.character(period)]] <- p
 }
+saveRDS(plot_list, file = "fibro_plot_list.rds")
 plot_list <- list(plot_list[[2]], plot_list[[1]], plot_list[[3]])
 # 使用 patchwork 包将所有图组合在一起
-library(patchwork)
-combined_plot <- wrap_plots(plot_list, ncol = 3)  # 每行 2 个图，可按需调整
+for (i in 2:length(plot_list)) {
+  plot_list[[i]] <- plot_list[[i]] + guides(color = "none")
+}
+# 组合图形
+combined_plot <- wrap_plots(plot_list, ncol = 3) + 
+  plot_layout(guides = "collect") & 
+  theme(legend.position = "bottom")
 
 # 保存组合后的图
 png("trajectory_by_fibro_period1_celltype.png", width = 6000, height = 3000, res = 300)
 print(combined_plot)
 dev.off()
 
-combined_plot <- wrap_plots(lapply(plot_list, function(p) {
+#sampletype
+faceted_plot_list <- lapply(plot_list, function(p) {
   p + facet_wrap(~sample_type, nrow = 2)
-}), ncol = 2)
+})
+
+# 隐藏除第一个图之外的所有图的图例
+for (i in 2:length(faceted_plot_list)) {
+  faceted_plot_list[[i]] <- faceted_plot_list[[i]] + guides(color = "none")
+}
+
+# 使用 patchwork 组合图形，并设置图例位置
+library(patchwork)
+combined_plot <- wrap_plots(faceted_plot_list, ncol = 3) + 
+  plot_layout(guides = "collect") & 
+  theme(legend.position = "bottom")
 
 # 保存组合后的图
 png("trajectory_by_fibro_period1_celltype_sampletype.png", width = 6000, height = 3000, res = 300)
 print(combined_plot)
-dev.off()
+dev.off()  
+
+
+#sampletype and celltype
+faceted_plot_list <- lapply(plot_list, function(p) {
+  p + facet_grid(cell_type ~ sample_type)
+})
+
+# 隐藏除第一个图之外的所有图的图例
+for (i in 2:length(faceted_plot_list)) {
+  faceted_plot_list[[i]] <- faceted_plot_list[[i]] + guides(color = "none")
+}
+
+# 使用 patchwork 组合图形，并设置图例位置
+library(patchwork)
+combined_plot <- wrap_plots(faceted_plot_list, ncol = 3) + 
+  plot_layout(guides = "collect") & 
+  theme(legend.position = "bottom")
+
+# 保存组合后的图
+png("trajectory_by_fibro_period1_celltype_sampletype_split.png", width = 6000, height = 3000, res = 300)
+print(combined_plot)
+dev.off()    
+
 
 #密度图
 df <- pData(cds)
@@ -216,6 +260,32 @@ density_plot_split <- ggplot(df, aes(Pseudotime, colour = cell_type, fill = cell
   ) + 
     facet_wrap("~cell_type", nrow = 2)
 ggsave("cell_density_along_pseudotim_split.png", plot = density_plot_split, width = 16, height = 6, dpi = 300)
+
+df <- pData(cds)
+
+# 创建自定义的标签函数，移除 cell_type 的显示
+my_labeller <- function(variable, value) {
+  if (variable == "cell_type") {
+    return("")
+  }
+  return(value)
+}
+
+# 创建密度图并添加分面
+density_plot <- ggplot(df, aes(Pseudotime, colour = cell_type, fill = cell_type)) +
+  geom_density(bw = 0.5, size = 1, alpha = 0.5) +  # 密度图
+  scale_color_manual(values = npg_extended) +      # 设置线条颜色
+  scale_fill_manual(values = npg_extended) +       # 设置填充颜色（与线条颜色一致）
+  theme(
+    panel.background = element_blank(),           # 去除背景颜色
+    panel.grid = element_blank(),                 # 去除网格线
+    axis.line = element_line(color = "black")     # 保留坐标轴线
+  ) +
+  # 使用 facet_grid 进行三维分面，并使用自定义标签
+  facet_grid(period1 ~ cell_type + sample_type, labeller = my_labeller)
+
+# 保存图形
+ggsave("cell_density_along_pseudotime.png", plot = density_plot, width = 16, height = 6, dpi = 300)
 
 #差异基因
 expressed_genes=row.names(subset(fData(cds),num_cells_expressed>=10)) #在部分基因里面找
