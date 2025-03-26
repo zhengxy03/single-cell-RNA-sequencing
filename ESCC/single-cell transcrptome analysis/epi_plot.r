@@ -189,30 +189,12 @@ dev.off()
 
 #patients
 #patients
-identity_mapping <- c(
-    "0" = "Proliferative cells_1",
-    "1" = "Invasive cells_1",
-    "2" = "Differentiated cells_1",
-    "3" = "Invasive cells_2",
-    "4" = "Invasive cells_3",
-    "5" = "Invasive cells_4",
-    "6" = "Invasive cells_5",
-    "7" = "Differentiated cells_2",
-    "8" = "Differentiated cells_3",
-    "9" = "Differentiated cells_4",
-    "10" = "Basal cells_1",
-    "11" = "Proliferative cells_2",
-    "12" = "Immune-associated invasive cells",
-    "13" = "Basal cells_2",
-    "14" = "EMT-like Epi",
-    "15" = "Invasive cells_6",
-    "16" = "Differentiated cells_5" 
-)
+
 
 
 # 假设 identity_mapping 已经定义
-cell_type <- identity_mapping[epi@meta.data$seurat_clusters]
-epi@meta.data$cell_type <- cell_type
+cell_type2 <- identity_mapping[epi@meta.data$seurat_clusters]
+epi@meta.data$cell_type2 <- cell_type2
 npg_pal <- pal_npg()(10)
 npg_extended <- colorRampPalette(npg_pal)(17)
 
@@ -229,10 +211,10 @@ epi@meta.data$patients <- factor(
 
 npg_extended <- colorRampPalette(npg_pal)(70)
 proportion_data <- epi@meta.data %>%
-    group_by(cell_type, patients) %>% summarise(count = n()) %>% mutate(proportion = count / sum(count))
+    group_by(cell_type2, patients) %>% summarise(count = n()) %>% mutate(proportion = count / sum(count))
 
 
-png("epi_celltype_patients_prop1.png", width = 6000, height = 6000, res = 300)  # 设置高分辨率和尺寸
+png("epi_celltype_patients_prop1.png", width = 6000, height = 9000, res = 300)  # 设置高分辨率和尺寸
 ggplot(proportion_data, aes(x = "", y = proportion, fill = patients)) +
   geom_bar(stat = "identity", width = 1) +         # 堆叠柱状图
   coord_polar(theta = "y") +                       # 转换为饼图
@@ -253,11 +235,11 @@ ggplot(proportion_data, aes(x = "", y = proportion, fill = patients)) +
     legend.title = element_text(size = 36)         # 移除图例标题
   ) +
   facet_wrap(
-    ~ cell_type,
+    ~ cell_type2,
     ncol = 3,
     strip.position = "bottom"                      # 标签放在下方
   )
-dev.off()    
+dev.off()
 
 
 npg_extended <- colorRampPalette(npg_pal)(17)
@@ -274,9 +256,9 @@ color_mapping["Normal"] <- npg_extended[2]
 color_mapping["Tumor"] <- npg_extended[1]
 
 proportion_data <- epi@meta.data %>%
-  group_by(period1, cell_type, sample_type) %>%
+  group_by(period1, cell_type2, sample_type) %>%
   summarise(count = n()) %>%
-  group_by(period1, cell_type) %>%
+  group_by(period1, cell_type2) %>%
   mutate(proportion = count / sum(count))
 
 # 打开 PNG 文件设备
@@ -302,13 +284,13 @@ ggplot(proportion_data, aes(x = "", y = proportion, fill = sample_type)) +
     legend.title = element_text(size = 36)
   ) +
   facet_grid(
-    cell_type ~ period1,
+    cell_type2 ~ period1,
     switch = "y",
     labeller = label_value
   )
 
 # 关闭文件设备
-dev.off()    
+dev.off()
 
 npg_extended <- colorRampPalette(npg_pal)(17)
 
@@ -324,9 +306,9 @@ color_mapping["Normal"] <- npg_extended[2]
 color_mapping["Tumor"] <- npg_extended[1]
 
 proportion_data <- epi@meta.data %>%
-  group_by(period2, cell_type, sample_type) %>%
+  group_by(period2, cell_type2, sample_type) %>%
   summarise(count = n()) %>%
-  group_by(period2, cell_type) %>%
+  group_by(period2, cell_type2) %>%
   mutate(proportion = count / sum(count))
 
 # 打开 PNG 文件设备
@@ -352,7 +334,7 @@ ggplot(proportion_data, aes(x = "", y = proportion, fill = sample_type)) +
     legend.title = element_text(size = 36)
   ) +
   facet_grid(
-    cell_type ~ period2,
+    cell_type2 ~ period2,
     switch = "y",
     labeller = label_value
   )

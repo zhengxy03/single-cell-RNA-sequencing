@@ -107,7 +107,7 @@ identity_mapping <- c(
     "4" = "Invasive cells",
     "5" = "Invasive cells",
     "6" = "Invasive cells",
-    "7" = "Differentiated cells",
+    "7" = "Keratinocytes",
     "8" = "Differentiated cells",
     "9" = "Differentiated cells",
     "10" = "Basal cells",
@@ -159,7 +159,8 @@ DimPlot(epi, reduction = "umap", label = FALSE, pt.size = 1, group.by = "cell_ty
         legend.text = element_text(size = 16, face = "bold", color = "black"),
         legend.title = element_text(size = 28, face = "bold", color = "black"),
         legend.position = "bottom",
-
+        legend.justification = "center",
+        legend.box.just = "center",
         legend.key = element_blank(),
         legend.background = element_blank(),
         panel.background = element_rect(fill = "white", color = NA),
@@ -202,4 +203,78 @@ DotPlot(epi,
     legend.background = element_blank()
   ) +
   scale_color_gsea()  # 使用ggsci的GSEA配色
+dev.off()
+
+identity_mapping <- c(
+    "0" = "Proliferative cells_1",
+    "1" = "Invasive cells_1",
+    "2" = "Differentiated cells_1",
+    "3" = "Invasive cells_2",
+    "4" = "Invasive cells_3",
+    "5" = "Invasive cells_4",
+    "6" = "Invasive cells_5",
+    "7" = "Keratinocytes",
+    "8" = "Differentiated cells_2",
+    "9" = "Differentiated cells_3",
+    "10" = "Basal cells_1",
+    "11" = "Proliferative cells_2",
+    "12" = "Immune-associated invasive cells",
+    "13" = "Basal cells_2",
+    "14" = "EMT-like Epi",
+    "15" = "Invasive cells_6",
+    "16" = "Differentiated cells_4" 
+)
+
+cell_type2 <- identity_mapping[epi@meta.data$seurat_clusters]
+epi@meta.data$cell_type2 <- cell_type2
+npg_pal <- pal_npg()(10)
+npg_extended <- colorRampPalette(npg_pal)(17)
+epi@meta.data$cell_type2 <- factor(epi@meta.data$cell_type2, levels = identity_mapping)
+
+# 获取图例的个数和名称长度
+cell_types <- as.character(unique(epi@meta.data$cell_type2))
+num_legend_items <- length(cell_types)  # 图例的个数
+max_label_length <- max(nchar(cell_types))  # 图例名称的最大长度
+
+# 动态计算图片尺寸
+base_width <- 3000  # 基础宽度
+base_height <- 3000  # 基础高度
+legend_width_factor <- 100  # 每个图例项增加的宽度
+label_length_factor <- 10  # 每个字符增加的宽度
+
+# 计算动态宽度
+dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
+
+# 导出图片
+png("epi_annotation2.png", width = dynamic_width, height = base_height, res = 300)
+DimPlot(epi, reduction = "umap", label = FALSE, pt.size = 1, group.by = "cell_type2", label.size = 8) +
+    xlab("UMAP_1") +
+    ylab("UMAP_2") +
+    ggtitle(NULL) +
+    scale_color_manual(values = npg_extended) +
+    coord_fixed(ratio = 1) +
+    guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
+    theme(
+        text = element_text(size = 12, face = "bold"),
+        axis.text.x = element_text(size = 28, color = "black"),
+        axis.text.y = element_text(size = 28, color = "black"),
+        axis.title.x = element_text(size = 36, face = "bold", color = "black"),
+        axis.title.y = element_text(size = 36, face = "bold", color = "black", margin = margin(r = 20)),  # 增加右侧间距
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        legend.text = element_text(size = 16, face = "bold", color = "black"),
+        legend.title = element_text(size = 28, face = "bold", color = "black"),
+        legend.position = "bottom",
+        legend.justification = "center",
+        legend.box.just = "center",
+        legend.key = element_blank(),
+        legend.background = element_blank(),
+        panel.background = element_rect(fill = "white", color = NA),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.line.x = element_line(color = "black", linewidth = 0.5),
+        axis.line.y = element_line(color = "black", linewidth = 0.5),
+        aspect.ratio = 1,
+        plot.margin = margin(10, 50, 10, 10)
+    )
 dev.off()
