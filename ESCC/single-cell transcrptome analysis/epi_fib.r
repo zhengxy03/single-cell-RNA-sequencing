@@ -86,7 +86,7 @@ identity_mapping <- c(
     "6" = "Differentiated cells",
     "7" = "Proliferative cells",
     "8" = "Keratinocytes",
-    "9" = "Differentiated cells_4",
+    "9" = "Proliferative cells(zand)",
     "10" = "Basal cells_1",
     "11" = "Proliferative cells_2",
     "12" = "Immune-associated invasive cells",
