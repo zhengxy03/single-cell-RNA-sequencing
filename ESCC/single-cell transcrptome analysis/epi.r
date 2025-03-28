@@ -109,14 +109,14 @@ identity_mapping <- c(
     "6" = "Invasive cells",
     "7" = "Keratinocytes",
     "8" = "Differentiated cells",
-    "9" = "Differentiated cells",
+    "9" = "Urothelial cells",
     "10" = "Basal cells",
     "11" = "Proliferative cells",
     "12" = "Immune-associated invasive cells",
-    "13" = "Basal cells",
-    "14" = "EMT-like Epi",
+    "13" = "Hepatocytes",
+    "14" = "EMT-like Epis",
     "15" = "Invasive cells",
-    "16" = "Differentiated cells" 
+    "16" = "Neuroendocrine cells" 
 )
 
 
@@ -215,14 +215,14 @@ identity_mapping <- c(
     "6" = "Invasive cells_5",
     "7" = "Keratinocytes",
     "8" = "Differentiated cells_2",
-    "9" = "Differentiated cells_3",
+    "9" = "Urothelial cells",
     "10" = "Basal cells_1",
     "11" = "Proliferative cells_2",
     "12" = "Immune-associated invasive cells",
-    "13" = "Basal cells_2",
-    "14" = "EMT-like Epi",
+    "13" = "Hepatocytes",
+    "14" = "EMT-like Epis",
     "15" = "Invasive cells_6",
-    "16" = "Differentiated cells_4" 
+    "16" = "Neuroendocrine cells" 
 )
 
 cell_type2 <- identity_mapping[epi@meta.data$seurat_clusters]

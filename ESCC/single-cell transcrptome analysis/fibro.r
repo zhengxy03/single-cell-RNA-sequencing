@@ -93,7 +93,7 @@ label_length_factor <- 10  # 每个字符增加的宽度
 dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
 
 npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(14)
+npg_extended <- colorRampPalette(npg_pal)(15)
 png("fibro_T_clusters.png", width = dynamic_width, height = base_height, res = 300)
 DimPlot(fibro_T, reduction = "umap", label = TRUE, pt.size = 2, label.size = 8) +
     xlab("UMAP_1") +
@@ -170,7 +170,7 @@ dev.off()
 
 
 
-
+library(ggrepel)
 identity_mapping <- c(
     "0" = "ACTG2+ myCAFs",
     "1" = "CD34+ Fib progenitors",
@@ -180,7 +180,7 @@ identity_mapping <- c(
     "5" = "CXCL1+ iCAFs",
     "6" = "CCL20+ iCAFs",
     "7" = "COL6A5+ myCAFs",
-    "8" = "THBS4+ myCAFs",
+    "8" = "vCAFs",
     "9" = "COL27A1+ myCAFs",
     "10" = "TIMP1+ myCAFs",
     "11" = "Immune-associated NAFs",

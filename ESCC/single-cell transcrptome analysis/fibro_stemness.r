@@ -18,8 +18,8 @@ stemness_genes <- matched_genes
 fibroblasts <- AddModuleScore(fibroblasts, features = list(stemness_genes), name = "Stemness_Score")
 head(fibroblasts@meta.data)
 summary(fibroblasts@meta.data$Stemness_Score1)
-#fibroblasts@meta.data$Stemness_Score_Z <- scale(fibroblasts@meta.data$Stemness_Score1)
-#summary(fibroblasts@meta.data$Stemness_Score_Z)
+fibroblasts@meta.data$Stemness_Score_Z <- scale(fibroblasts@meta.data$Stemness_Score1)
+summary(fibroblasts@meta.data$Stemness_Score_Z)
 
 npg_pal <- pal_npg()(10)
 npg_extended <- colorRampPalette(npg_pal)(4)
@@ -58,7 +58,7 @@ p <- VlnPlot(
 ggsave("fibro_stem_vln.png", plot = p)
 
 
-#stemness_genes <- c(
+stemness_genes <- c(
     "SOX2",    # 维持干性和多能性的关键转录因子
     "NANOG",   # 多能性标志基因
 

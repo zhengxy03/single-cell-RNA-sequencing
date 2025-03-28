@@ -80,27 +80,27 @@ identity_mapping <- c(
     "0" = "COL11A1+ myCAFs",
     "1" = "iCAF/myCAF transition",
     "2" = "IGF1+ iCAFs",
-    "3" = "Proliferative cells",
-    "4" = "Basal cells",
+    "3" = "Proliferative Epis",
+    "4" = "Basal Epis",
     "5" = "PI16+ Fib progenitors",
-    "6" = "Differentiated cells",
-    "7" = "Proliferative cells",
+    "6" = "Differentiated Epis",
+    "7" = "Proliferative Epis",
     "8" = "Keratinocytes",
-    "9" = "Proliferative cells",
+    "9" = "Proliferative Epis",
     "10" = "vCAFs",
-    "11" = "Invasive cells",
-    "12" = "Invasive cells",
-    "13" = "Differentiated cells",
-    "14" = "Proliferative cells",
-    "15" = "Invasive cells",
+    "11" = "Invasive Epis",
+    "12" = "Invasive Epis",
+    "13" = "Differentiated Epis",
+    "14" = "Proliferative Epis",
+    "15" = "Invasive Epis",
     "16" = "COL7A1+ myCAFs",
     "17" = "Immune-associated NAFs",
     "18" = "Neuroendocrine cells",
     "19" = "Urothelial cells",
     "20" = "Hepatocytes",
-    "21" = "Proliferative cells",
-    "22" = "Proliferative myCAF",
-    "23" = "EMT-like Epi"
+    "21" = "Proliferative Epis",
+    "22" = "Proliferative myCAFs",
+    "23" = "EMT-like Epis"
 )
 cell_type <- identity_mapping[epi_fib@meta.data$seurat_clusters]
 epi_fib@meta.data$cell_type <- cell_type
@@ -213,50 +213,78 @@ identity_mapping <- c(
     "18" = "Neuroendocrine cells",
     "19" = "Urothelial cells",
     "20" = "Hepatocytes",
-    "21" = "Proliferative Epi_5",
-    "22" = "Proliferative myCAF",
-    "23" = "EMT-like Epi"
+    "21" = "Proliferative Epis_5",
+    "22" = "Proliferative myCAFs",
+    "23" = "EMT-like Epis"
 )
 cell_type <- identity_mapping[epi_fib@meta.data$seurat_clusters]
 epi_fib@meta.data$cell_type <- cell_type
-npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(24)
 
-# 获取图例的个数和名称长度
-cell_types <- unique(epi_fib@meta.data$cell_type)
+# 将 cell_type 列转换为因子，并指定顺序
+epi_fib@meta.data$cell_type <- factor(epi_fib@meta.data$cell_type, levels = identity_mapping)
+
+# 获取唯一的细胞类型并转换为字符向量
+cell_types <- as.character(unique(epi_fib@meta.data$cell_type))
 num_legend_items <- length(cell_types)  # 图例的个数
 max_label_length <- max(nchar(cell_types))  # 图例名称的最大长度
 
 # 动态计算图片尺寸
-base_width <- 3000  # 基础宽度
-base_height <- 3000  # 基础高度
+base_width <- 9000  # 基础宽度
+base_height <- 5000  # 基础高度
 legend_width_factor <- 100  # 每个图例项增加的宽度
 label_length_factor <- 10  # 每个字符增加的宽度
 
 # 计算动态宽度
 dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
 
-# 导出图片
-png("epi_fib_annotation.png", width = dynamic_width, height = base_height, res = 300)
-DimPlot(epi_fib, reduction = "umap", label = FALSE, pt.size = 1, group.by = "cell_type", label.size = 8) +
-    xlab("UMAP_1") +
-    ylab("UMAP_2") +
-    ggtitle(NULL) +
-    scale_color_manual(values = npg_extended) +
-    coord_fixed(ratio = 1) +
-    guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
+# 保存图片
+
+umap_data <- as.data.frame(epi_fib@reductions$umap@cell.embeddings)
+umap_data$cell_type <- epi_fib@meta.data$cell_type
+
+# 检查列名
+print(head(umap_data))
+
+# 确保列名正确
+colnames(umap_data) <- c("umap_1", "umap_2", "cell_type")
+
+# 计算每个细胞类型的中心点
+centroids <- umap_data %>%
+    group_by(cell_type) %>%
+    summarise(
+        umap_1 = median(umap_1),
+        umap_2 = median(umap_2)
+    )
+
+# 绘制 UMAP 图
+p <- DimPlot(epi_fib, reduction = "umap", label = FALSE, pt.size = 2, group.by = "cell_type") +
+    geom_text_repel(
+        data = centroids,  # 使用中心点数据
+        aes(x = umap_1, y = umap_2, label = cell_type),  # 指定 x 和 y 的美学映射
+        size = 8,  # 标签字体大小
+        box.padding = 0.5,  # 标签与点之间的间距
+        point.padding = 0.5,  # 标签之间的间距
+        max.overlaps = Inf,  # 允许的最大重叠次数
+        force = 1,  # 调整标签的排斥力
+        min.segment.length = 0  # 强制显示所有标签的连接线
+    ) +
+    xlab("UMAP_1") +  # 添加 x 轴标签
+    ylab("UMAP_2") +  # 添加 y 轴标签
+    ggtitle(NULL) +  # 移除标题
+    scale_color_manual(values = npg_extended) +  # 使用自定义颜色
+    coord_fixed(ratio = 1) +  # 固定坐标轴比例
+    guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +  # 调整图例
     theme(
         text = element_text(size = 12, face = "bold"),
-        axis.text.x = element_text(size = 28, color = "black"),
-        axis.text.y = element_text(size = 28, color = "black"),
-        axis.title.x = element_text(size = 36, face = "bold", color = "black"),
-        axis.title.y = element_text(size = 36, face = "bold", color = "black", margin = margin(r = 20)),  # 增加右侧间距
+        axis.text.x = element_text(size = 40, color = "black"),
+        axis.text.y = element_text(size = 40, color = "black"),
+        axis.title.x = element_text(size = 56, face = "bold", color = "black"),
+        axis.title.y = element_text(size = 56, face = "bold", color = "black", margin = margin(r = 20)),
         plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
-        legend.text = element_text(size = 16, face = "bold", color = "black"),
-        legend.title = element_text(size = 28, face = "bold", color = "black"),
-        legend.position = "bottom",
-        legend.justification = "center",
-        legend.box.just = "center",
+        legend.text = element_text(size = 40, face = "bold", color = "black"),
+        legend.title = element_text(size = 40, face = "bold", color = "black"),
+        legend.position = "right",
+        legend.box.margin = margin(0, 0, 0, 0),
         legend.key = element_blank(),
         legend.background = element_blank(),
         panel.background = element_rect(fill = "white", color = NA),
@@ -268,4 +296,8 @@ DimPlot(epi_fib, reduction = "umap", label = FALSE, pt.size = 1, group.by = "cel
         aspect.ratio = 1,
         plot.margin = margin(10, 50, 10, 10)
     )
+
+# 保存图片
+png("epi_fib_annotation.png", width = dynamic_width, height = base_height, res = 300)
+print(p)
 dev.off()

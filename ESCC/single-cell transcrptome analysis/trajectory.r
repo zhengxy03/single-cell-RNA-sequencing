@@ -1,6 +1,7 @@
 library(Seurat)
 library(monocle)
 library(ggplot2)
+library(ggsci)
 trace('project2MST', edit = T, where = asNamespace("monocle"))
 
 setwd("/share/home/wangq/zxy/ESCC")
@@ -73,7 +74,7 @@ cds <- reduceDimension(cds, max_components = 2, method = 'DDRTree')
 
 # 轨迹推断
 cds <- orderCells(cds)
-
+cds <- orderCells(cds, root_state  = 4)
 
 
 # 绘制轨迹图
@@ -86,9 +87,28 @@ p <- p + scale_color_manual(values = npg_extended)
 
 p2 <- plot_cell_trajectory(cds, color_by = "seurat_clusters") + facet_wrap("~seurat_clusters", nrow = 2) + scale_color_manual(values = npg_extended)
 
-p3 <- plot_cell_trajectory(cds, color_by = "cell_type") + scale_color_manual(values = npg_extended)
+p3 <- plot_cell_trajectory(cds, color_by = "cell_type") + scale_color_manual(values = npg_extended) +
+  theme(legend.text = element_text(size = 18),
+        legend.title = element_blank())
 
-p4 <- plot_cell_trajectory(cds, color_by = "cell_type") + facet_wrap("~cell_type", nrow = 2) + scale_color_manual(values = npg_extended)
+png("traj_fib_celltype.png", width = 6000, height = 3000, res = 300)
+print(p3)
+dev.off()
+
+p4 <- plot_cell_trajectory(cds, color_by = "cell_type") + facet_wrap("~cell_type", nrow = 2) + scale_color_manual(values = npg_extended) +
+  theme(legend.text = element_text(size = 18),
+        legend.title = element_blank())
+png("traj_fib_celltype_split.png", width = 6000, height = 3000, res = 300)
+print(p4)
+dev.off()
+
+p4 <- plot_cell_trajectory(cds, color_by = "period1") + facet_wrap("~period1", nrow = 3) + scale_color_manual(values = npg_extended) +
+  theme(legend.text = element_text(size = 18),
+        legend.title = element_blank())
+png("traj_fib_period1_split.png", width = 6000, height = 3000, res = 300)
+print(p4)
+dev.off()
+
 
 p <- plot_cell_trajectory(cds, color_by = "sample_type") +
     scale_color_manual(values = npg_extended)
@@ -185,7 +205,9 @@ for (i in 2:length(plot_list)) {
 # 组合图形
 combined_plot <- wrap_plots(plot_list, ncol = 3) + 
   plot_layout(guides = "collect") & 
-  theme(legend.position = "bottom")
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        legend.text = element_text(size = 18)) # 修改这里来增大图例字体大小
 
 # 保存组合后的图
 png("trajectory_by_fibro_period1_celltype.png", width = 6000, height = 3000, res = 300)
@@ -206,7 +228,9 @@ for (i in 2:length(faceted_plot_list)) {
 library(patchwork)
 combined_plot <- wrap_plots(faceted_plot_list, ncol = 3) + 
   plot_layout(guides = "collect") & 
-  theme(legend.position = "bottom")
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        legend.text = element_text(size = 18))
 
 # 保存组合后的图
 png("trajectory_by_fibro_period1_celltype_sampletype.png", width = 6000, height = 3000, res = 300)
@@ -228,10 +252,12 @@ for (i in 2:length(faceted_plot_list)) {
 library(patchwork)
 combined_plot <- wrap_plots(faceted_plot_list, ncol = 3) + 
   plot_layout(guides = "collect") & 
-  theme(legend.position = "bottom")
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        legend.text = element_text(size = 18))
 
 # 保存组合后的图
-png("trajectory_by_fibro_period1_celltype_sampletype_split.png", width = 6000, height = 3000, res = 300)
+png("trajectory_by_fibro_period1_celltype_sampletype_split.png", width = 6000, height = 4000, res = 300)
 print(combined_plot)
 dev.off()    
 
@@ -279,16 +305,52 @@ density_plot <- ggplot(df, aes(Pseudotime, colour = cell_type, fill = cell_type)
   theme(
     panel.background = element_blank(),           # 去除背景颜色
     panel.grid = element_blank(),                 # 去除网格线
-    axis.line = element_line(color = "black")     # 保留坐标轴线
+    axis.line = element_line(color = "black"),     # 保留坐标轴线
+    legend.position = "bottom",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 18),
+    strip.text = element_text(size = 22)  # 增大分面标题字体大小
   ) +
   # 使用 facet_grid 进行三维分面，并使用自定义标签
   facet_grid(period1 ~ cell_type + sample_type, labeller = my_labeller)
 
 # 保存图形
-ggsave("cell_density_along_pseudotime.png", plot = density_plot, width = 16, height = 6, dpi = 300)
+png("cell_density_along_pseudotime.png", width = 9000, height = 3000, res = 300)
+print(density_plot)
+dev.off()
 
 #差异基因
-expressed_genes=row.names(subset(fData(cds),num_cells_expressed>=10)) #在部分基因里面找
+#expressed_genes=row.names(subset(fData(cds),num_cells_expressed>=10)) #在部分基因里面找
+ordering_genes <- row.names(subset(fData(cds), use_for_ordering == TRUE))
+high_quality_ordering_genes <- row.names(subset(fData(cds), 
+                                              use_for_ordering == TRUE & 
+                                              num_cells_expressed >= 10 &
+                                              mean_expression > 0.5))
+stage_markers <- differentialGeneTest(cds[high_quality_ordering_genes,], 
+                                    fullModelFormulaStr = "~period1", 
+                                    cores = 24)
+#stage_markers <- differentialGeneTest(cds[expressed_genes,], 
+                                    fullModelFormulaStr = "~period1", 
+                                    cores = 4)
+stage_markers <- stage_markers[order(stage_markers$qval), ]
+write.csv(marker_fib, "stage_markers_fib.csv")
+sig_genes <- subset(stage_markers, qval < 0.01)
+ordering_genes <- row.names(subset(fData(cds), use_for_ordering == TRUE))
+sig_ordering_genes <- sig_genes[row.names(sig_genes) %in% ordering_genes, ]
+sig_ordering_genes <- sig_ordering_genes[order(sig_ordering_genes$qval), ]
+write.csv(sig_ordering_genes, "stage_markers_fib_sig.csv")
+
+top_genes <- row.names(head(sig_ordering_genes, 50))
+p <- plot_pseudotime_heatmap(
+  cds[top_genes, ],
+  show_rownames = TRUE,
+  hmcols = viridis::inferno(100),
+  cluster_rows = TRUE,
+  use_gene_short_name = TRUE,
+  return_heatmap = TRUE  # 确保返回ggplot对象
+)
+ggsave("topgene_pseudotime_heatmap.png", plot = p)
+
 pseudotime_de <- differentialGeneTest(cds[expressed_genes,],
                                       fullModelFormulaStr = "~sm.ns(Pseudotime)")
 pseudotime_de <- pseudotime_de[order(pseudotime_de$qval), ]
@@ -300,12 +362,89 @@ saveRDS(cds, file = "test_monocle.rds")
 write.table(pseudotime_de, file = "pseudotime_de.rds", quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE)
 write.table(states_de, file = "states_de.rds", quote = FALSE, sep = '\t', row.names = FALSE, col.names = TRUE)
 
+#pheatmap
+pData(cds)$period1 <- factor(pData(cds)$period1, 
+                            levels = c("I", "II", "III"))
+top_genes <- row.names(head(sig_ordering_genes, 52))
+
+genes_to_remove <- c("ENSG00000286533", "LINC01705")
+top_genes <- setdiff(top_genes, genes_to_remove)
+
+# 验证结果
+length(top_genes) 
+library(pheatmap)
+
+# 按period1排序样本
+sample_order <- order(pData(cds)$period1)
+expr_ordered <- exprs(cds[top_genes, sample_order])
+
+# 创建分组注释
+annotation_col <- data.frame(
+  Period = pData(cds)$period1[sample_order],
+  row.names = colnames(expr_ordered)
+)
+
+# 自定义颜色
+period_colors <- c("I" = "#1f77b4", "II" = "#ff7f0e", "III" = "#2ca02c")
+
+mean_expr <- do.call(cbind, lapply(levels(pData(cds)$period1), function(grp) {
+  cells_in_group <- row.names(subset(pData(cds), period1 == grp))
+  Matrix::rowMeans(exprs(cds[top_genes, cells_in_group]))
+}))
+colnames(mean_expr) <- levels(pData(cds)$period1)
+
+
+# 检查结果
+head(mean_expr)
+annotation_col <- data.frame(
+  Period = colnames(mean_expr),  # 列名即为分组
+  row.names = colnames(mean_expr)  # 行名与矩阵列名一致
+)
+
+# 3. 定义分组颜色
+period_colors <- c("I" = "#1f77b4", "II" = "#ff7f0e", "III" = "#2ca02c")
+
+
+
+p <- pheatmap(
+  mean_expr,
+  scale = "row",                 # 按基因标准化（行）
+  cluster_cols = FALSE,          # 禁用列聚类 → 保持I-II-III顺序
+  show_colnames = TRUE,          # 显示列名（I/II/III）
+  show_rownames = TRUE,          # 显示基因名
+  color = colorRampPalette(c("#13007D", "white", "#9B0000"))(100),  # 高对比度
+  annotation_col = annotation_col,  # 添加分组条
+  annotation_colors = list(Period = period_colors),  # 分组颜色
+  gaps_col = 1:2,                # 在I-II和II-III之间画分隔线（因只有3列）
+  main = "Average Expression by Period",
+  border_color = NA,             # 无单元格边框
+  cellwidth = 30,                # 固定列宽
+  cellheight = 12                # 固定行高
+)
+ggsave("topgene_period1_heatmap.png", plot = p, width = 6, height = 12)
+
+
 
 #驱动基因
 trace('buildBranchCellDataSet', edit = T, where = asNamespace("monocle"))
+expressed_genes <- row.names(subset(fData(cds), 
+                                  num_cells_expressed >= 10))  # 至少在10个细胞中表达
+cds_filtered <- cds[expressed_genes, ]
+
+var_genes <- dispersionTable(cds)
+var_genes <- var_genes[order(-var_genes$dispersion_empirical), ]
+top_genes <- var_genes$gene_id[1:2000]  # 取前2000个高变基因
+
 beam_res <- BEAM(
-  cds, 
+  cds[top_genes, ],  # 只分析高变基因
+  branch_point = 1,
+  cores = 22,
+  progenitor_method = "sequential_split"
+)
+
+beam_res <- BEAM(
+  cds[top_genes, ], 
   branch_point = 1,          # 分支点编号（通过plot_cell_trajectory确定）
-  cores = 4,                  # 多线程加速
-  progenitor_method = "duplicate"
+  cores = 22,                  # 多线程加速
+  progenitor_method = "sequential_split"
 )
