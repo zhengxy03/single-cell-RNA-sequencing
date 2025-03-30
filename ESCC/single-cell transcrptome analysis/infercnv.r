@@ -90,6 +90,27 @@ set.seed(123)
 
 # 设置抽样数量（例如抽取 10,000 个细胞）
 n_samples <- 10000
+sampled_epi_cells <- sample(colnames(epi_expr_matrix), size = n_samples, replace = FALSE)
+sampled_expression_matrix <- epi_expr_matrix[, sampled_epi_cells]
+sampled_annotations_file <- data.frame(
+    cells = sampled_epi_cells,
+    cell_type = paste0("Epi_Cluster_", epi$seurat_clusters[match(sampled_epi_cells, colnames(epi))])
+)
+groupFiles <- "sampled_groupFiles.txt"
+write.table(sampled_annotations_file, file = groupFiles, sep = "\t", quote = FALSE, col.names = FALSE, row.names = FALSE)
+
+geneFile <- "geneFile.txt"
+write.table(gene_location_ref, file = geneFile, sep = "\t", quote = FALSE, col.names = FALSE, row.names = FALSE)
+
+T_ref_matrix <- T_expr_matrix[, ]
+
+infercnv_obj <- CreateInfercnvObject(
+    raw_counts_matrix = sampled_expression_matrix,
+    annotations_file = groupFiles,
+    delim = "\t",
+    gene_order_file = geneFile,
+    reference_group_matrix = T_ref_matrix  # 参考组仍为 T 细胞（需单独准备 T 细胞矩阵）
+)
 
 sampled_cells <- sample(colnames(expression_matrix), size = n_samples, replace = FALSE)
 
