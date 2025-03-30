@@ -1,5 +1,9 @@
+epi_T <- readRDS("epi_T.rds")
 #expr_matrix <- GetAssayData(epi_T, layer = "counts")
+T <- subset(epi_T, subset = seurat_clusters %in% c(0,1))
+epi <- subset(epi_T, subset = seurat_clusters %in% c(2,9,13))
 # 获取表达矩阵
+
 T_expr_matrix <- GetAssayData(T, layer = "counts")
 epi_expr_matrix <- GetAssayData(epi, layer = "counts")
 
@@ -141,6 +145,30 @@ infercnv_obj <- infercnv::run(
 )
 
 #cnv score
+epi$is_sampled <- colnames(epi) %in% sampled_cells
+epi_sampled <- subset(epi, cells = sampled_cells)
+
+infercnv_obj <- readRDS("infercnv_output/run.final.infercnv_obj")
+cnv_matrix <- infercnv_obj@expr.data 
+cnv_cells <- colnames(cnv_matrix)
+sampled_cells_infercnv <- cnv_cells[cnv_cells %in% sampled_cells]
+cnv_sampled <- cnv_matrix[, sampled_cells_infercnv, drop = FALSE]
+
+normalize_to_minus1_1 <- function(x) {
+  2 * (x - min(x)) / (max(x) - min(x)) - 1
+}
+cnv_norm <- t(apply(cnv_sampled, 1, normalize_to_minus1_1))
+cnv_score <- data.frame(
+  cell = colnames(cnv_norm),
+  cnv_score = colSums(cnv_norm^2)
+)
+epi_sampled$cnv_score <- cnv_score$cnv_score[match(colnames(epi_sampled), cnv_score$cell_clean)]
+
+
+cell_cnv_score <- colSums(abs(infercnv_obj@expr.data - 1))
+
+# 确保只保留抽样细胞
+sampled_cnv_score <- cell_cnv_score[names(cell_cnv_score) %in% sampled_cells]
 cnv_scores <- infercnv_obj@expr.data
 summary(as.vector(cnv_scores))
 cnv_threshold <- quantile(cell_cnv_scores, probs = 0.90)
