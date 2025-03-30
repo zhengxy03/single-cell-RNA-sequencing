@@ -6,7 +6,8 @@ epi <- subset(epi_T, subset = seurat_clusters %in% c(2,9,13))
 
 T_expr_matrix <- GetAssayData(T, layer = "counts")
 epi_expr_matrix <- GetAssayData(epi, layer = "counts")
-
+T_matrix <- T_expr_matrix  # 所有 T 细胞
+Epi_matrix <- epi_expr_matrix 
 # 找到共同的基因
 common_genes <- intersect(rownames(T_expr_matrix), rownames(epi_expr_matrix))
 
@@ -162,7 +163,7 @@ cnv_score <- data.frame(
   cell = colnames(cnv_norm),
   cnv_score = colSums(cnv_norm^2)
 )
-epi_sampled$cnv_score <- cnv_score$cnv_score[match(colnames(epi_sampled), cnv_score$cell_clean)]
+epi_sampled$cnv_score <- cnv_score$cnv_score[match(colnames(epi_sampled), cnv_score$cell)]
 
 
 cell_cnv_score <- colSums(abs(infercnv_obj@expr.data - 1))
@@ -182,3 +183,84 @@ print(paste("正常细胞数量:", length(normal_cells)))
 
 malignant_epithelial_cells <- malignant_cells[malignant_cells %in% sampled_annotations_file$cells[sampled_annotations_file$cell_type == "Epithelial cells"]]
 print(paste("恶性上皮细胞数量:", length(malignant_epithelial_cells)))
+
+
+
+
+epi_T <- readRDS("epi_T.rds")
+T <- subset(epi_T, seurat_clusters %in% c(0,1))
+epi <- subset(epi_T, seurat_clusters %in% c(2,9,13))
+
+# 获取表达矩阵（不合并）
+T_expr_matrix <- GetAssayData(T, layer = "counts")
+epi_expr_matrix <- GetAssayData(epi, layer = "counts")
+
+# 找到共同基因
+common_genes <- intersect(rownames(T_expr_matrix), rownames(epi_expr_matrix))
+T_expr_matrix <- T_expr_matrix[common_genes, ]
+epi_expr_matrix <- epi_expr_matrix[common_genes, ]
+
+# --------------- 关键修改开始 ---------------
+# 不合并矩阵，分别处理
+T_matrix <- T_expr_matrix  # 所有 T 细胞
+Epi_matrix <- epi_expr_matrix  # 所有 Epi 细胞
+
+# 仅对 Epi 细胞抽样
+set.seed(123)
+n_samples <- 10000
+sampled_Epi_cells <- sample(colnames(Epi_matrix), size = n_samples, replace = FALSE)
+
+# 构建 infercnv 输入（参考组全量 + 目标组抽样）
+infercnv_input <- cbind(
+  T_matrix,  # 所有 T 细胞（参考组）
+  Epi_matrix[, sampled_Epi_cells]  # 抽样的 Epi 细胞
+)
+
+# 生成注释文件
+annotations_file <- data.frame(
+  cells = colnames(infercnv_input),
+  cell_type = ifelse(
+    colnames(infercnv_input) %in% colnames(T_matrix),
+    "T cells",
+    "Epi"
+  )
+)
+
+# 基因注释（保持原代码）
+gene_names <- rownames(infercnv_input)
+gene_annotation <- annoGene(IDs = gene_names, ID_type = "SYMBOL", species = "human")
+gene_location_ref <- data.frame(
+  gene = gene_annotation$SYMBOL,
+  chr = gene_annotation$chr,
+  start = gene_annotation$start,
+  stop = gene_annotation$end
+)
+write.table(gene_location_ref[!duplicated(gene_location_ref$gene), ], "geneFile.txt", sep = "\t", row.names = FALSE, col.names = FALSE)
+
+# 运行 infercnv（禁用过滤）
+infercnv_obj <- CreateInfercnvObject(
+    raw_counts_matrix = infercnv_input,  # 表达矩阵文件路径
+    annotations_file = groupFiles,  # 注释文件路径
+    delim = "\t",  # 文件分隔符
+    gene_order_file = geneFile,  # 基因位置参考文件路径
+    ref_group_names = c("T cells")  # 以 T 细胞作为参考
+)
+
+infercnv_obj <- infercnv::run(
+    infercnv_obj,
+    cutoff = 0.2,  # 设置 cutoff 值
+    out_dir = "infercnv_output",  # 输出目录
+    cluster_by_groups = TRUE,  # 按组聚类
+    denoise = TRUE,  # 去噪
+    HMM = FALSE  # 是否使用 HMM 模型
+)
+
+# 提取 Epi 细胞的 CNV 矩阵（顺序一致）
+Epi_cnv_matrix <- infercnv_obj@expr.data[, colnames(Epi_matrix) %in% sampled_Epi_cells]
+
+# 赋值到 Seurat 对象
+epi_sampled <- epi[, sampled_Epi_cells]
+epi_sampled$cnv_score <- colSums(t(apply(Epi_cnv_matrix, 1, function(x) {
+  norm_x <- 2 * ((x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE))) - 1
+  norm_x^2
+})))
