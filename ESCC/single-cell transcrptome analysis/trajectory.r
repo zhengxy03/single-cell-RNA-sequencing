@@ -340,7 +340,9 @@ sig_ordering_genes <- sig_genes[row.names(sig_genes) %in% ordering_genes, ]
 sig_ordering_genes <- sig_ordering_genes[order(sig_ordering_genes$qval), ]
 write.csv(sig_ordering_genes, "stage_markers_fib_sig.csv")
 
-top_genes <- row.names(head(sig_ordering_genes, 50))
+top_genes <- row.names(head(sig_ordering_genes, 52))
+genes_to_remove <- c("ENSG00000286533", "LINC01705")
+top_genes <- setdiff(top_genes, genes_to_remove)
 p <- plot_pseudotime_heatmap(
   cds[top_genes, ],
   show_rownames = TRUE,
@@ -418,10 +420,10 @@ p <- pheatmap(
   gaps_col = 1:2,                # 在I-II和II-III之间画分隔线（因只有3列）
   main = "Average Expression by Period",
   border_color = NA,             # 无单元格边框
-  cellwidth = 30,                # 固定列宽
+  cellwidth = 100,                # 固定列宽
   cellheight = 12                # 固定行高
 )
-ggsave("topgene_period1_heatmap.png", plot = p, width = 6, height = 12)
+ggsave("topgene_period1_heatmap.png", plot = p, width = 8, height = 10)
 
 
 
