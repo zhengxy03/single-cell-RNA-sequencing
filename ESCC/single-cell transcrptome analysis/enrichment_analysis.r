@@ -127,30 +127,27 @@ top50_gsva_matrix_transposed <- t(top50_gsva_matrix)
 library(tibble)
 
 gsva_df <- as.data.frame(top50_gsva_matrix_transposed)
-gsva_df$seurat_clusters <- fibroblasts@meta.data$seurat_clusters
-
-# 使用 tibble::rownames_to_column 将某一列设置为行名
-gsva_df <- rownames_to_column(gsva_df, var = "seurat_clusters")
-
+gsva_df$seurat_clusters <- epi@meta.data[rownames(gsva_df), "seurat_clusters"]
 average_pathway_scores <- gsva_df %>%
-  group_by(seurat_clusters) %>%
-  summarise(across(everything(), mean, na.rm = TRUE))
+    group_by(seurat_clusters) %>%
+    summarise(across(where(is.numeric), mean, na.rm = TRUE))
+average_pathway_scores_matrix <- as.matrix(average_pathway_scores[, -1])  # 移除第一列（seurat_clusters）
+rownames(average_pathway_scores_matrix) <- average_pathway_scores$seurat_clusters
 
-# 转置矩阵以便于绘制热图（行是通路，列是簇）
-average_pathway_scores_matrix <- t(average_pathway_scores)
+# 转置矩阵（行为通路，列为簇）
+average_pathway_scores_matrix <- t(average_pathway_scores_matrix)
 
-# 绘制热图
-png("top50_average_pathway_scores_heatmap.png", width = 2000, height = 2000, res = 300)
+png("epi_top50_average_pathway_scores_heatmap.png", width = 2000, height = 2000, res = 300)
 pheatmap(
-  average_pathway_scores_matrix,
-  scale = "row",
-  clustering_method = "complete",
-  show_rownames = TRUE,
-  show_colnames = TRUE,
-  color = colorRampPalette(c("blue", "white", "red"))(100)
+    average_pathway_scores_matrix,
+    scale = "row",  # 按行标准化
+    clustering_method = "complete",
+    show_rownames = TRUE,
+    show_colnames = TRUE,
+    color = colorRampPalette(c("blue", "white", "red"))(100),
+    main = "Average GSVA Scores by Cluster"
 )
 dev.off()
-
 
 
 

@@ -485,3 +485,115 @@ ggplot(cell_proportions, aes(x = cell_type, y = proportion, fill = sample_type))
   scale_fill_npg() +
   scale_y_continuous(limits = c(0, 1))
 dev.off()
+
+library(ggpubr)
+cell_counts <- fibroblasts@meta.data %>%
+  group_by(sample, period1, sample_type, cell_type) %>%  # ✅ 新增sample分组
+  summarise(count = n()) %>%
+  ungroup()
+total_counts <- cell_counts %>%
+  group_by(sample, period1, sample_type) %>%
+  summarise(total_count = sum(count)) %>%
+  ungroup()
+
+# 合并数据并计算比例
+cell_proportions <- cell_counts %>%
+  left_join(total_counts, by = c("sample", "period1", "sample_type")) %>%
+  mutate(proportion = count / total_count)
+
+
+library(tidyr)
+cell_proportions <- cell_proportions %>%
+    mutate(
+        cell_type = gsub("\\+", "_", cell_type),
+        cell_type = ifelse(cell_type == "", "Unknown", cell_type)  # 直接填充为 "Unknown"
+    )
+
+
+
+# 对每个 cell_type 构建列联表并进行卡方检验
+selected_periods <- c("I", "II")
+selected_sample_type <- "Tumor"
+# 提取数据
+subset_data <- cell_proportions %>%
+    filter( period1 %in% selected_periods, sample_type == selected_sample_type)
+chisq_results <- subset_data %>%
+    group_by(cell_type) %>%
+    summarise(
+        p_value = {
+            # 提取正常样本和肿瘤样本的细胞数量和总细胞数
+            I_count = sum(count[period1== "I"])
+            II_count = sum(count[period1 == "II"])
+            I_total = sum(total_count[period1 == "I"])
+            II_total = sum(total_count[period1 == "II"])
+            
+            # 构建 2x2 列联表
+            cont_table <- matrix(
+                c(I_count, II_count, I_total - I_count, II_total - II_count),
+                nrow = 2
+            )
+            
+            # 进行卡方检验
+            chisq.test(cont_table)$p.value
+        }
+    ) %>%
+    ungroup()
+chisq_results <- chisq_results %>%
+    mutate(
+        significance = case_when(
+            p_value < 0.001 ~ "***",
+            p_value < 0.01 ~ "**",
+            p_value < 0.05 ~ "*",
+            TRUE ~ "ns"
+        )
+    )
+
+# 遍历每个 cell_type 和 sample_type 的组合
+for (cell_type in unique(cell_proportions$cell_type)) {
+  for (sample_type in unique(cell_proportions$sample_type)) {
+    # 筛选出当前 cell_type 和 sample_type 的数据
+    subset_data <- cell_proportions %>%
+      filter(cell_type == !!cell_type & sample_type == !!sample_type)
+    
+    # 创建一个箱线图
+    p <- ggplot(subset_data, aes(x = period1, y = proportion, fill = period1)) +
+      geom_boxplot() +
+      labs(x = "", y = "", fill = "Period") +  # 图例显示为 Period
+      theme_classic() +
+      theme(
+        axis.text.x = element_text(angle = 0, hjust = 1, size = 28),  # 横坐标标签不倾斜
+        axis.text.y = element_text(size = 28),
+        axis.title.y = element_blank(),  # 去掉纵坐标标题
+        axis.line = element_line(color = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.text = element_text(size = 36),
+        legend.title = element_text(size = 40),
+        legend.position = "right",
+        plot.title = element_text(size = 22)   # 分面标题字体大小
+      ) +
+      scale_fill_manual(values = c("I" = "#F8766D", "II" = "#00BFC4", "III" = "#619CFF")) +  # 设置颜色
+      scale_y_continuous(limits = c(0, 1)) +
+      ggtitle(paste(cell_type, sample_type))  # 设置分面标题
+    
+    # 将生成的图添加到列表中
+    plots <- append(plots, list(p))
+  }
+}
+
+# 计算所需的行数，确保所有图都能合理显示
+n_plots <- length(plots)
+ncol <- 4
+nrow <- ceiling(n_plots / ncol)
+
+# 使用 patchwork 合并所有图
+combined_plot <- wrap_plots(plots, ncol = ncol, nrow = nrow) + 
+  plot_layout(guides = 'collect') +
+  plot_annotation(
+    title = "Cell Proportions Across Periods",
+    subtitle = "Proportions of each cell type in different periods",
+    caption = "Significance levels: *** p < 0.001, ** p < 0.01, * p < 0.05, ns not significant"
+  )
+
+# 保存合并后的图，调整尺寸以避免内存问题
+ggsave("fibro_combined_boxplots.png", combined_plot, width = 24, height = 6 * nrow, units = "in", dpi = 300)
