@@ -512,74 +512,173 @@ cell_proportions <- cell_proportions %>%
 
 
 # 对每个 cell_type 构建列联表并进行卡方检验
-selected_periods <- c("I", "II")
-selected_sample_type <- "Tumor"
-# 提取数据
-subset_data <- cell_proportions %>%
-    filter( period1 %in% selected_periods, sample_type == selected_sample_type)
-chisq_results <- subset_data %>%
-    group_by(cell_type) %>%
-    summarise(
-        p_value = {
-            # 提取正常样本和肿瘤样本的细胞数量和总细胞数
-            I_count = sum(count[period1== "I"])
-            II_count = sum(count[period1 == "II"])
-            I_total = sum(total_count[period1 == "I"])
-            II_total = sum(total_count[period1 == "II"])
+all_sample_types <- unique(cell_proportions$sample_type)
+all_periods <- unique(cell_proportions$period1)
+
+# 生成所有 period1 的两两组合（确保顺序正确）
+period_pairs <- combn(all_periods, 2, simplify = FALSE) %>%
+  map(~ sort(.x)) %>%  # 确保组合顺序一致（如 I vs II，而不是 II vs I）
+  unique()  # 去重
+
+# 初始化结果列表
+all_results <- list()
+
+for (sample_type in all_sample_types) {
+  for (pair in period_pairs) {
+    # 提取当前 sample_type 和 period pair 的数据
+    subset_data <- cell_proportions %>%
+      filter(sample_type == !!sample_type, period1 %in% pair)
+    
+    # 检查每个 cell_type 是否在两个 period1 中都有数据
+    valid_cell_types <- subset_data %>%
+      group_by(cell_type) %>%
+      summarise(
+        n_periods = n_distinct(period1),
+        has_valid_counts = all(!is.na(count)) & all(!is.na(total_count))
+      ) %>%
+      filter(n_periods == 2 & has_valid_counts) %>%
+      pull(cell_type)
+    
+    # 只对有效的 cell_type 进行计算
+    if (length(valid_cell_types) > 0) {
+      chisq_results <- subset_data %>%
+        filter(cell_type %in% valid_cell_types) %>%
+        group_by(cell_type) %>%
+        summarise(
+          p_value = {
+            # 提取两个时期的细胞数量和总细胞数
+            period1_data <- filter(cur_data(), period1 == pair[1])
+            period2_data <- filter(cur_data(), period1 == pair[2])
+            
+            # 如果数据缺失，返回 NA
+            if (nrow(period1_data) == 0 || nrow(period2_data) == 0) return(NA)
+            
+            period1_count <- sum(period1_data$count, na.rm = TRUE)
+            period2_count <- sum(period2_data$count, na.rm = TRUE)
+            period1_total <- sum(period1_data$total_count, na.rm = TRUE)
+            period2_total <- sum(period2_data$total_count, na.rm = TRUE)
+            
+            # 如果计数为 0，返回 NA
+            if (period1_count == 0 || period2_count == 0 || 
+                period1_total == 0 || period2_total == 0) return(NA)
             
             # 构建 2x2 列联表
             cont_table <- matrix(
-                c(I_count, II_count, I_total - I_count, II_total - II_count),
-                nrow = 2
+              c(period1_count, period2_count,
+                period1_total - period1_count,
+                period2_total - period2_count),
+              nrow = 2
             )
             
-            # 进行卡方检验
-            chisq.test(cont_table)$p.value
-        }
-    ) %>%
-    ungroup()
-chisq_results <- chisq_results %>%
-    mutate(
-        significance = case_when(
-            p_value < 0.001 ~ "***",
-            p_value < 0.01 ~ "**",
-            p_value < 0.05 ~ "*",
-            TRUE ~ "ns"
-        )
-    )
-
-# 遍历每个 cell_type 和 sample_type 的组合
-for (cell_type in unique(cell_proportions$cell_type)) {
-  for (sample_type in unique(cell_proportions$sample_type)) {
-    # 筛选出当前 cell_type 和 sample_type 的数据
-    subset_data <- cell_proportions %>%
-      filter(cell_type == !!cell_type & sample_type == !!sample_type)
-    
-    # 创建一个箱线图
-    p <- ggplot(subset_data, aes(x = period1, y = proportion, fill = period1)) +
-      geom_boxplot() +
-      labs(x = "", y = "", fill = "Period") +  # 图例显示为 Period
-      theme_classic() +
-      theme(
-        axis.text.x = element_text(angle = 0, hjust = 1, size = 28),  # 横坐标标签不倾斜
-        axis.text.y = element_text(size = 28),
-        axis.title.y = element_blank(),  # 去掉纵坐标标题
-        axis.line = element_line(color = "black"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        legend.text = element_text(size = 36),
-        legend.title = element_text(size = 40),
-        legend.position = "right",
-        plot.title = element_text(size = 22)   # 分面标题字体大小
-      ) +
-      scale_fill_manual(values = c("I" = "#F8766D", "II" = "#00BFC4", "III" = "#619CFF")) +  # 设置颜色
-      scale_y_continuous(limits = c(0, 1)) +
-      ggtitle(paste(cell_type, sample_type))  # 设置分面标题
-    
-    # 将生成的图添加到列表中
-    plots <- append(plots, list(p))
+            # 进行卡方检验（如果失败则返回 NA）
+            tryCatch(
+              chisq.test(cont_table)$p.value,
+              error = function(e) NA
+            )
+          },
+          period1_comparison = paste(pair, collapse = " vs "),
+          sample_type = sample_type
+        ) %>%
+        ungroup() %>%
+        filter(!is.na(p_value))  # 移除无效计算结果
+      
+      # 添加显著性标记
+      if (nrow(chisq_results) > 0) {
+        chisq_results <- chisq_results %>%
+          mutate(
+            significance = case_when(
+              p_value < 0.001 ~ "***",
+              p_value < 0.01 ~ "**",
+              p_value < 0.05 ~ "*",
+              TRUE ~ "ns"
+            )
+          )
+        
+        # 将结果添加到列表中
+        all_results <- append(all_results, list(chisq_results))
+      }
+    }
   }
 }
+
+# 合并所有结果
+final_results <- bind_rows(all_results)
+
+# 提取每个细胞类型在不同 period1_comparison 之下的 significance 的第一条记录
+# （前面的代码保持不变，直到 first_significance 部分）
+
+# 提取每个细胞类型在不同 period1_comparison 和 sample_type 之下的第一条记录
+first_significance <- final_results %>%
+    group_by(cell_type, period1_comparison, sample_type) %>%
+    slice_head(n = 1) %>%
+    ungroup() %>%
+    select(cell_type, period1_comparison, significance, sample_type)
+
+# （后面的绘图代码修改如下）
+
+plots <- list()
+
+for (cell_type in unique(cell_proportions$cell_type)) {
+    for (sample_type in unique(cell_proportions$sample_type)) {
+        # 筛选出当前 cell_type 和 sample_type 的数据
+        subset_data <- cell_proportions %>%
+            filter(cell_type == !!cell_type & sample_type == !!sample_type)
+        
+        # 获取当前 cell_type 和 sample_type 的显著性结果（关键修改：添加 sample_type 筛选）
+        sig_data <- first_significance %>%
+            filter(cell_type == !!cell_type & sample_type == !!sample_type) %>%
+            separate(period1_comparison, into = c("group1", "group2"), sep = " vs ")
+        
+        # 创建显著性标记的列表
+        comparisons <- list()
+        annotations <- list()
+        
+        if (nrow(sig_data) > 0) {
+            for (i in 1:nrow(sig_data)) {
+                comparisons[[i]] <- c(sig_data$group1[i], sig_data$group2[i])
+                annotations[[i]] <- sig_data$significance[i]
+            }
+        }
+        
+        # 创建箱线图（保持不变）
+        p <- ggplot(subset_data, aes(x = period1, y = proportion, fill = period1)) +
+            geom_boxplot() +
+            labs(x = "", y = "", fill = "Period") +
+            theme_classic() +
+            theme(
+                axis.text.x = element_text(angle = 0, hjust = 1, size = 36),
+                axis.text.y = element_text(size = 28),
+                axis.title.y = element_blank(),
+                axis.line = element_line(color = "black"),
+                panel.grid.major = element_blank(),
+                panel.grid.minor = element_blank(),
+
+                legend.position = "none",
+                plot.title = element_text(size = 28)
+            ) +
+            scale_fill_manual(values = c("I" = "#F8766D", "II" = "#00BFC4", "III" = "#619CFF")) +
+            scale_y_continuous(limits = c(0, 1)) +
+            ggtitle(paste(cell_type, sample_type))
+        
+        # 添加显著性标记（仅当前 sample_type 的比较）
+        if (length(comparisons) > 0) {
+            for (i in 1:length(comparisons)) {
+                p <- p + geom_signif(
+                    comparisons = list(comparisons[[i]]),
+                    annotations = annotations[[i]],
+                    y_position = 0.9 - (i-1)*0.1,  # 调整垂直位置
+                    textsize = 8,
+                    vjust = 0.5,
+                    tip_length = 0.01
+                )
+            }
+        }
+        
+        plots <- append(plots, list(p))
+    }
+}
+
+# （合并和保存代码保持不变）
 
 # 计算所需的行数，确保所有图都能合理显示
 n_plots <- length(plots)
@@ -588,12 +687,8 @@ nrow <- ceiling(n_plots / ncol)
 
 # 使用 patchwork 合并所有图
 combined_plot <- wrap_plots(plots, ncol = ncol, nrow = nrow) + 
-  plot_layout(guides = 'collect') +
-  plot_annotation(
-    title = "Cell Proportions Across Periods",
-    subtitle = "Proportions of each cell type in different periods",
-    caption = "Significance levels: *** p < 0.001, ** p < 0.01, * p < 0.05, ns not significant"
-  )
+  plot_layout(guides = 'collect')
 
-# 保存合并后的图，调整尺寸以避免内存问题
-ggsave("fibro_combined_boxplots.png", combined_plot, width = 24, height = 6 * nrow, units = "in", dpi = 300)
+# 保存合并后的图
+ggsave("fibro_combined_boxplots_with_signif.png", combined_plot, 
+       width = 24, height = 6 * nrow, units = "in", dpi = 300)
