@@ -514,7 +514,7 @@ cell_proportions <- cell_proportions %>%
 # 对每个 cell_type 构建列联表并进行卡方检验
 all_sample_types <- unique(cell_proportions$sample_type)
 all_periods <- unique(cell_proportions$period1)
-
+library(purrr)
 # 生成所有 period1 的两两组合（确保顺序正确）
 period_pairs <- combn(all_periods, 2, simplify = FALSE) %>%
   map(~ sort(.x)) %>%  # 确保组合顺序一致（如 I vs II，而不是 II vs I）
@@ -682,7 +682,7 @@ for (cell_type in unique(cell_proportions$cell_type)) {
 
 # 计算所需的行数，确保所有图都能合理显示
 n_plots <- length(plots)
-ncol <- 4
+ncol <- 8
 nrow <- ceiling(n_plots / ncol)
 
 # 使用 patchwork 合并所有图
@@ -691,4 +691,186 @@ combined_plot <- wrap_plots(plots, ncol = ncol, nrow = nrow) +
 
 # 保存合并后的图
 ggsave("fibro_combined_boxplots_with_signif.png", combined_plot, 
-       width = 24, height = 6 * nrow, units = "in", dpi = 300)
+       width = 48, height = 6 * nrow, units = "in", dpi = 300, limits = FALSE)
+
+
+
+library(ggpubr)
+library(patchwork)
+
+# 定义颜色映射（交换Tumor/Normal颜色）
+color_mapping <- c("Tumor" = "#00BFC4", "Normal" = "#F8766D")  
+
+# 按Ⅰ→Ⅱ→Ⅲ的顺序处理period1
+ordered_periods <- c("I", "II", "III")  # 确保顺序正确
+plot_list <- list()
+
+for (current_period in ordered_periods) {
+    # 检查数据是否存在该period
+    if (!current_period %in% fibroblasts@meta.data$period1) next
+    
+    # 筛选数据
+    period_data <- fibroblasts@meta.data %>% 
+        filter(period1 == current_period)
+    
+    # 计算细胞比例（保持原始逻辑）
+    cell_counts <- period_data %>%
+        group_by(orig.ident, cell_type, sample_type) %>%
+        summarise(count = n(), .groups = "drop")
+    
+    cell_proportions <- cell_counts %>%
+        left_join(
+            cell_counts %>% group_by(orig.ident) %>% summarise(total = sum(count)),
+            by = "orig.ident"
+        ) %>%
+        mutate(proportion = count / total)
+    
+    # 卡方检验
+    chisq_results <- cell_proportions %>%
+        group_by(cell_type) %>%
+        summarise(
+            p_value = {
+                cont_table <- matrix(
+                    c(sum(count[sample_type == "Normal"]), sum(count[sample_type == "Tumor"]),
+                      sum(total[sample_type == "Normal"]) - sum(count[sample_type == "Normal"]),
+                      sum(total[sample_type == "Tumor"]) - sum(count[sample_type == "Tumor"])),
+                    nrow = 2
+                )
+                chisq.test(cont_table)$p.value
+            }
+        ) %>%
+        mutate(significance = case_when(
+            p_value < 0.001 ~ "***",
+            p_value < 0.01 ~ "**",
+            p_value < 0.05 ~ "*",
+            TRUE ~ "ns"
+        ))
+    
+    # 创建ggplot对象（修改颜色映射）
+    p <- ggplot(cell_proportions, aes(x = cell_type, y = proportion, fill = sample_type)) +
+        geom_boxplot() +
+        geom_text(
+            data = chisq_results,
+            aes(x = cell_type, y = 1.05, label = significance),  # 统一y位置
+            size = 12, vjust = 0.5, inherit.aes = FALSE
+        ) +
+        labs(
+            title = paste("Period", current_period),
+            x = "",
+            y = ifelse(current_period == "I", "Cell Proportion", ""),  # 仅第一个图显示y轴标签
+            fill = "Sample Type"
+        ) +
+        theme_classic() +
+        theme(
+            axis.text.x = element_text(angle = 45, hjust = 1, size = 28),
+            axis.text.y = element_text(size = 28),
+            axis.title.y = element_text(size = 40),
+            plot.title = element_text(size = 40, hjust = 0.5, face = "bold"),
+            legend.position = ifelse(current_period == "III", "right", "none")  # 仅最后一个图保留图例
+        ) +
+        scale_fill_manual(values = color_mapping) +  # 使用交换后的颜色
+        scale_y_continuous(limits = c(0, 1.1))  # 为显著性标记留出空间
+    
+    plot_list[[current_period]] <- p
+}
+
+# 纵向排列图形（Ⅰ在上，Ⅲ在下）
+combined_plot <- wrap_plots(plot_list, ncol = 1) 
+
+# 保存图片
+ggsave(
+    "combined_boxplots_vertical.png",
+    combined_plot,
+    width = 5000/300,  # 适当调整宽度
+    height = 8000/300, # 增加高度适应纵向排列
+    dpi = 300,
+    units = "in",
+    limitsize = FALSE
+)
+
+
+
+library(ggpubr)
+cell_counts <- period1@meta.data %>%
+  group_by(orig.ident, cell_type, sample_type) %>%
+  summarise(count = n()) %>%
+  ungroup()
+
+# 计算每个样本的总细胞数
+sample_totals <- cell_counts %>%
+  group_by(orig.ident) %>%
+  summarise(total = sum(count)) %>%
+  ungroup()
+
+# 将样本总细胞数合并到 cell_counts 中
+cell_counts <- cell_counts %>%
+  left_join(sample_totals, by = "orig.ident")
+
+# 计算细胞类型比例
+cell_proportions <- period1@meta.data %>%
+  group_by(orig.ident, cell_type, sample_type) %>%
+  summarise(count = n()) %>%  # 计算每种细胞类型的数量
+  ungroup() %>%
+  left_join(sample_totals, by = "orig.ident") %>%  # 合并样本总细胞数
+  mutate(proportion = count / total)  # 计算细胞类型比例
+
+# 对每个细胞类型构建列联表并进行卡方检验
+chisq_results <- cell_proportions %>%
+  group_by(cell_type) %>%
+  summarise(
+    p_value = {
+      # 提取正常样本和肿瘤样本的细胞数量和总细胞数
+      normal_count = sum(count[sample_type == "Normal"])
+      tumor_count = sum(count[sample_type == "Tumor"])
+      normal_total = sum(total[sample_type == "Normal"])
+      tumor_total = sum(total[sample_type == "Tumor"])
+      
+      # 构建 2x2 列联表
+      cont_table <- matrix(
+        c(normal_count, tumor_count, normal_total - normal_count, tumor_total - tumor_count),
+        nrow = 2
+      )
+      
+      # 进行卡方检验
+      chisq.test(cont_table)$p.value
+    }
+  ) %>%
+  ungroup()
+
+# 添加显著性标记
+chisq_results <- chisq_results %>%
+  mutate(
+    significance = case_when(
+      p_value < 0.001 ~ "***",
+      p_value < 0.01 ~ "**",
+      p_value < 0.05 ~ "*",
+      TRUE ~ "ns"
+    )
+  )
+
+# 绘制基于比例的箱线图并添加显著性标记
+png("fibro_period1_箱图_proportion.png", width = 6000, height = 3000, res = 300)
+ggplot(cell_proportions, aes(x = cell_type, y = proportion, fill = sample_type)) +
+  geom_boxplot() +  # 绘制箱线图
+  geom_text(
+    data = chisq_results, 
+    aes(x = cell_type, y = max(cell_proportions$proportion) * 1.05, label = significance),  # 调整 y 值
+    size = 12, 
+    vjust = 0.5,  # 调整 vjust 参数
+    inherit.aes = FALSE  # 忽略父图层的 aes 映射
+  ) +  # 添加显著性标记
+  labs(x = "", y = "Cell Proportion", fill = "Sample Type") +  # 设置坐标轴和图例标题
+  theme_classic() +  # 使用经典主题
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 28),  # 调整横轴标签角度
+    axis.text.y = element_text(size = 28),
+    axis.title.y = element_text(size = 40),
+    axis.line = element_line(color = "black"),  # 设置坐标轴颜色
+    panel.grid.major = element_blank(),  # 移除主要网格线
+    panel.grid.minor = element_blank(),  # 移除次要网格线
+    legend.text = element_text(size = 36),         # 图例文本字体大小
+    legend.title = element_text(size = 40),
+    legend.position = "right"  # 设置图例位置在右侧
+  ) +
+  scale_fill_npg()
+dev.off()
