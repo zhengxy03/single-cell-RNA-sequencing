@@ -119,12 +119,31 @@ identity_mapping <- c(
     "16" = "Neuroendocrine cells" 
 )
 
+identity_mapping <- c(
+    "0" = "Proliferative cells",
+    "1" = "Invasive cells",
+    "2" = "Superficial cells",
+    "3" = "Immune-associated Epis",
+    "4" = "Invasive cells",
+    "5" = "Secretory cells",
+    "6" = "Invasive cells",
+    "7" = "Superficial cells",
+    "8" = "Neuroendocrine cells",
+    "9" = "Neuroendocrine cells",
+    "10" = "Parabasal cells",
+    "11" = "Proliferative cells",
+    "12" = "Immune-associated Epis",
+    "13" = "Basal stem cells",
+    "14" = "Invasive cells",
+    "15" = "Secretory cells",
+    "16" = "Neuroendocrine cells" 
+)
 
 # 假设 identity_mapping 已经定义
 cell_type <- identity_mapping[epi@meta.data$seurat_clusters]
 epi@meta.data$cell_type <- cell_type
 npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(17)
+npg_extended <- colorRampPalette(npg_pal)(8)
 
 # 获取图例的个数和名称长度
 cell_types <- unique(epi@meta.data$cell_type)
@@ -208,21 +227,21 @@ dev.off()
 identity_mapping <- c(
     "0" = "Proliferative cells_1",
     "1" = "Invasive cells_1",
-    "2" = "Differentiated cells_1",
-    "3" = "Invasive cells_2",
-    "4" = "Invasive cells_3",
-    "5" = "Invasive cells_4",
-    "6" = "Invasive cells_5",
-    "7" = "Keratinocytes",
-    "8" = "Differentiated cells_2",
-    "9" = "Urothelial cells",
-    "10" = "Basal cells_1",
+    "2" = "Superficial cells_1",
+    "3" = "Immune-associated Epis_1",
+    "4" = "Invasive cells_2",
+    "5" = "Secretory cells_1",
+    "6" = "Invasive cells_3",
+    "7" = "Superficial cells_2",
+    "8" = "Neuroendocrine cells_1",
+    "9" = "Neuroendocrine cells_2",
+    "10" = "Parabasal cells",
     "11" = "Proliferative cells_2",
-    "12" = "Immune-associated invasive cells",
-    "13" = "Hepatocytes",
-    "14" = "EMT-like Epis",
-    "15" = "Invasive cells_6",
-    "16" = "Neuroendocrine cells" 
+    "12" = "Immune-associated Epis_2",
+    "13" = "Basal stem cells",
+    "14" = "Invasive cells_4",
+    "15" = "Secretory cells_2",
+    "16" = "Neuroendocrine cells_3" 
 )
 
 cell_type2 <- identity_mapping[epi@meta.data$seurat_clusters]
