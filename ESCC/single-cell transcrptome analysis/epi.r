@@ -128,14 +128,14 @@ identity_mapping <- c(
     "5" = "Secretory cells",
     "6" = "Invasive cells",
     "7" = "Superficial cells",
-    "8" = "Neuroendocrine cells",
-    "9" = "Neuroendocrine cells",
+    "8" = "Parabasal cells",
+    "9" = "Parabasal cells",
     "10" = "Parabasal cells",
     "11" = "Proliferative cells",
     "12" = "Immune-associated Epis",
-    "13" = "Basal stem cells",
+    "13" = "Invasive cells",
     "14" = "Invasive cells",
-    "15" = "Secretory cells",
+    "15" = "Invasive cells",
     "16" = "Neuroendocrine cells" 
 )
 
@@ -230,18 +230,18 @@ identity_mapping <- c(
     "2" = "Superficial cells_1",
     "3" = "Immune-associated Epis_1",
     "4" = "Invasive cells_2",
-    "5" = "Secretory cells_1",
+    "5" = "Secretory cells",
     "6" = "Invasive cells_3",
     "7" = "Superficial cells_2",
-    "8" = "Neuroendocrine cells_1",
-    "9" = "Neuroendocrine cells_2",
-    "10" = "Parabasal cells",
+    "8" = "Parabasal cells_1",
+    "9" = "Parabasal cells_2",
+    "10" = "Parabasal cells_3",
     "11" = "Proliferative cells_2",
     "12" = "Immune-associated Epis_2",
-    "13" = "Basal stem cells",
-    "14" = "Invasive cells_4",
-    "15" = "Secretory cells_2",
-    "16" = "Neuroendocrine cells_3" 
+    "13" = "Invasive cells_4",
+    "14" = "Invasive cells_5",
+    "15" = "Invasive cells_6",
+    "16" = "Neuroendocrine cells" 
 )
 
 cell_type2 <- identity_mapping[epi@meta.data$seurat_clusters]
