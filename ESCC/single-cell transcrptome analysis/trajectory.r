@@ -78,7 +78,7 @@ cds <- orderCells(cds, root_state  = 4)
 
 
 # 绘制轨迹图
-p <- plot_cell_trajectory(cds, color_by = "State")+
+p <- plot_cell_trajectory(cds, color_by = "State") +
   facet_wrap("~State", nrow = 2) + scale_color_manual(values = npg_extended)
 p <- plot_cell_trajectory(cds, color_by = "seurat_clusters")
 npg_pal <- pal_npg()(10)
@@ -443,10 +443,15 @@ beam_res <- BEAM(
   cores = 22,
   progenitor_method = "sequential_split"
 )
+sig_genes <- subset(beam_res, qval < 0.05)
+sig_genes <- sig_genes[order(sig_genes$qval), ]
 
-beam_res <- BEAM(
-  cds[top_genes, ], 
-  branch_point = 1,          # 分支点编号（通过plot_cell_trajectory确定）
-  cores = 22,                  # 多线程加速
-  progenitor_method = "sequential_split"
-)
+gene_list <- c(MSTN, ZNF750, TAS2R19, POTEF, HOXD11, IGLV1-47)
+plot_genes_in_pseudotime(
+  cds[top_genes[1:5], ],
+  color_by = "Branch",
+  trend_formula = "~ sm.ns(Pseudotime, df=3)",
+  panel_order = top_genes[1:5],  # 控制基因顺序
+  ncol = 2  # 分两列显示
+) +
+  theme(legend.position = "right")
