@@ -1,34 +1,36 @@
-data.input <- GetAssayData(epi_fib, assay = "RNA", slot = "data")  # 使用 log-normalized 数据
+library(Seurat)
+library(CellChat)
+library(patchwork)
+library(dplyr)
+
+data.input <- epi_fib[["RNA"]]$data
 
 meta <- epi_fib@meta.data
-counts <- GetAssayData(epi_fib, assay = "RNA", slot = "counts")  # 原始计数
-data <- GetAssayData(epi_fib, assay = "RNA", slot = "data")      # 标准化数据
-
-# 创建对象（显式指定两个层）
-cellchat <- createCellChat(
-  object = list(raw = counts, normalized = data),  # 关键！
-  meta = epi_fib@meta.data,
-  group.by = "cell_type"
-)
+cell.types <- meta$cell_type
+names(cell.types) <- rownames(meta)
 
 cellchat <- createCellChat(object = data.input, meta = meta, group.by = "cell_type")
-cellchat <- createCellChat(
-  object = as.matrix(data.input),  # 确保输入是矩阵
-  meta = meta,
-  group.by = "cell_type"
-)
 
-# 设置细胞分组信息
-cellchat <- setIdent(cellchat, ident.use = "cell_type")
-levels(cellchat@idents)
+CellChatDB <- CellChatDB.human  # 人类用
+# CellChatDB <- CellChatDB.mouse # 小鼠用
 
-CellChatDB <- CellChatDB.human  # 人类数据库
-# CellChatDB <- CellChatDB.mouse  # 小鼠数据库
+# 使用全部数据库或子集（可选）
+cellchat@DB <- CellChatDB
 
-# 使用全部相互作用或子集
-CellChatDB.use <- subsetDB(CellChatDB, search = "Secreted Signaling")  # 可选：仅用分泌信号
-cellchat@DB <- CellChatDB.use
-cellchat <- subsetData(cellchat)  # 可选：子集数据加速计算
+
+cellchat <- subsetData(cellchat) # 必要时裁剪数据
 cellchat <- identifyOverExpressedGenes(cellchat)
 cellchat <- identifyOverExpressedInteractions(cellchat)
-cellchat <- computeCommunProb(cellchat, raw.use = FALSE) 
+cellchat <- computeCommunProb(cellchat)
+
+# 过滤低可信度的相互作用（可选）
+cellchat <- filterCommunication(cellchat, min.cells = 10)
+
+# 聚合细胞类型的通讯网络
+cellchat <- aggregateNet(cellchat)
+
+groupSize <- as.numeric(table(meta$cell_type))
+# 保存为PNG
+png("cellchat_network.png", width=2000, height=1800, res=300)  # 高分辨率
+netVisual_circle(cellchat@net$count, vertex.weight = groupSize, weight.scale = T)
+dev.off()
