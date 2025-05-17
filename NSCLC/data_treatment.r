@@ -1,111 +1,3 @@
-#GSE117570
-setwd("E:/project/nsclc/GSE117570_RAW")
-library(Seurat)
-
-#import raw data
-counts_matrix1 <- read.csv("GSM3304007_P1_Tumor_processed_data.txt.gz")
-counts_matrix2 <- read.csv("GSM3304008_P1_Normal_processed_data.txt.gz")
-counts_matrix3 <- read.csv("GSM3304009_P2_Tumor_processed_data.txt.gz")
-counts_matrix4 <- read.csv("GSM3304010_P2_Normal_processed_data.txt.gz")
-counts_matrix5 <- read.csv("GSM3304011_P3_Tumor_processed_data.txt.gz")
-counts_matrix6 <- read.csv("GSM3304012_P3_Normal_processed_data.txt.gz")
-counts_matrix7 <- read.csv("GSM3304013_P4_Tumor_processed_data.txt.gz")
-counts_matrix8 <- read.csv("GSM3304014_P4_Normal_processed_data.txt.gz")
-
-seurat_obj1 <- CreateSeuratObject(counts = counts_matrix1)
-
-samples <- data.frame(
-  gsm_prefix = c(007, 008, 009, 010, 011, 012, 013, 014),
-  patient = rep(1:4, each = 2),
-  type = rep(c("Tumor", "Normal"), 4)
-)
-
-seurat_list <- list()
-
-for (i in 1:nrow(samples)) {
-  filename <- sprintf("GSM3304%03d_P%d_%s_processed_data.txt.gz",
-                     samples$gsm_prefix[i],
-                     samples$patient[i],
-                     samples$type[i])
-
-  counts <- read.table(filename, header = TRUE, row.names = 1)
-  
-  seurat_list[[i]] <- CreateSeuratObject(
-    counts = counts,
-    project = paste0("P", samples$patient[i], "_", samples$type[i])
-  )
-  
-  assign(paste0("seurat_P", samples$patient[i], "_", samples$type[i]), seurat_list[[i]])
-}
-
-
-names(seurat_list) <- paste0("P", samples$patient, "_", samples$type)
-
-#add metadata
-for (i in 1:length(seurat_list)) {
-  current_patient <- paste0("P", samples$patient[i])
-  current_type <- samples$type[i]
-
-  seurat_list[[i]]$patient <- current_patient
-  seurat_list[[i]]$sample_type <- current_type
-}
-
-#merge all objs
-merged_seurat_obj <- merge(x = seurat_list[[1]], 
-                       y = seurat_list[2:length(seurat_list)],
-                       add.cell.ids = names(seurat_list),
-                       project = "CombinedAnalysis")
-merged_seurat_obj <- JoinLayers(merged_seurat_obj)
-
-merged_seurat_obj <- NormalizeData(merged_seurat_obj)
-merged_seurat_obj <- FindVariableFeatures(merged_seurat_obj, nfeatures = 2000)
-
-hvgs <- VariableFeatures(merged_seurat_obj)
-merged_seurat_obj <- ScaleData(merged_seurat_obj, features = hvgs)
-merged_seurat_obj <- RunPCA(merged_seurat_obj, features = hvgs, npcs = 20)
-
-
-
-library(harmony)
-merged_seurat_obj <- RunHarmony(merged_seurat_obj, "orig.ident")
-
-ElbowPlot(merged_seurat_obj)
-merged_seurat_obj <- FindNeighbors(merged_seurat_obj, reduction = "harmony", dims = 1:15)
-
-merged_seurat_obj <- FindClusters(merged_seurat_obj, resolution = 0.5)
-merged_seurat_obj <- RunUMAP(merged_seurat_obj, reduction = "harmony", dims = 1:20)
-
-DimPlot(merged_seurat_obj, reduction = "umap", label = TRUE)
-
-target_genes <- c("CDKN2A","FZD10","NOTCH1","PDGFRA","WNT7B")
-FeaturePlot(merged_seurat_obj, features = target_genes)
-
-identity_mapping <- c(
-    "0" = "Effector T cell",
-    "1" = "Alveolar type II cell",
-    "2" = "Neutrophil",
-    "3" = "Macrophage",
-    "4" = "Dendritic cell",
-    "5" = "Naive T cell",
-    "6" = "NK cell",
-    "7" = "Basal Epithelial cell",
-    "8" = "Ciliated Epithelial cell",
-    "9" = "B cell",
-    "10" = "Fibroblast",
-    "11" = "Airway secretory cell",
-    "12" = "Ciliated Airway Epithelial cell",
-    "13" = "Proliferating cell"
-)
-cell_type <- identity_mapping[seurat_obj@meta.data$seurat_clusters]
-seurat_obj@meta.data$cell_type <- cell_type
-DimPlot(seurat_obj, reduction = "umap", label = FALSE, group.by = "cell_type")
-
-
-
-
-
-
-
 #GSE131907
 raw_counts <- readRDS("GSE131907_Lung_Cancer_raw_UMI_matrix.rds")
 lung_matrix <- raw_counts[, grepl("_LUNG_", colnames(raw_counts))]
@@ -135,21 +27,12 @@ sample_info <- data.frame(
 )
 head(sample_info)
 
-#sample_info <- read.table(
-  file = "GSE131907_Lung_Cancer_cell_annotation.txt",
-  sep = "\t",
-  header = TRUE,
-  fill = TRUE
-)
 
-
-
-#lung_samples <- sample_info[grepl("_LUNG_", sample_info$Index), ]
 
 seurat_obj <- CreateSeuratObject(
-  counts = lung_matrix,       # 使用原始计数矩阵（raw_counts）
-  meta.data = sample_info,    # 添加元数据
-  project = "Lung_Cancer"     # 项目名称
+  counts = lung_matrix,
+  meta.data = sample_info,
+  project = "Lung_Cancer"
 )
 head(seurat_obj@meta.data)
 

@@ -1,0 +1,297 @@
+
+
+
+
+target_gene <- "CDKN2A"
+
+
+target_gene <- "WNT7B"
+target_gene <- "FZD10"
+target_gene <- "NOTCH1"
+target_gene <- "PDGFRA"
+full_data <- FetchData(
+    seurat_obj,
+    vars = c(target_gene, "cell_type", "condition"),
+    layer = "data"
+)
+
+cell_types <- unique(full_data$cell_type)
+
+ns_plots <- list()       # 不显著
+up_plots <- list()       # 显著升高
+down_plots <- list()     # 显著降低
+
+p_threshold <- 0.05
+
+p_values <- list()
+cell_types_list <- list()
+
+
+
+for (ct in cell_types) {
+    ct_full_data <- full_data %>%
+        filter(cell_type == ct)
+    
+    if (nrow(ct_full_data) == 0) {
+        warning(paste("没有找到", ct, "的数据"))
+        next
+    }
+    
+    conditions <- unique(ct_full_data$condition)
+    
+    if (length(conditions) != 2) {
+        warning(paste(ct, "的条件数量不为2，跳过"))
+        next
+    }
+    
+    if ("Tumor" %in% conditions && "Normal" %in% conditions) {
+        tumor_group <- ct_full_data[ct_full_data$condition == "Tumor", target_gene]
+        normal_group <- ct_full_data[ct_full_data$condition == "Normal", target_gene]
+        
+        
+        if (length(tumor_group) < 2 || length(normal_group) < 2) {
+            p_text <- "Insufficient samples"
+            group <- "ns"
+        } else {
+            is_expressed <- any(tumor_group > 0) || any(normal_group > 0)
+            
+            if (is_expressed) {
+                tryCatch({
+                    test_result <- wilcox.test(tumor_group, normal_group)
+                    p_val <- test_result$p.value
+                    
+                    if (is.na(p_val)) {
+                        p_text <- "p-value unavailable"
+                        group <- "ns"
+                    } else {
+                        p_text <- paste("p =", formatC(p_val, format = "e", digits = 2))
+                        mean_tumor <- mean(tumor_group, na.rm = TRUE)
+                        mean_normal <- mean(normal_group, na.rm = TRUE)
+                        fold_change <- mean_tumor / mean_normal
+                        
+                        # 收集p值用于FDR校正
+                        p_values[[ct]] <- p_val
+                        
+                        group <- ifelse(p_val >= p_threshold, "ns",
+                                        ifelse(fold_change > 1, "up", "down"))
+                    }
+                }, error = function(e) {
+                    p_text <- "Test error"
+                    group <- "ns"
+                })
+            } else {
+                p_text <- "No expression"
+                group <- "ns"
+            }
+        }
+    } else {
+        warning(paste("未找到Tumor或Normal条件，跳过", ct))
+        next
+    }
+    
+    
+    summary_data <- ct_full_data %>%
+        group_by(condition) %>%
+        summarise(
+            mean_expr = mean(.data[[target_gene]], na.rm = TRUE),
+            sd_expr = sd(.data[[target_gene]], na.rm = TRUE),
+            is_valid = mean_expr > 0  # 有效表达标记
+        ) %>%
+        ungroup()
+    
+    
+    p <- ggplot(summary_data, aes(x = condition, y = mean_expr, fill = condition)) +
+        geom_bar(stat = "identity", width = 0.7, alpha = 0.7) +
+        labs(
+            title = ct,
+            subtitle = p_text,
+            y = expression(log[2]("CPM/100 + 1"))
+        ) +
+        scale_x_discrete(limits = c("Tumor", "Normal")) +
+        theme_classic() +
+        theme(
+            legend.position = "none",
+            plot.title = element_text(hjust = 0.5, size = 12),
+            axis.title.x = element_blank()
+        )
+    
+    
+    for (cond in c("Tumor", "Normal")) {
+        cond_data <- summary_data[summary_data$condition == cond, ]
+        if (nrow(cond_data) > 0 && cond_data$mean_expr > 0) {
+            x_pos <- which(c("Tumor", "Normal") == cond)  # 显式获取x轴位置
+            
+            p <- p + 
+                # 误差棒竖线
+                annotate("segment",
+                         x = x_pos, xend = x_pos,
+                         y = cond_data$mean_expr, 
+                         yend = cond_data$mean_expr + cond_data$sd_expr,
+                         color = "black", size = 0.8) +
+                
+                # 误差棒顶部横线
+                annotate("segment",
+                         x = x_pos - 0.15, xend = x_pos + 0.15,
+                         y = cond_data$mean_expr + cond_data$sd_expr,
+                         yend = cond_data$mean_expr + cond_data$sd_expr,
+                         color = "black", size = 0.8)
+        }
+    }
+    
+    if (group == "ns") {
+        ns_plots[[ct]] <- p
+    } else if (group == "up") {
+        up_plots[[ct]] <- p
+    } else if (group == "down") {
+        down_plots[[ct]] <- p
+    }
+}
+
+# 计算FDR校正
+if (length(p_values) > 0) {
+    # 转换为数值向量
+    p_vector <- unlist(p_values)
+    cell_type_vector <- names(p_values)
+    
+    # 仅对非NA的p值进行校正
+    valid_indices <-!is.na(p_vector)
+    if (sum(valid_indices) > 1) {  
+        fdr_values <- p.adjust(p_vector[valid_indices], method = "fdr")
+        fdr_adjusted <- rep(NA, length(p_vector))
+        fdr_adjusted[valid_indices] <- fdr_values
+        
+        # 根据FDR值重新分类
+        for (i in seq_along(cell_type_vector)) {
+            ct <- cell_type_vector[i]
+            if (ct %in% names(up_plots) || ct %in% names(down_plots) || ct %in% names(ns_plots)) {
+                # 确定该细胞类型的图在哪个列表中
+                if (ct %in% names(up_plots)) {
+                    plot_list <- "up_plots"
+                } else if (ct %in% names(down_plots)) {
+                    plot_list <- "down_plots"
+                } else {
+                    plot_list <- "ns_plots"
+                }
+                
+                current_plot <- get(plot_list)[[ct]]
+                
+
+                new_subtitle <- paste("FDR =", formatC(fdr_adjusted[i], format = "e", digits = 2))
+                
+                assign(
+                    plot_list,
+                    c(
+                        get(plot_list)[setdiff(names(get(plot_list)), ct)],
+                        setNames(list(current_plot + labs(subtitle = new_subtitle)), ct)
+                    )
+                )
+                
+                if (!is.na(fdr_adjusted[i])) {
+                    if (fdr_adjusted[i] >= p_threshold) {
+                        current_list <- get(plot_list)
+                        current_list[[ct]] <- NULL
+                        assign(plot_list, current_list)
+                        
+                        ns_plots[[ct]] <- current_plot + labs(subtitle = new_subtitle)
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+
+if (length(ns_plots) > 0) {
+    ns_combined <- wrap_plots(ns_plots, ncol = 7) +
+        plot_annotation(title = paste(target_gene, "Expression: Not Significant"),
+                        theme = theme(plot.title = element_text(hjust = 0, size = 16, face = "bold")))
+    print(ns_combined)
+}
+
+# ...（up_plots和down_plots的组合代码同上）
+
+
+# 最终合并
+calc_grid <- function(n, ncol = 7) {
+    nrow <- ceiling(n / ncol)
+    return(list(nrow = nrow, ncol = ncol))
+}
+
+create_panel <- function(plot_list, title, ncol = 7) {
+    if (length(plot_list) == 0) return(NULL)
+    
+    grid <- calc_grid(length(plot_list), ncol)
+    
+    title_plot <- ggplot() + 
+        annotate("text", x = 0.5, y = 0.5, label = title, 
+                 size = 5, fontface = "bold", hjust = 0.5) +
+        theme_void() +
+        theme(plot.margin = margin(5, 0, 5, 5))
+    
+    wrap_plots(
+        title_plot,
+        wrap_plots(plot_list, ncol = ncol),
+        ncol = 1,
+        heights = c(0.5, grid$nrow *2)
+    )
+}
+
+create_combined_plot <- function(up_plots, down_plots, ns_plots, target_gene, ncol = 7) {
+  # 只处理非空的plot列表
+  panels <- list()
+  heights <- numeric(0)
+  
+  if (length(up_plots) > 0) {
+    panel_up <- create_panel(up_plots, "UPREGULATED IN TUMOR", ncol)
+    panels <- c(panels, list(panel_up))
+    heights <- c(heights, 0.5 + calc_grid(length(up_plots), ncol)$nrow)
+  }
+  
+  if (length(down_plots) > 0) {
+    panel_down <- create_panel(down_plots, "DOWNREGULATED IN TUMOR", ncol)
+    panels <- c(panels, list(panel_down))
+    heights <- c(heights, 0.5 + calc_grid(length(down_plots), ncol)$nrow)
+  }
+  
+  if (length(ns_plots) > 0) {
+    panel_ns <- create_panel(ns_plots, "NOT SIGNIFICANT", ncol)
+    panels <- c(panels, list(panel_ns))
+    heights <- c(heights, 0.5 + calc_grid(length(ns_plots), ncol)$nrow)
+  }
+  
+  # 如果没有有效的面板，返回NULL
+  if (length(panels) == 0) return(NULL)
+  
+  combined <- wrap_plots(
+    panels,
+    ncol = 1,
+    heights = heights
+  ) + 
+    plot_annotation(
+      title = paste("DIFFERENTIAL EXPRESSION OF", target_gene),
+      theme = theme(
+        plot.title = element_text(size = 18, face = "bold", hjust = 0.5, margin = margin(b = 10))
+      )
+    )
+  
+  base_width <- 14
+  base_height <- 2 * (sum(heights) - 0.5 * length(panels))
+  
+  return(list(
+    plot = combined,
+    width = base_width,
+    height = base_height
+  ))
+}
+
+result <- create_combined_plot(up_plots, down_plots, ns_plots, target_gene)
+
+if (!is.null(result$plot)) {
+    print(result$plot)
+    ggsave(paste0(target_gene, "_combined_expression_FDR.png"), 
+           plot = result$plot, 
+           width = result$width, 
+           height = result$height, 
+           dpi = 300)
+}
