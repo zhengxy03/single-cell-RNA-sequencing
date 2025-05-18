@@ -79,3 +79,7 @@ identity_mapping <- c(
 cell_type <- identity_mapping[seurat_obj@meta.data$seurat_clusters]
 seurat_obj@meta.data$cell_type <- cell_type
 DimPlot(seurat_obj, reduction = "umap", label = FALSE, group.by = "cell_type")
+
+target_genes <- c("CDKN2A", "FZD10", "NOTCH1", "PDGFRA", "WNT7B")
+feature_plot <- FeaturePlot(seurat_obj, features = target_genes)
+ggsave("featureplot.png", plot = feature_plot, width = 6 , height = 8, dpi = 300)
