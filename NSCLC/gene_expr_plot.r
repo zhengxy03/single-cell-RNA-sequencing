@@ -1,4 +1,8 @@
 #barplot
+seurat_obj@meta.data$condition <- recode(seurat_obj@meta.data$condition, 
+                                         "T" = "Tumor", 
+                                         "N" = "Normal")
+
 seurat_obj@meta.data$condition <- factor(
   seurat_obj@meta.data$condition,
   levels = c("Tumor", "Normal")
@@ -6,6 +10,7 @@ seurat_obj@meta.data$condition <- factor(
 
 target_genes <- c("CDKN2A", "FZD10", "NOTCH1", "PDGFRA", "WNT7B")
 
+library(patchwork)
 for (target_gene in target_genes) {
   
     full_data <- FetchData(
@@ -19,15 +24,17 @@ for (target_gene in target_genes) {
     down_plots <- list()
 
     cell_types <- unique(full_data$cell_type)
-    conditions <- unique(ct_full_data$condition)
+
     
     p_threshold <- 0.05
     p_values <- list()
 
     for (ct in cell_types) {
+
         ct_full_data <- full_data %>%
-        filter(cell_type == ct)
-    
+            filter(cell_type == ct)
+        
+        conditions <- unique(ct_full_data$condition)    
         if (nrow(ct_full_data) == 0) {
         warning(paste("can't find", ct, "data"))
         next
