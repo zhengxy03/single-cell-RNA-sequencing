@@ -33,10 +33,6 @@ hvgs <- VariableFeatures(seurat_obj)
 seurat_obj <- ScaleData(seurat_obj, features = hvgs)
 seurat_obj <- RunPCA(seurat_obj, features = hvgs, npcs = 20)
 seurat_obj <- RunTSNE(seurat_obj, dims = 1:10)
-p1 <- DimPlot(seurat_obj, reduction = "tsne", label = TRUE)
-ggsave("clusters.png", plot = p1, dpi = 300)
-p2 <- DimPlot(seurat_obj, reduction = "tsne", label = FALSE, group.by = "Cell_subtype")
-ggsave("annotation.png", plot = p2, dpi = 300)
 
 saveRDS(seurat_obj, file = "GSE131907_all.rds")
 
@@ -158,6 +154,63 @@ ggsave(
   plot = normal_combined,
   width = 24, height = 48, dpi = 300
 )
+
+patient_ids <- c("P06", "P08", "P09", "P18", "P19", "P20", "P28", "P30", "P31", "P34")
+p06 <- subset(seurat_obj, subset = patient_id == "P06")
+
+
+lung_paired@meta.data$Condition <- lung_paired@meta.data$Sample_Origin
+lung_paired@meta.data$Condition <- ifelse(
+  lung_paired@meta.data$Condition == "nLung", "Normal",
+  ifelse(lung_paired@meta.data$Condition == "tLung", "Tumor", lung_paired@meta.data$Condition)
+)
+
+unique_patients <- sort(unique(lung_paired@meta.data$patient_id))
+unique_sample_types <- unique(lung_paired@meta.data$Condition)
+unique_cell_types <- sort(unique(lung_paired@meta.data$cell_type))
+
+all_plot_list <- list()
+
+
+for (patient in unique_patients) {
+  for (sample in unique_sample_types) {
+
+    lung_paired$combined_group <- paste(lung_paired@meta.data$patient_id, lung_paired@meta.data$Condition, sep = "_")
+    current_group <- paste(patient, sample, sep = "_")
+    
+
+    p <- DimPlot(
+      lung_paired, 
+      reduction = "tsne", 
+      label = FALSE, 
+      pt.size = 1, 
+      group.by = "cell_type" 
+    ) +
+    ggtitle(paste(patient, sample, sep = " - ")) +
+    theme(
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+      legend.text = element_text(size = 10),
+      legend.title = element_text(size = 12, face = "bold")
+    )
+    
+
+
+    all_plot_list[[current_group]] <- p
+  }
+}
+
+combined_plot <- wrap_plots(all_plot_list, ncol = 2)
+ggsave("")
+png("lung_paired_tsne_celltype_by_patient_sample.png", width = 6000, height = 9000, res = 300)
+print(combined_plot)
+dev.off()
+
+
+png("seurat_patient_sample_type_umap.png", width = 6000, height = 9000, res = 300)
+print(combined_plot)
+dev.off()
+
+
 
 
 #pseudobulk
