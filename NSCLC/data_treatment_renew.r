@@ -102,89 +102,44 @@ normal <- subset(lung_paired, subset = Sample_Origin == "nLung")
 
 patient_ids <- c("P06", "P08", "P09", "P18", "P19", "P20", "P28", "P30", "P31", "P34")
 library(patchwork)
-generate_combined_plot <- function(data, condition_name) {
-  plots <- list()
-  
-  for (patient in patient_ids) {
-    pat <- subset(data, subset = patient_id == patient)
-
-    p <- DimPlot(
-      pat, 
-      reduction = "tsne", 
-      label = FALSE, 
-      group.by = "cell_type",
-    ) +
-    ggtitle(patient) +
-    theme(
-      plot.title = element_text(hjust = 0.5, size = 10),
-      legend.position = "bottom"  
-    )
-    
-    plots[[patient]] <- p
-  }
-
-  combined_plot <- wrap_plots(
-    plots, 
-    ncol = 2
-  ) +
-  plot_annotation(
-    title = condition_name,
-    theme = theme(
-      plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
-      plot.margin = margin(10, 10, 10, 10)
-    )
-  )
-  
-  return(combined_plot)
-}
-
-
-tumor_combined <- generate_combined_plot(tumor, "Tumor")
-normal_combined <- generate_combined_plot(normal, "Normal")
-
-
-ggsave(
-  "tumor_patients_combined.png",
-  plot = tumor_combined,
-  width = 24, height = 48, dpi = 300
-)
-
-ggsave(
-  "normal_patients_combined.png",
-  plot = normal_combined,
-  width = 24, height = 48, dpi = 300
-)
 
 patient_ids <- c("P06", "P08", "P09", "P18", "P19", "P20", "P28", "P30", "P31", "P34")
 p06 <- subset(seurat_obj, subset = patient_id == "P06")
 
-
-lung_paired@meta.data$Condition <- lung_paired@meta.data$Sample_Origin
-lung_paired@meta.data$Condition <- ifelse(
-  lung_paired@meta.data$Condition == "nLung", "Normal",
-  ifelse(lung_paired@meta.data$Condition == "tLung", "Tumor", lung_paired@meta.data$Condition)
+#distribution plot
+lung_paired@meta.data$Sample_Origin <- lung_paired@meta.data$Condition
+lung_paired@meta.data$Sample_Origin <- ifelse(
+  lung_paired@meta.data$Sample_Origin == "nLung", "Normal",
+  ifelse(lung_paired@meta.data$Sample_Origin == "tLung", "Tumor", lung_paired@meta.data$Sample_Origin)
 )
 
+lung_paired@meta.data$Sample_Origin <- factor(
+  lung_paired@meta.data$Sample_Origin,
+  levels = c("Tumor", "Normal"),
+  ordered = TRUE
+)
+
+
 unique_patients <- sort(unique(lung_paired@meta.data$patient_id))
-unique_sample_types <- unique(lung_paired@meta.data$Condition)
-unique_cell_types <- sort(unique(lung_paired@meta.data$cell_type))
+unique_sample_types <- levels(lung_paired@meta.data$Sample_Origin)
 
 all_plot_list <- list()
 
 
 for (patient in unique_patients) {
-  for (sample in unique_sample_types) {
 
-    lung_paired$combined_group <- paste(lung_paired@meta.data$patient_id, lung_paired@meta.data$Condition, sep = "_")
+  for (sample in unique_sample_types) {
+    patient_subset <- subset(lung_paired, subset = combined_group == paste0(patient, "_", sample))
+ 
     current_group <- paste(patient, sample, sep = "_")
     
 
     p <- DimPlot(
-      lung_paired, 
+      patient_subset, 
       reduction = "tsne", 
       label = FALSE, 
       pt.size = 1, 
-      group.by = "cell_type" 
+      group.by = "cell_type"
     ) +
     ggtitle(paste(patient, sample, sep = " - ")) +
     theme(
@@ -193,24 +148,91 @@ for (patient in unique_patients) {
       legend.title = element_text(size = 12, face = "bold")
     )
     
-
-
     all_plot_list[[current_group]] <- p
   }
 }
 
+
 combined_plot <- wrap_plots(all_plot_list, ncol = 2)
-ggsave("")
-png("lung_paired_tsne_celltype_by_patient_sample.png", width = 6000, height = 9000, res = 300)
+
+
+png("lung_paired_tsne_celltype_by_patient_sample.png", width = 6000, height = 12000, res = 300)
 print(combined_plot)
 dev.off()
 
+#proportion
 
-png("seurat_patient_sample_type_umap.png", width = 6000, height = 9000, res = 300)
-print(combined_plot)
+proportion_data <- lung_paired@meta.data %>%
+    group_by(patient_id, Sample_Origin, cell_type) %>% 
+    summarise(count = n()) %>% 
+    mutate(proportion = count / sum(count)) %>%
+    ungroup()
+
+patients <- unique(proportion_data$patient_id)
+
+
+all_plots <- list()
+proportion_data <- lung_paired@meta.data %>%
+  group_by(patient_id, Sample_Origin, cell_type) %>% 
+  summarise(count = n()) %>% 
+  mutate(proportion = count / sum(count)) %>%
+  ungroup()
+
+patients <- unique(proportion_data$patient_id)
+
+
+for (patient in patients) {
+  patient_data <- proportion_data %>% filter(patient_id == patient)
+  sample_types <- unique(patient_data$Sample_Origin)
+  pie_plots <- list()
+  
+  for (sample in sample_types) {
+    sample_data <- patient_data %>% filter(Sample_Origin == sample)
+    p <- ggplot(sample_data, aes(x = "", y = proportion, fill = cell_type)) +
+      geom_bar(stat = "identity", width = 1) +
+      coord_polar(theta = "y") +
+      theme_void() +
+      labs(title = sample, fill = "Cell Type") +
+      theme(
+        plot.title = element_text(size = 24, face = "bold", hjust = 0.5),
+        legend.position = "right",
+        legend.text = element_text(size = 20),
+        legend.title = element_text(size = 22),
+      ) + guides(fill = guide_legend(ncol = 1))
+    pie_plots[[sample]] <- p
+  }
+  
+  combined_pie <- wrap_plots(pie_plots, ncol = length(sample_types))
+  
+  bar_chart <- ggplot(patient_data, aes(x = Sample_Origin, y = proportion, fill = cell_type)) +
+    geom_bar(stat = "identity", position = "stack") +
+    labs(x = "Sample Type", y = "Proportion", fill = "Cell Type") +
+    theme_classic() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 20),
+      axis.title.x = element_text(size = 24),
+      axis.title.y = element_text(size = 24),
+      axis.text.y = element_text(size = 20),
+      legend.position = "none"
+    )
+  
+  patient_combined <- combined_pie | bar_chart + 
+    plot_layout(widths = c(2, 1)) +
+    plot_annotation(title = paste("Patient", patient, "- Cell Type Proportions"),
+                    theme = theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)))
+  
+  all_plots[[patient]] <- patient_combined
+}
+
+
+final_combined <- wrap_plots(all_plots, ncol = 1) + 
+  plot_annotation(title = "All Patients - Cell Type Proportions",
+                  theme = theme(plot.title = element_text(size = 48, face = "bold", hjust = 0.5)))
+
+
+png("all_patients_combined.png", width = 9000, height = 27000, res = 300)  # 根据ncol调整尺寸
+print(final_combined)
 dev.off()
-
-
 
 
 #pseudobulk
