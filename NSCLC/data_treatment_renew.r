@@ -152,26 +152,12 @@ for (patient in unique_patients) {
   }
 }
 
-
 combined_plot <- wrap_plots(all_plot_list, ncol = 2)
-
-
 png("lung_paired_tsne_celltype_by_patient_sample.png", width = 6000, height = 12000, res = 300)
 print(combined_plot)
 dev.off()
 
 #proportion
-
-proportion_data <- lung_paired@meta.data %>%
-    group_by(patient_id, Sample_Origin, cell_type) %>% 
-    summarise(count = n()) %>% 
-    mutate(proportion = count / sum(count)) %>%
-    ungroup()
-
-patients <- unique(proportion_data$patient_id)
-
-
-all_plots <- list()
 proportion_data <- lung_paired@meta.data %>%
   group_by(patient_id, Sample_Origin, cell_type) %>% 
   summarise(count = n()) %>% 
@@ -179,7 +165,11 @@ proportion_data <- lung_paired@meta.data %>%
   ungroup()
 
 patients <- unique(proportion_data$patient_id)
+all_plots <- list()
+fixed_cell_types <- sort(unique(proportion_data$cell_type))
 
+default_colors <- scales::hue_pal()(length(fixed_cell_types))
+color_map <- setNames(default_colors, fixed_cell_types)
 
 for (patient in patients) {
   patient_data <- proportion_data %>% filter(patient_id == patient)
@@ -193,6 +183,7 @@ for (patient in patients) {
       coord_polar(theta = "y") +
       theme_void() +
       labs(title = sample, fill = "Cell Type") +
+      scale_fill_manual(values = color_map) +
       theme(
         plot.title = element_text(size = 24, face = "bold", hjust = 0.5),
         legend.position = "right",
@@ -208,6 +199,7 @@ for (patient in patients) {
     geom_bar(stat = "identity", position = "stack") +
     labs(x = "Sample Type", y = "Proportion", fill = "Cell Type") +
     theme_classic() +
+    scale_fill_manual(values = color_map) +
     theme(
       axis.text.x = element_text(angle = 45, hjust = 1, size = 20),
       axis.title.x = element_text(size = 24),
@@ -224,13 +216,11 @@ for (patient in patients) {
   all_plots[[patient]] <- patient_combined
 }
 
-
 final_combined <- wrap_plots(all_plots, ncol = 1) + 
   plot_annotation(title = "All Patients - Cell Type Proportions",
                   theme = theme(plot.title = element_text(size = 48, face = "bold", hjust = 0.5)))
 
-
-png("all_patients_combined.png", width = 9000, height = 27000, res = 300)  # 根据ncol调整尺寸
+png("all_patients_combined.png", width = 9000, height = 27000, res = 300)
 print(final_combined)
 dev.off()
 
@@ -246,8 +236,7 @@ pseudo_sce <- PseudobulkExpression(
 pseudo_sce_df <- as.data.frame(pseudo_sce)
 write.csv(pseudo_sce_df, file = "pseudo_bulk.csv", row.names = TRUE)
 
-
-
+#方法二
 meta <- lung_paired@meta.data %>%
   as_tibble(rownames = "cell") %>%
   mutate(Patient = patient_id, Condition = Sample_Origin) %>%
@@ -289,23 +278,16 @@ res <- lfcShrink(dds, coef = "Condition_Tumor_vs_Normal", type = "apeglm")
 res_tbl <- as_tibble(res, rownames = "gene") %>% arrange(padj)
 
 gene_list <- c("CDKN2A", "FZD10", "NOTCH1", "PDGFRA", "WNT7B")
-
 res_focus <- res_tbl %>%
   filter(gene %in% gene_list) %>%
   select(gene, log2FoldChange, pvalue, padj)
 
 
 #del each celltype
-
 dds_original <- dds
-
 cell_types <- unique(coldata$cell_type)
-
 all_results <- list()
-
-
 cell_types <- unique(meta$cell_type)
-
 all_results <- list()
 
 for (ct in cell_types) {
@@ -360,9 +342,6 @@ for (ct in cell_types) {
 
 
 combined_results <- bind_rows(all_results)
-
-print(combined_results)
-
 write.csv(combined_results, "differential_expression_by_cell_type.csv", row.names = FALSE)
 
 #filter
