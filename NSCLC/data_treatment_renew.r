@@ -245,3 +245,135 @@ pseudo_sce <- PseudobulkExpression(
 )
 pseudo_sce_df <- as.data.frame(pseudo_sce)
 write.csv(pseudo_sce_df, file = "pseudo_bulk.csv", row.names = TRUE)
+
+
+
+meta <- lung_paired@meta.data %>%
+  as_tibble(rownames = "cell") %>%
+  mutate(Patient = patient_id, Condition = Sample_Origin) %>%
+  select(cell, Patient, Condition, cell_type)
+
+counts_matrix <- as.matrix(GetAssayData(lung_paired, assay = "RNA", layer = "counts"))
+
+
+meta$sample_id <- paste0(meta$Patient, "_", meta$Condition, "_", meta$cell_type)
+mat_t <- t(counts_matrix)
+pb_t <- rowsum(mat_t, group = meta$sample_id)
+pb_counts <- t(pb_t)
+
+coldata <- tibble(sample_id = colnames(pb_counts)) %>%
+  separate(
+    sample_id,
+    into = c("Patient", "Condition", "cell_type"),
+    sep = "_",
+    remove = FALSE
+  ) %>%
+  mutate(
+    Condition = factor(Condition, levels = c("Normal", "Tumor")),
+    Patient = factor(Patient),
+    cell_type = factor(cell_type)
+  ) %>%
+  column_to_rownames("sample_id")
+
+dds <- DESeqDataSetFromMatrix(
+  countData = pb_counts,
+  colData   = coldata,
+  design    = ~ Patient + Condition
+)
+dds <- DESeq(dds)
+
+res <- results(dds, contrast = c("Condition", "Tumor", "Normal"))
+resultsNames(dds)
+res <- lfcShrink(dds, coef = "Condition_Tumor_vs_Normal", type = "apeglm")
+
+res_tbl <- as_tibble(res, rownames = "gene") %>% arrange(padj)
+
+gene_list <- c("CDKN2A", "FZD10", "NOTCH1", "PDGFRA", "WNT7B")
+
+res_focus <- res_tbl %>%
+  filter(gene %in% gene_list) %>%
+  select(gene, log2FoldChange, pvalue, padj)
+
+
+#del each celltype
+
+dds_original <- dds
+
+cell_types <- unique(coldata$cell_type)
+
+all_results <- list()
+
+
+cell_types <- unique(meta$cell_type)
+
+all_results <- list()
+
+for (ct in cell_types) {
+  message("Processing without cell type: ", ct)
+
+  meta_filtered <- meta %>% filter(cell_type != ct)
+
+  cells_to_keep <- meta_filtered$cell
+  counts_matrix_filtered <- counts_matrix[, cells_to_keep]
+
+  meta_filtered$sample_id <- paste0(meta_filtered$Patient, "_", meta_filtered$Condition, "_", meta_filtered$cell_type)
+  mat_t_filtered <- t(counts_matrix_filtered)
+  pb_t_filtered <- rowsum(mat_t_filtered, group = meta_filtered$sample_id)
+  pb_counts_filtered <- t(pb_t_filtered)
+ 
+  coldata_filtered <- tibble(sample_id = colnames(pb_counts_filtered)) %>%
+    separate(
+      sample_id,
+      into = c("Patient", "Condition", "cell_type"),
+      sep = "_",
+      remove = FALSE
+    ) %>%
+    mutate(
+      Condition = factor(Condition, levels = c("Normal", "Tumor")),
+      Patient = factor(Patient),
+      cell_type = factor(cell_type)
+    ) %>%
+    column_to_rownames("sample_id")
+  
+
+  dds_filtered <- DESeqDataSetFromMatrix(
+    countData = pb_counts_filtered,
+    colData   = coldata_filtered,
+    design    = ~ Patient + Condition 
+  )
+  dds_filtered <- DESeq(dds_filtered)
+  
+  res_filtered <- results(dds_filtered, contrast = c("Condition", "Tumor", "Normal"))
+  res_filtered <- lfcShrink(dds_filtered, coef = "Condition_Tumor_vs_Normal", type = "apeglm")
+
+  res_tbl_filtered <- as_tibble(res_filtered, rownames = "gene") %>% arrange(padj)
+  res_focus_filtered <- res_tbl_filtered %>%
+    filter(gene %in% gene_list) %>%
+    select(gene, log2FoldChange, pvalue, padj)
+  
+
+  res_focus_filtered$removed_cell_type <- ct
+  
+
+  all_results[[ct]] <- res_focus_filtered
+}
+
+
+combined_results <- bind_rows(all_results)
+
+print(combined_results)
+
+write.csv(combined_results, "differential_expression_by_cell_type.csv", row.names = FALSE)
+
+#filter
+counts_matrix <- GetAssayData(lung_paired, layer = "counts")
+expr_cells <- which(counts_matrix["FZD10", ] > 0)
+expr_ratio <- length(expr_cells) / ncol(lung_paired)
+
+min_cell_percentage <- 0.001 
+
+expressed_cells_per_gene <- Matrix::rowSums(counts_matrix > 0)
+min_cells_required <- min_cell_percentage * ncol(lung_paired)
+genes_to_keep <- expressed_cells_per_gene >= min_cells_required
+lung_paired <- lung_paired[genes_to_keep, ]
+
