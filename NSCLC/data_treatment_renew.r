@@ -3,7 +3,10 @@
 library(Seurat)
 library(dplyr)
 library(ggplot2)
-
+library(DESeq2)
+library(edgeR)
+library(limma)
+library(tidyverse)
 #data import
 raw_counts <- readRDS("GSE131907_Lung_Cancer_raw_UMI_matrix.rds")
 
@@ -103,8 +106,6 @@ normal <- subset(lung_paired, subset = Sample_Origin == "nLung")
 patient_ids <- c("P06", "P08", "P09", "P18", "P19", "P20", "P28", "P30", "P31", "P34")
 library(patchwork)
 
-patient_ids <- c("P06", "P08", "P09", "P18", "P19", "P20", "P28", "P30", "P31", "P34")
-p06 <- subset(seurat_obj, subset = patient_id == "P06")
 
 #distribution plot
 lung_paired@meta.data$Sample_Origin <- lung_paired@meta.data$Condition
