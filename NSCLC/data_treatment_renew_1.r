@@ -7,6 +7,9 @@ library(DESeq2)
 library(edgeR)
 library(limma)
 library(tidyverse)
+library(patchwork)
+library(ggsci)
+
 #data import
 raw_counts <- readRDS("GSE131907_Lung_Cancer_raw_UMI_matrix.rds")
 
