@@ -114,7 +114,7 @@ theme(
 ggsave(
   filename = "lung_paired_tsne_CellType_npg.png",
   plot = p,
-  width = 10,）
+  width = 10,
   height = 8,
   dpi = 300,
   bg = "white"
