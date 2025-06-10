@@ -91,48 +91,55 @@ lung_paired <- RunTSNE(
   verbose = TRUE
 )
 
+#umap
+lung_paired <- RunUMAP(
+  lung_paired,
+  dims = 1:n_significant_pcs,
+  verbose = TRUE
+)
 
 lung_paired <- FindNeighbors(lung_paired, dims = 1:15)
 lung_paired <- FindClusters(lung_paired, resolution = 0.5)
-DimPlot(lung_paired, reduction = "tsne", label = TRUE, pt.size = 0.5)
+DimPlot(lung_paired, reduction = "umap", label = TRUE)
 
-tsne_markers <- FindAllMarkers(lung_paired, 
+umap_markers <- FindAllMarkers(lung_paired, 
                               only.pos = TRUE, 
                               min.pct = 0.25, 
                               logfc.threshold = 0.25, 
                               test.use = "wilcox")
 
-tsne_significant_markers <- subset(tsne_markers, p_val_adj < 0.05)
-tsne_significant_markers <- tsne_significant_markers %>% 
+umap_significant_markers <- subset(umap_markers, p_val_adj < 0.05)
+umap_significant_markers <- umap_significant_markers %>% 
   group_by(cluster) %>% 
   top_n(n = 20, wt = avg_log2FC)
-write.csv(tsne_significant_markers, "tsne_marker_top.csv")
+write.csv(umap_significant_markers, "umap_marker_top.csv")
 
-#identity_mapping <- c(
-    "0" = "Effector T cell",
+
+identity_mapping <- c(
+    "0" = "Naive T cell",
     "1" = "NK cell",
     "2" = "Alveolar Macrophage",
-    "3" = "Transitional T cell",
-    "4" = "Tumor-associated Macrophage cell",
-    "5" = "Monocyte",
+    "3" = "Effector T cell",
+    "4" = "Transitional T cell",
+    "5" = "Tumor-associated Macrophage cell",
     "6" = "Macrophage/Monocyte",
-    "7" = "Fibroblast",
-    "8" = "B cell",
-    "9" = "Mast cell",
-    "10" = "Ciliated Epithelial cell_1",
-    "11" = "Secretory Club cell",
-    "12" = "Alveolar type II cell",
-    "13" = "Endothelial cell",
-    "14" = "Plasma cell",
-    "15" = "Basal Epithelial cell_1",
-    "16" = "Adenocarcinoma stem-like cell",
-    "17" = "Ciliated Epithelial cell_2",
-    "18" = "Alveolar type I cell",
-    "19" = "Proliferating cell",
-    "20" = "Basal Epithelial cell_2",
-    "21" = "Plasmacytoid dendritic cell",
-    "22" = "Ciliated Epithelial cell_3",
-    "23" = "Mesenchymal stromal cell"  
+    "7" = "Alveolar type II cell",
+    "8" = "Fibroblast",
+    "9" = "Monocyte",
+    "10" = "B cell",
+    "11" = "Mast cell",
+    "12" = "Ciliated Epithelial cell_1",
+    "13" = "Conventional dendritic cell",
+    "14" = "Endothelial cell",
+    "15" = "Plasma cell",
+    "16" = "Basal Epithelial cell_1",
+    "17" = "Adenocarcinoma stem-like cell",
+    "18" = "Ciliated Epithelial cell_2",
+    "19" = "Alveolar type I cell",
+    "20" = "Proliferating cell",
+    "21" = "Basal Epithelial cell_2",
+    "22" = "Plasmacytoid dendritic cell",
+    "23" = "Ciliated Epithelial cell_3"
 )
 cell_type <- identity_mapping[lung_paired@meta.data$seurat_clusters]
 lung_paired@meta.data$cell_type <- cell_type
@@ -148,43 +155,7 @@ num_types <- length(cell_types)
 color_map <- setNames(npg_extended[1:num_types], cell_types)
 
 
-#p_tsne <- DimPlot(
-  lung_paired,
-  reduction = "tsne",
-  group.by = "cell_type",
-  label = FALSE,
-  pt.size = 1
-) +
-#scale_color_manual(
-  values = color_map,
-  name = "cell Type"
-) +
-#theme(
-  plot.title = element_blank(),
-  axis.text = element_text(colour = "#000000", face = "plain", size = 5.5),
-  axis.title.y = element_text(colour = "#000000", face = "bold", size = 7),
-  axis.title.x = element_text(colour = "#000000", face = "bold", size = 7),
-  axis.ticks.length = unit(0.35, units = "mm"),
-  axis.ticks = element_line(colour = "#000000", linewidth = 0.1167156),
-  axis.line = element_line(colour = "#000000", linewidth = 0.1167156),
-  legend.text = element_text(size = 5),
-  legend.title = element_blank(),
-  legend.margin = margin(t = 0,r = 0,b = 0,l = 0,unit = "cm"),
-  legend.position = "right"
-)
-
-
-#pdf(
-      file = "celltype_all_tsne.pdf",
-      family = "Helvetica",
-      width = 6.4,
-      height = 3.2,
-      useDingbats = FALSE
-    )
-#print(p_tsne)
-#dev.off()
-
-
+#tsne-annoation
 tsne_coords <- Embeddings(lung_paired, reduction = "tsne")
 
 tsne_data <- data.frame(
@@ -231,67 +202,12 @@ pdf(
 print(p_tsne)
 dev.off()
 
-#featureplot
+#featureplot-tsne
 tumor <- subset(lung_paired, subset = Sample_Origin == "Tumor")
 normal <- subset(lung_paired, subset = Sample_Origin == "Normal")
 
 target_genes <- c("CDKN2A", "NOTCH1", "PDGFRA", "WNT7B")
-
-#pdf(file = "gene_feature_plots_tumor_tsne.pdf", 
-    width = 8, 
-    height = 6,
-    family = "Helvetica")
-#for (gene in target_genes) {
-  p <- FeaturePlot(tumor, 
-                  features = gene,
-                  reduction = "tsne",
-                  order = TRUE) +
-    ggtitle(gene) +
-    theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
-  print(p)
-}
-#dev.off()
-
-#pdf(file = "gene_feature_plots_normal_tsne.pdf", 
-    width = 3.2, 
-    height = 3.2,
-    family = "Helvetica",
-    useDingbats = FALSE
-    )
-#for (gene in target_genes) {
-  p <- FeaturePlot(normal, 
-                  features = gene, 
-                  reduction = "tsne",
-                  order = TRUE) +
-    geom_point(size = 0.001, shape =16) +               
-    ggtitle(gene) +
-    labs(x="tSNE 1",y="tSNE 2") +
-    theme(
-        aspect.ratio = 1,
-        plot.title = element_text(size = 7),
-        axis.text = element_text(colour = "#000000", face = "plain", size = 5.5),
-        axis.title.y = element_text(colour = "#000000", face = "bold", size = 7),
-        axis.title.x = element_text(colour = "#000000", face = "bold", size = 7),
-        axis.ticks.length = unit(0.35, units = "mm"),
-        axis.ticks = element_line(colour = "#000000", linewidth = 0.1167156),
-        axis.line = element_line(colour = "#000000", linewidth = 0.1167156),
-        legend.title = element_blank(),
-        legend.margin = margin(t = 0,r = 0,b = 0,l = 0,unit = "cm"),
-        legend.position = "right",
-        legend.spacing = unit(-0.2, "cm"),
-        legend.background = element_blank(),
-        legend.key.spacing = unit(-0.2, "cm"),
-        legend.key.size = unit(0.3, "cm"),
-        legend.spacing.y = unit(-0.2, "cm"),
-        legend.text = element_text(size = 5,margin = margin(r = 0.1, unit = "cm")),
-        panel.grid.major = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank()
-        )
-  print(p)
-}
-#dev.off()
-
+#tumor
 pdf(file = "gene_feature_plots_tumor_tsne.pdf", 
     width = 3.2, 
     height = 3.2,
@@ -359,7 +275,7 @@ for (gene in target_genes) {
   print(p)
 }
 dev.off()
-
+#normal
 pdf(file = "gene_feature_plots_normal_tsne.pdf", 
     width = 3.2, 
     height = 3.2,
@@ -430,100 +346,9 @@ dev.off()
 
 
 
-#umap
-lung_paired <- RunUMAP(
-  lung_paired,
-  dims = 1:n_significant_pcs,
-  verbose = TRUE
-)
 
-lung_paired <- FindNeighbors(lung_paired, dims = 1:15)
-lung_paired <- FindClusters(lung_paired, resolution = 0.5)
-DimPlot(lung_paired, reduction = "umap", label = TRUE)
-
-umap_markers <- FindAllMarkers(lung_paired, 
-                              only.pos = TRUE, 
-                              min.pct = 0.25, 
-                              logfc.threshold = 0.25, 
-                              test.use = "wilcox")
-
-umap_significant_markers <- subset(umap_markers, p_val_adj < 0.05)
-umap_significant_markers <- umap_significant_markers %>% 
-  group_by(cluster) %>% 
-  top_n(n = 20, wt = avg_log2FC)
-write.csv(umap_significant_markers, "umap_marker_top.csv")
-
-
-identity_mapping <- c(
-    "0" = "Naive T cell",
-    "1" = "NK cell",
-    "2" = "Alveolar Macrophage",
-    "3" = "Effector T cell",
-    "4" = "Transitional T cell",
-    "5" = "Tumor-associated Macrophage cell",
-    "6" = "Macrophage/Monocyte",
-    "7" = "Alveolar type II cell",
-    "8" = "Fibroblast",
-    "9" = "Monocyte",
-    "10" = "B cell",
-    "11" = "Mast cell",
-    "12" = "Ciliated Epithelial cell_1",
-    "13" = "Conventional dendritic cell",
-    "14" = "Endothelial cell",
-    "15" = "Plasma cell",
-    "16" = "Basal Epithelial cell_1",
-    "17" = "Adenocarcinoma stem-like cell",
-    "18" = "Ciliated Epithelial cell_2",
-    "19" = "Alveolar type I cell",
-    "20" = "Proliferating cell",
-    "21" = "Basal Epithelial cell_2",
-    "22" = "Plasmacytoid dendritic cell",
-    "23" = "Ciliated Epithelial cell_3"
-)
-cell_type <- identity_mapping[lung_paired@meta.data$seurat_clusters]
-lung_paired@meta.data$cell_type <- cell_type
-
-lung_paired@meta.data$cell_type <- factor(
-  lung_paired@meta.data$cell_type,
-  levels = sort(unique(lung_paired@meta.data$cell_type))
-)
-npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(24)
-cell_types <- sort(unique(lung_paired@meta.data$cell_type))
-num_types <- length(cell_types)
-color_map <- setNames(npg_extended[1:num_types], cell_types)
-
-
-#p_umap <- DimPlot(
-  lung_paired,
-  reduction = "umap",
-  group.by = "cell_type",
-  label = FALSE,
-  pt.size = 0.1,
-) +
-#scale_color_manual(
-  values = color_map,
-  name = "cell Type"
-) +
-#theme(
-  plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
-  legend.text = element_text(size = 12),
-  legend.title = element_text(size = 14, face = "bold"),
-  legend.position = "right"
-)
-#pdf(
-      file = "celltype_all_umap.pdf",
-      family = "Helvetica",
-      width = 12,
-      height = 6,
-      useDingbats = FALSE
-    )
-#print(p_umap)
-#dev.off()
-
-
+#uamp-annotation
 umap_coords <- Embeddings(lung_paired, reduction = "umap")
-
 
 umap_data <- data.frame(
   UMAP_1 = umap_coords[, 1],
@@ -569,41 +394,13 @@ pdf(
 print(p_umap)
 dev.off()
 
-#featureplot
+#featureplot-umap
 tumor <- subset(lung_paired, subset = Sample_Origin == "Tumor")
 normal <- subset(lung_paired, subset = Sample_Origin == "Normal")
 
 target_genes <- c("CDKN2A", "NOTCH1", "PDGFRA", "WNT7B")
 
-#pdf(file = "gene_feature_plots_tumor_umap.pdf", 
-    width = 8, 
-    height = 6,
-    family = "Helvetica")
-#for (gene in target_genes) {
-  p <- FeaturePlot(tumor, 
-                  features = gene, 
-                  order = TRUE) +
-    ggtitle(gene) +
-    theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
-  print(p)
-}
-#dev.off()
-
-#pdf(file = "gene_feature_plots_normal_umap.pdf", 
-    width = 8, 
-    height = 6,
-    family = "Helvetica")
-#for (gene in target_genes) {
-  p <- FeaturePlot(normal, 
-                  features = gene, 
-                  order = TRUE) +
-    ggtitle(gene) +
-    theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
-  print(p)
-}
-#dev.off()
-
-
+#tumor
 pdf(file = "gene_feature_plots_tumor_umap.pdf", 
     width = 3.2, 
     height = 3.2,
@@ -671,7 +468,7 @@ for (gene in target_genes) {
   print(p)
 }
 dev.off()
-
+#normal
 pdf(file = "gene_feature_plots_normal_umap.pdf", 
     width = 3.2, 
     height = 3.2,
@@ -755,134 +552,7 @@ lung_paired@meta.data$Sample_Origin <- factor(
 )
 unique_patients <- sort(unique(lung_paired@meta.data$patient_id))
 unique_sample_types <- levels(lung_paired@meta.data$Sample_Origin)
-
-all_plot_list <- list()
-
-
-#for (patient in unique_patients) {
-    for (sample in unique_sample_types) {
-        patient_subset <- subset(lung_paired, subset = combined_group == paste0(patient, "_", sample))
-        
-        current_group <- paste(patient, sample, sep = "_")
-
-        p <- DimPlot(
-            patient_subset, 
-            reduction = "tsne", 
-            label = FALSE, 
-            pt.size = 0.5, 
-            group.by = "cell_type"
-        ) +
-            scale_color_manual(values = color_map) +
-            ggtitle(paste(patient, sample, sep = " - ")) +
-            theme(
-                plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
-                legend.text = element_text(size = 10),
-                legend.title = element_text(size = 12, face = "bold")
-            )
-        
-        all_plot_list[[current_group]] <- p
-    }
-}
-
-#combined_plot <- wrap_plots(all_plot_list, ncol = 2)
-#pdf(file = "lung_paired_tsne_CellType_by_patient_sample.pdf", 
-#    width = 24, 
-#    height = 36,
-#    family = "Helvetica")
-
-#print(combined_plot)
-#dev.off()
-
-
 #tsne
-for (sample in unique_sample_types) {
-
-  pdf_file <- paste0("patient_celltype_tsne_", sample, ".pdf")
-  
-  pdf(file = pdf_file, 
-      width = 3.2, 
-      height = 3.2,
-      family = "Helvetica")
-
-  for (patient in unique_patients) {
-    patient_subset <- subset(lung_paired, 
-                           subset = combined_group == paste0(patient, "_", sample))
-    
-
-    if (ncol(patient_subset) == 0) next
-
-    p <- DimPlot(
-      patient_subset, 
-      reduction = "tsne", 
-      label = FALSE, 
-      pt.size = 1, 
-      group.by = "cell_type"
-    ) +
-      scale_color_manual(values = color_map) +
-      ggtitle(paste(patient, sample, sep = " - ")) +
-      guides(color=guide_legend(ncol=1)) +
-      theme(
-        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
-        legend.text = element_text(size = 10),
-        legend.title = element_text(size = 12, face = "bold"),
-        legend.position = "right"
-      ) 
-
-    print(p)
-  }
-  dev.off()
-}
-#umap
-for (sample in unique_sample_types) {
-
-  pdf_file <- paste0("patient_celltype_umap_", sample, ".pdf")
-  
-  pdf(file = pdf_file, 
-      width = 9, 
-      height = 6,
-      family = "Helvetica")
-
-  for (patient in unique_patients) {
-    patient_subset <- subset(lung_paired, 
-                           subset = combined_group == paste0(patient, "_", sample))
-    
-
-    if (ncol(patient_subset) == 0) next
-
-    p <- DimPlot(
-      patient_subset, 
-      reduction = "umap", 
-      label = FALSE, 
-      pt.size = 1, 
-      group.by = "cell_type"
-    ) +
-      scale_color_manual(values = color_map) +
-      ggtitle(paste(patient, sample, sep = " - ")) +
-      guides(color=guide_legend(ncol=1)) +
-      theme(
-        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
-        legend.text = element_text(size = 10),
-        legend.title = element_text(size = 12, face = "bold"),
-        legend.position = "right"
-      ) 
-
-    print(p)
-  }
-  dev.off()
-}
-
-lung_paired@meta.data$combined_group <- paste0(
-  lung_paired@meta.data$patient_id, "_", 
-  lung_paired@meta.data$Sample_Origin
-)
-lung_paired@meta.data$Sample_Origin <- factor(
-  lung_paired@meta.data$Sample_Origin,
-  levels = c("Tumor", "Normal"),
-  ordered = TRUE
-)
-unique_patients <- sort(unique(lung_paired@meta.data$patient_id))
-unique_sample_types <- levels(lung_paired@meta.data$Sample_Origin)
-
 tsne_coords <- Embeddings(lung_paired, reduction = "tsne")
 tsne_data <- data.frame(
   tSNE_1 = tsne_coords[, 1],
@@ -949,7 +619,7 @@ for (sample in unique_sample_types) {
   dev.off()
 }
 
-
+#umap
 umap_coords <- Embeddings(lung_paired, reduction = "umap")
 umap_data <- data.frame(
   UMAP_1 = umap_coords[, 1],
