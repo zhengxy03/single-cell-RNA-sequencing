@@ -346,20 +346,24 @@ dev.off()
 
 
 
-
+npg_pal <- pal_npg()(10)
+npg_extended <- colorRampPalette(npg_pal)(24)
+Cell_types <- sort(unique(lung_paired@meta.data$Cell_type))
+num_types <- length(Cell_types)
+color_map <- setNames(npg_pal[1:num_types], Cell_types)
 #uamp-annotation
 umap_coords <- Embeddings(lung_paired, reduction = "umap")
 
 umap_data <- data.frame(
   UMAP_1 = umap_coords[, 1],
   UMAP_2 = umap_coords[, 2],
-  cell_type = lung_paired$cell_type
+  cell_type = lung_paired$Cell_type
 )
 
 p_umap <- ggplot(umap_data, aes(x = UMAP_1, y = UMAP_2, color = cell_type)) +
   geom_point(size = 0.001, shape = 16) +
   scale_color_manual(values = color_map) +
-  #guides(color = guide_legend(override.aes = list(size = 2))) + 
+  guides(color = guide_legend(override.aes = list(size = 2))) + 
   labs(x = "UMAP 1", y = "UMAP 2") +
   theme(
     aspect.ratio = 1,
@@ -385,7 +389,7 @@ p_umap <- ggplot(umap_data, aes(x = UMAP_1, y = UMAP_2, color = cell_type)) +
   )
 
 pdf(
-  file = "celltype_all_umap.pdf",
+  file = "Celltype_all_umap.pdf",
   family = "Helvetica",
   width = 5.6,
   height = 3.2,
@@ -746,6 +750,64 @@ for (patient in patients) {
 
 dev.off()
 
+proportion_data <- lung_paired@meta.data %>%
+  group_by(Sample_Origin, cell_type) %>% 
+  summarise(count = n()) %>% 
+  mutate(proportion = count / sum(count)) %>%
+  ungroup()
+
+patients <- unique(proportion_data$patient_id)
+fixed_cell_types <- sort(unique(proportion_data$cell_type))
+
+
+pdf("proportion_combined_CellType.pdf", width = 30, height = 10, family = "Helvetica")
+
+for (patient in patients) {
+  patient_data <- proportion_data %>% filter(patient_id == patient)
+  sample_types <- unique(patient_data$Sample_Origin)
+  pie_plots <- list()
+  
+  for (sample in sample_types) {
+    sample_data <- patient_data %>% filter(Sample_Origin == sample)
+    p <- ggplot(sample_data, aes(x = "", y = proportion, fill = cell_type)) +
+      geom_bar(stat = "identity", width = 1) +
+      coord_polar(theta = "y") +
+      theme_void() +
+      labs(title = sample, fill = "Cell Type") +
+      scale_fill_manual(values = color_map) +
+      theme(
+        plot.title = element_text(size = 24, face = "bold", hjust = 0.5),
+        legend.position = "right",
+        legend.text = element_text(size = 20),
+        legend.title = element_text(size = 22),
+      ) + guides(fill = guide_legend(ncol = 1))
+    pie_plots[[sample]] <- p
+  }
+  
+  combined_pie <- wrap_plots(pie_plots, ncol = length(sample_types))
+  
+  bar_chart <- ggplot(patient_data, aes(x = Sample_Origin, y = proportion, fill = cell_type)) +
+    geom_bar(stat = "identity", position = "stack") +
+    labs(x = "Sample Type", y = "Proportion", fill = "Cell Type") +
+    theme_classic() +
+    scale_fill_manual(values = color_map) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 20),
+      axis.title.x = element_text(size = 24),
+      axis.title.y = element_text(size = 24),
+      axis.text.y = element_text(size = 20),
+      legend.position = "none"
+    )
+  
+  patient_combined <- combined_pie | bar_chart + 
+    plot_layout(widths = c(2, 1)) +
+    plot_annotation(title = paste("Patient", patient, "- Cell Type Proportions"),
+                    theme = theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)))
+  
+  print(patient_combined)
+}
+
+dev.off()
 
 #pseudo bulk
 meta <- lung_paired@meta.data %>%
