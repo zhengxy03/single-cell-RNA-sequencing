@@ -288,37 +288,6 @@ seurat_obj <- RenameIdents(seurat_obj, new.cluster.ids)
 DimPlot(seurat_obj, reduction = "umap", label = TRUE, pt.size = 0.5) + NoLegend()
 ```
 ![umap2](./pic/umap2.png "umap2")<br>
-umap图美化：
-```
-#可以将坐标轴进行缩放
-##调用第三方包
-library(tidyr)
-library(ggplot2)
-##绘图
-p <- DimPlot(seurat_obj, reduction = "umap", label = TRUE, pt.size = 1.2 ,label.size = 5) + 
-  theme_dr(xlength = 0.2, 
-           ylength = 0.2,
-           arrow = arrow(length = unit(0.2, "inches"),type = "closed")) +
-  theme(panel.grid = element_blank(),
-        axis.title = element_text(face = 2,hjust = 0.03)) +
-  NoLegend()
-```
-几个参数
-* pt.size = 1.2：设置绘制的点（代表细胞）的大小为 1.2，调整点的大小可以影响图形的清晰度和视觉效果，使细胞分布更加直观可见。<br>
-* theme_dr主题函数调整图片主题样式<br>
-  * face是加粗<br>
-  * hjust = 0.03设置水平对齐方式，使坐标轴标题向左偏移一定距离，以避免与图形内容重叠或改善视觉布局。<br>
-生成的图片如下：<br>
-![umap3](./pic/umap3.png "ump3")<br>
-还可以将配色进行调整：
-```
-##调用第三方包
-library(ggsci)
-##随机选一种
-p1 <- p + scale_color_npg() + labs(title = "scc13", tag = "A")
-ggsave("umap4.png", plot = p1, width = 6, height = 6, dpi = 300)
-```
-![umap4](./pic/umap4.png "umap4")
 # 5 细胞子集：
 ## 5.1 提取髓细胞相关聚类
 seurat_obj--cell_type-`Myeloid`
