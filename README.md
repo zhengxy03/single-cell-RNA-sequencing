@@ -142,7 +142,7 @@ cellranger count --id=scRNA \
 ```
 # 2 下游数据分析
 # 2.1 数据下载
-这里可以直接使用GSE144236中的单细胞测序表达矩阵数据
+这里也可以直接使用GSE144236中的单细胞测序表达矩阵数据（barcodes.tsv 、 genes.tsv和matrix.mtx或counts_matrix.csv/txt.gz）
 ```
 wget https://ftp.ncbi.nlm.nih.gov/geo/series/GSE144nnn/GSE144236/suppl/GSE144236%5FSCC13%5Fcounts.txt.gz
 gzip -d GSE144236_SCC13_counts.txt.gz
