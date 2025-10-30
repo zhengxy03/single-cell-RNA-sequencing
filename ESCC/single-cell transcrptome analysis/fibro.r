@@ -4,7 +4,7 @@ fibroblasts <- FindVariableFeatures(fibroblasts, nfeatures = 2000)
 hvgs <- VariableFeatures(fibroblasts)
 fibroblasts <- ScaleData(fibroblasts, features = hvgs)
 fibroblasts <- RunPCA(fibroblasts, features = hvgs, npcs = 20)
-
+library(harmony)
 fibroblasts <- RunHarmony(fibroblasts, "sample_sources")
 fibroblasts <- RunUMAP(fibroblasts, dims = 1:20, reduction = "harmony")
 fibroblasts <- FindNeighbors(fibroblasts, dims = 1:20, reduction = "harmony")
