@@ -1,4 +1,4 @@
-png("elbowplot", width = 800, height = 600)
+png("elbowplot.png", width = 800, height = 600)
 elbowplot <- ElbowPlot(merged_seurat_obj)
 print(elbowplot)
 dev.off()

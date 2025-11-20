@@ -305,3 +305,13 @@ SRX12995836,,Illumina NovaSeq 6000
 SRX12995832,,Illumina NovaSeq 6000
 EOF
 
+cat <<EOF > source.csv
+SRR9154358,,Illumina NovaSeq 6000
+SRR9154359,,Illumina NovaSeq 6000
+SRR9154360,,Illumina NovaSeq 6000
+SRR9154361,,Illumina NovaSeq 6000
+SRR9154362,,Illumina NovaSeq 6000
+SRR9154363,,Illumina NovaSeq 6000
+SRR9154364,,Illumina NovaSeq 6000
+SRR9154365,,Illumina NovaSeq 6000
+EOF
