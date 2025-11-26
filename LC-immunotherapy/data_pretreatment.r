@@ -313,6 +313,32 @@ metadata_to_add <- metadata_df[, colnames(metadata_df) != "cellid", drop = FALSE
 common_cells <- intersect(rownames(metadata_to_add), colnames(seurat_obj))
 print(paste("匹配细胞数:", length(common_cells)))
 seurat_obj <- AddMetaData(seurat_obj, metadata = metadata_to_add)
+saveRDS(seurat_obj,file="GSE179994.rds")
+#19790 features across 150849 samples within 1 assay
+filtered_samples <- read_csv("GSE179994_filtered.csv")
+matching_samples <- intersect(seurat_obj$patient, filtered_samples$Patient)
+print(paste("匹配的样本数:", length(matching_samples)))
+#8
+seurat_filtered <- subset(seurat_obj, subset = patient %in% matching_samples)
+print(seurat_filtered)
+#19790 features across 55434 samples within 1 assay
+library(dplyr)
+
+cancer_type_mapping <- setNames(filtered_samples$cancer_type, filtered_samples$Patient)
+cancer_type <- cancer_type_mapping[seurat_filtered@meta.data$patient]
+seurat_filtered@meta.data$cancer_type <- cancer_type
+
+Response_mapping <- setNames(filtered_samples$Response, filtered_samples$Patient)
+Response <- Response_mapping[seurat_filtered@meta.data$patient]
+seurat_filtered@meta.data$Response <- Response
+
+
+patients_mapping <- setNames(filtered_samples$patients, filtered_samples$Patient)
+patients <- patients_mapping[seurat_filtered@meta.data$patient]
+seurat_filtered@meta.data$patients <- patients
+
+saveRDS(seurat_filtered,file="GSE179994_pritumor.rds")
+
 
 #GSE131933
 library(data.table)

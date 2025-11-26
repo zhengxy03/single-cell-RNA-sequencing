@@ -1,5 +1,6 @@
 # difference between different response status
 use datasets GSE241934, GSE207422
+## merge
 ```
 library(Seurat)
 seurat_obj1 <- readRDS("GSE241934.rds")
@@ -62,7 +63,7 @@ merged_seurat_obj <- RunPCA(merged_seurat_obj, features = hvgs, npcs = 20)
 merged_seurat_obj <- RunHarmony(merged_seurat_obj, "orig.ident")
 saveRDS(merged_seurat_obj,file="response_pre.rds")
 ```
-# clustering and annotation
+## clustering and annotation
 ```
 png("elbowplot.png", width = 800, height = 600)
 elbowplot <- ElbowPlot(merged_seurat_obj)
@@ -128,7 +129,7 @@ markers <- FindAllMarkers(merged_seurat_obj,
 library(dplyr)
 significant_markers <- subset(markers, p_val_adj < 0.05)
 significant_markers <- significant_markers %>% group_by(cluster) %>% top_n(n = 20, wt = avg_log2FC)
-write.csv(significant_markers,"marker_top_0.5.csv")
+write.csv(significant_markers,"marker_top.csv")
 
 library(Seurat)
 library(ggplot2)
@@ -205,7 +206,7 @@ DimPlot(merged_seurat_obj, reduction = "umap", label = TRUE, pt.size = 1, group.
 dev.off()
 saveRDS(merged_seurat_obj,file="response_anno.rds")
 ```
-# celltype differnence between response and non-response
+## celltype differnence between response and non-response
 ```
 plot_data <- merged_seurat_obj
 plot_data$Response_plot <- ifelse(
@@ -382,7 +383,7 @@ ggplot(cell_proportions, aes(x = cell_type, y = proportion, fill = Response_plot
   scale_y_continuous(limits = c(0, 1))  # 设置 y 轴范围为 0 到 1
 dev.off()
 ```
-# LUAD and LUSC response difference
+## LUAD and LUSC response difference
 ```
 #LUAD
 library(Seurat)
@@ -480,3 +481,9 @@ ggplot(proportion_data, aes(x = cancer_sample, y = proportion, fill = cell_type)
   )
 
 dev.off()
+```
+## immune
+```
+immune <- subset(merged_seurat_obj,subset = cell_type %in% c("B","Macrophage","Mast","Monocyte/Macrophage","Neutrophil","pDC","Plasma","T"))
+#20645 features across 318281 samples within 1 assay
+saveRDS(immune,file="allcellsets_immune.rds")
