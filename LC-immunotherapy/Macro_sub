@@ -1,27 +1,24 @@
-# T sub_cell_type
 ```
 library(Seurat)
 library(ggplot2)
 library(dplyr)
 library(ggsci)
-merged_seurat_obj <- readRDS("TN_anno.rds")
-LUSC <- subset(merged_seurat_obj,subset=cancer_type=="LUSC")
+myeloid <- subset(LUSC,subset=cell_type %in% c("DC","Myeloid_1","Myeloid_2","Neutrophil","pDC"))
 
-t_cells <- subset(LUSC,subset=cell_type %in% c("Treg_1","Tex","Treg_2","Tn/Tm"))
-t_cells <- NormalizeData(t_cells)
-t_cells <- FindVariableFeatures(t_cells, nfeatures = 2000)
-hvgs <- VariableFeatures(t_cells)
-t_cells <- ScaleData(t_cells, features = hvgs)
-t_cells <- RunPCA(t_cells, features = hvgs, npcs = 20)
-#16227 features across 95099 samples within 1 assay
+myeloid <- NormalizeData(myeloid)
+myeloid <- FindVariableFeatures(myeloid, nfeatures = 2000)
+hvgs <- VariableFeatures(myeloid)
+myeloid <- ScaleData(myeloid, features = hvgs)
+myeloid <- RunPCA(myeloid, features = hvgs, npcs = 20)
+#16227 features across 19200 samples within 1 assay
 #only one dataset
 #library(harmony)
 #t_cells <- RunHarmony(t_cells, "orig.ident")
-t_cells <- RunUMAP(t_cells, dims = 1:20)
-t_cells <- FindNeighbors(t_cells, dims = 1:20)
-t_cells <- FindClusters(t_cells, resolution = 0.3)
+myeloid <- RunUMAP(myeloid, dims = 1:20)
+myeloid <- FindNeighbors(myeloid, dims = 1:20)
+myeloid <- FindClusters(myeloid, resolution = 0.3)
 
-seurat_clusters <- as.character(unique(t_cells@meta.data$seurat_clusters))  # 转换为字符向量
+seurat_clusters <- as.character(unique(myeloid@meta.data$seurat_clusters))  # 转换为字符向量
 num_legend_items <- length(seurat_clusters)  # 图例的个数
 max_label_length <- max(nchar(seurat_clusters))  # 图例名称的最大长度
 
@@ -35,9 +32,9 @@ label_length_factor <- 10  # 每个字符增加的宽度
 dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
 
 npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(15)
-pdf("t_clusters.pdf", width = dynamic_width/300, height = base_height/300)
-DimPlot(t_cells, reduction = "umap", label = TRUE, pt.size = 1, label.size = 8) +
+npg_extended <- colorRampPalette(npg_pal)(14)
+pdf("myeloid_clusters.pdf", width = dynamic_width/300, height = base_height/300)
+DimPlot(myeloid, reduction = "umap", label = TRUE, pt.size = 1, label.size = 8) +
     xlab("UMAP_1") +
     ylab("UMAP_2") +
     ggtitle(NULL) +
@@ -68,45 +65,81 @@ DimPlot(t_cells, reduction = "umap", label = TRUE, pt.size = 1, label.size = 8) 
     )
 dev.off()
 
-t_cell_markers <- FindAllMarkers(t_cells, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use = "wilcox")
-t_significant_markers <- subset(t_cell_markers, p_val_adj < 0.05)
-#write.csv(t_significant_markers, "t_all_marker.csv")
-t_significant_markers <- t_significant_markers %>% group_by(cluster) %>% top_n(n = 20, wt = avg_log2FC)
-write.csv(t_significant_markers, "t_top_marker_20.csv")
+myeloid_markers <- FindAllMarkers(myeloid, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use = "wilcox")
+myeloid_significant_markers <- subset(myeloid_markers, p_val_adj < 0.05)
+#write.csv(myeloid_significant_markers, "myeloid_all_marker.csv")
+myeloid_significant_markers <- myeloid_significant_markers %>% group_by(cluster) %>% top_n(n = 20, wt = avg_log2FC)
+write.csv(myeloid_significant_markers, "myeloid_top_marker_20_filter.csv")
 
-identity_mapping <- c(
-  "0" = "CD4T_Tn/Tm_TCF7",
-  "1" = "T_Tn/Tm_ANXA1",
-  "2" = "CD8T_Trm_ITGAE",
-  "3" = "CD8T_Tem_GZMK",
-  "4" = "CD8T_Tem/Trm_IFNG", 
-  "5" = "CD4T_Treg_FOXP3",
-  "6" = "CD4T_Tn/Tm_BRAF",
-  "7" = "CD4T_Tfh_CXCL13",
-  "8" = "T_Tn/Tm_RELB",
-  "9" = "CD8T_Tem_NR4A3",
-  "10" = "CD4T_Tn/Tm_CCR7",
-  "11" = "T_Tex/Tfh_LAG3",
-  "12" = "CD8T_Tem_GZMK",
-  "13"= "ILC3_KIT",
-  "14" = "CD8T_Tex_HAVCR2"
-)
-
-cell_type <- identity_mapping[t_cells@meta.data$seurat_clusters]
-t_cells@meta.data$cell_type <- cell_type
-saveRDS(t_cells,file="t_cells_anno.rds")
 
 library(ggplot2)
-target_genes <- c("CD3","CD4", "CD8A", "CD8B")
-feature_plot <- FeaturePlot(t_cells, features = target_genes)
-ggsave("t_cells_featureplot.png", plot = feature_plot, width = 6 , height = 8, dpi = 300)
+target_genes <- c("CD1C","CLEC9A","ZBTB46")
+feature_plot <- FeaturePlot(myeloid, features = target_genes)
+ggsave("myeloid_featureplot.png", plot = feature_plot, width = 6 , height = 8, dpi = 300)
 
+
+myeloid_filter <- subset(myeloid,subset=seurat_clusters %in% c(0,1,2,3,4,6,8,9,10,11,12,13))
+myeloid <- NormalizeData(myeloid)
+myeloid <- FindVariableFeatures(myeloid, nfeatures = 2000)
+hvgs <- VariableFeatures(myeloid)
+myeloid <- ScaleData(myeloid, features = hvgs)
+myeloid <- RunPCA(myeloid, features = hvgs, npcs = 20)
+#16227 features across 16636 samples within 1 assa
+#only one dataset
+#library(harmony)
+#t_cells <- RunHarmony(t_cells, "orig.ident")
+myeloid <- RunUMAP(myeloid, dims = 1:20)
+myeloid <- FindNeighbors(myeloid, dims = 1:20)
+myeloid <- FindClusters(myeloid, resolution = 0.3)
+
+
+identity_mapping <- c(
+  "0" = "DC_cDC2_CD1C",
+  "1" = "Macro_Lipid-TAM_APOE",
+  "2" = "Macro_Inflam-TAM_VCAN",
+  "3" = "Macro_Repair-TAM_SERPINB2",
+  "4" = "Macro_Inva-TAM_SNAI1",
+  "5" = "Macro_Reg-TAM_TMEM176A",
+  "6" = "Neu_FCGR3B",
+  "7" = "DC_cDC2_CCR7",
+  "8" = "DC_cDC1_CLEC9A",
+  "9" = "DC_pDC_LILRA4",
+  "10" = "Macro_Metab-TAM_FABP4", 
+  "11" = "DC_mDC_LAMP3",
+  "12" = "Macro_Prolif-TAM_MKI67",
+  "13" = "Macro_IFN-TAM_CXCL9"
+)
+
+cell_type <- identity_mapping[myeloid@meta.data$seurat_clusters]
+myeloid@meta.data$cell_type <- cell_type
+
+identity_mapping <- c(
+  "0" = "DC",
+  "1" = "Macro",
+  "2" = "Macro",
+  "3" = "Macro",
+  "4" = "Macro",
+  "5" = "Macro",
+  "6" = "Neu",
+  "7" = "DC",
+  "8" = "DC",
+  "9" = "DC",
+  "10" = "Macro", 
+  "11" = "DC",
+  "12" = "Macro",
+  "13" = "Macro"
+)
+
+major_cell <- identity_mapping[myeloid@meta.data$seurat_clusters]
+myeloid@meta.data$major_cell <- major_cell
+
+saveRDS(myeloid,file="myeloid_anno.rds")
 
 library(ggsci)
 npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(15)
+npg_extended <- colorRampPalette(npg_pal)(14)
 # 获取唯一的细胞类型并转换为字符向量
-cell_types <- as.character(unique(t_cells@meta.data$cell_type))
+cell_types <- as.character(unique(myeloid@meta.data$cell_type))
 
 num_legend_items <- length(cell_types)  # 图例的个数
 max_label_length <- max(nchar(cell_types))  # 图例名称的最大长度
@@ -120,8 +153,8 @@ label_length_factor <- 10  # 每个字符增加的宽度
 dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
 
 # 保存图片
-pdf("t_annotation.pdf", width = dynamic_width/300, height = base_height/300)
-DimPlot(t_cells, reduction = "umap", label = TRUE, pt.size = 1, label.size = 6, group.by = "cell_type") +
+pdf("myeloid_annotation.pdf", width = dynamic_width/300, height = base_height/300)
+DimPlot(myeloid, reduction = "umap", label = TRUE, pt.size = 1, label.size = 6, group.by = "cell_type") +
     xlab("UMAP_1") +
     ylab("UMAP_2") +
     ggtitle(NULL) +
@@ -149,25 +182,24 @@ DimPlot(t_cells, reduction = "umap", label = TRUE, pt.size = 1, label.size = 6, 
         axis.line.y = element_line(color = "black", linewidth = 0.5),
         aspect.ratio = 1,
         plot.margin = margin(10, 50, 10, 10)
-    ) +scale_x_continuous(limits = c(-10.5,10))
+    ) +scale_x_continuous(limits = c(-20,20))
 dev.off()
 ```
-# group difference
+#group 
 ```
-#分布图
 library(Seurat)
 library(ggplot2)
 library(ggsci)
 library(dplyr)
-plot_data <- t_cells
+plot_data <- myeloid
 
 plot_data$group_response <- paste(plot_data$Group, plot_data$Response, sep = "_")
 plot_data$group_response <- factor(plot_data$group_response,
                                   levels = c("Group1_YES", "Group1_NO",
                                             "Group2_YES", "Group2_NO"))
 npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(15)
-pdf("t_combined_annotation_by_group_response.pdf", width = 12000/300, height = 3000/300)
+npg_extended <- colorRampPalette(npg_pal)(14)
+pdf("myeloid_combined_annotation_by_group_response.pdf", width = 4000/300, height = 3000/300)
 
 p <- DimPlot(plot_data, 
              reduction = "umap", 
@@ -176,7 +208,7 @@ p <- DimPlot(plot_data,
              group.by = "cell_type", 
              label.size = 4,
              split.by = "group_response",  
-             ncol = 4) + 
+             ncol = 2) + 
     xlab("UMAP_1") +
     ylab("UMAP_2") +
     ggtitle(NULL) +
@@ -212,117 +244,14 @@ p <- DimPlot(plot_data,
 print(p)
 dev.off()
 
-#折线图
-plot_data <- t_cells@meta.data %>%
-  group_by(Group, Response, cell_type) %>%
-  summarise(count = n()) %>%
-  ungroup() %>%
-  # 计算每个Group-Response组合内的比例
-  group_by(Group, Response) %>%
-  mutate(proportion = count / sum(count)) %>%
-  ungroup()
-
-# 设置Response因子的顺序 - YES在前，NO在后
-plot_data$Response <- factor(plot_data$Response, levels = c("YES", "NO"))
-
-# 绘制折线图 - 去掉分面标题方框
-pdf("t_group_response_lineplot.pdf", width = 8000/300, height = 4000/300)
-
-ggplot(plot_data, aes(x = Response, y = proportion, group = cell_type, color = cell_type)) +
-  geom_line(linewidth = 1.5) +
-  geom_point(size = 3) +
-  facet_wrap(~ Group, ncol = 2) +
-  labs(
-    x = "Response",
-    y = "Cell Proportion",
-    color = "Cell Type"
-  ) +
-  theme_classic() +
-  theme(
-    text = element_text(size = 12, face = "bold"),
-    axis.text.x = element_text(size = 20, color = "black", face = "bold"),
-    axis.text.y = element_text(size = 20, color = "black", face = "bold"),
-    axis.title.x = element_text(size = 24, face = "bold", color = "black", margin = margin(t = 10)),
-    axis.title.y = element_text(size = 24, face = "bold", color = "black", margin = margin(r = 20)),
-    legend.text = element_text(size = 16, face = "bold"),
-    legend.title = element_text(size = 18, face = "bold"),
-    legend.position = "right",
-    legend.key.size = unit(0.8, "cm"),
-    # 修改分面标题样式 - 去掉方框
-    strip.background = element_blank(),  # 去掉背景
-    strip.text = element_text(size = 20, face = "bold", margin = margin(b = 10)),
-    panel.grid.major.y = element_line(color = "grey90", linewidth = 0.5),
-    panel.spacing = unit(1.5, "lines")
-  ) +
-  scale_color_manual(values = npg_extended) +
-  scale_y_continuous(labels = scales::percent_format())
-
-dev.off()
-
-#柱状图
-library(tidyr)
-cell_proportions <- t_cells@meta.data %>%
-  group_by(Group, cell_type) %>%
-  summarise(count = n()) %>%
-  group_by(Group) %>%
-  mutate(proportion = count / sum(count)) %>%
-  ungroup()
-
-npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(15)
-
-all_cell_types <- unique(t_cells@meta.data$cell_type)
-cell_proportions_complete <- cell_proportions %>%
-  complete(Group, cell_type = all_cell_types, fill = list(count = 0, proportion = 0))
-
-# 绘制分面柱状图
-pdf("t_cells_group_proportion.pdf", width = 6000/300, height = 4000/300)
-
-p <- ggplot(cell_proportions_complete, aes(x = cell_type, y = proportion, fill = cell_type)) +
-  geom_col() +
-  scale_fill_manual(values = npg_extended, name = "Cell Type") +
-  scale_y_continuous(labels = scales::percent_format()) +
-  labs(x = "", y = "Proportion") +
-  theme_classic() +
-  theme(
-    # 横坐标设置
-    axis.text.x = element_blank(),
-    axis.ticks.x = element_blank(),
-    axis.line.x = element_line(color = "black", linewidth = 0.5),
-    
-    # 纵坐标设置
-    axis.text.y = element_text(size = 20, color = "black", face = "bold"),
-    axis.title.y = element_text(size = 24, face = "bold", color = "black", margin = margin(r = 20)),
-    
-    # 图例位置
-    legend.position = "top",
-    legend.direction = "horizontal",
-    legend.justification = "center",
-    legend.text = element_text(size = 16, face = "bold"),
-    legend.title = element_text(size = 18, face = "bold"),
-    legend.box = "horizontal",
-    legend.key.size = unit(0.8, "cm"),
-    
-    # 分面标题设置
-    strip.background = element_blank(),
-    strip.text = element_text(size = 20, face = "bold", vjust = 1),
-    strip.placement = "outside",
-    
-    # 其他设置
-    panel.spacing = unit(1.5, "lines")
-  ) +
-  facet_wrap(~ Group, ncol = 1, scales = "free_x")
-
-print(p)
-dev.off()
-
 #箱图
 library(ggpubr)
 library(dplyr)
 library(ggsci)
 library(tidyr)
 
-cell_counts <- t_cells@meta.data %>%
+# 统计每个样本-细胞类型-分组的细胞数
+cell_counts <- myeloid@meta.data %>%
   group_by(patients, cell_type, Group) %>%
   summarise(count = n(), .groups = "drop")
 
@@ -464,7 +393,7 @@ chisq_results$cell_type <- factor(chisq_results$cell_type, levels = celltype_alp
 # === 绘制图形 ===
 y_max <- max(plot_data$proportion, na.rm = TRUE) * 1.1
 
-pdf("t_cells_箱图_proportion_by_group.pdf", width = 6000/300, height = 3000/300)
+pdf("myeloid_箱图_proportion_by_group.pdf", width = 6000/300, height = 3000/300)
 ggplot(plot_data, aes(x = cell_type, y = proportion, fill = Group)) +
   geom_boxplot(width = 0.7) +
   geom_text(
@@ -489,118 +418,125 @@ ggplot(plot_data, aes(x = cell_type, y = proportion, fill = Group)) +
   scale_y_continuous(limits = c(0, y_max))
 dev.off()
 
-#气泡图
-# 准备数据
-cell_proportions <- t_cells@meta.data %>%
-  group_by(Group, Response, cell_type) %>%
-  summarise(count = n()) %>%
-  group_by(Group, Response) %>%
-  mutate(proportion = count / sum(count)) %>%
+#桑葚图
+sankey_data <- myeloid@meta.data %>%
+  group_by(Group, major_cell) %>%
+  summarise(cell_count = n(), .groups = 'drop') %>%
+  group_by(Group) %>%
+  mutate(total = sum(cell_count),
+         proportion = cell_count / total) %>%
   ungroup()
 
-# 设置Response的顺序 - YES在前，NO在后
-cell_proportions$Response <- factor(cell_proportions$Response, levels = c("YES", "NO"))
+# 定义major_cell的指定顺序（Macro → DC → Neu）
+major_cell_order <- c("Macro", "DC", "Neu")
+# 过滤并排序major_cell（确保只保留指定类型并按顺序排列）
+sankey_data$major_cell <- factor(sankey_data$major_cell, levels = major_cell_order)
+sankey_data <- sankey_data %>% filter(!is.na(major_cell))
 
-# 创建组合标签并设置正确的顺序
-cell_proportions <- cell_proportions %>%
-  mutate(
-    group_response = paste0(Group, "_", Response)
+# 获取颜色 - 按指定顺序匹配颜色
+npg_pal <- pal_npg()(10)
+npg_major <- npg_pal[1:length(major_cell_order)]
+
+# 垂直桑葚图：Group在上层，major_cell在下层
+pdf("myeloid_sankey_Group_major_cell_vertical.pdf", width = 5000/300, height = 3000/300)
+
+ggplot(sankey_data,
+       aes(axis1 = Group, axis2 = major_cell, 
+           y = cell_count)) +
+  # 桑基流（垂直方向）
+  geom_alluvium(aes(fill = major_cell), width = 1/12, reverse = FALSE) +
+  # 分层节点（上层Group，下层major_cell）
+  geom_stratum(width = 1/12, fill = "grey90", color = "black", reverse = FALSE) +
+  # 节点标签（水平显示）
+  geom_text(stat = "stratum", aes(label = after_stat(stratum)), 
+            size = 10, fontface = "bold", angle = 0, reverse = FALSE) +
+  # 定义层级顺序（axis1=Group在上，axis2=major_cell在下）
+  scale_x_discrete(limits = c("Group", "Major Cell Type"), 
+                   expand = c(0.1, 0.1),
+                   position = "top") +
+  # 按指定顺序设置颜色
+  scale_fill_manual(values = npg_major, name = "Major Cell Type", limits = major_cell_order) +
+  labs(title = "Cell Distribution: Group → Major Cell Type",
+       x = "") +
+  # 翻转坐标系但保持层级顺序
+  coord_flip() +
+  theme_void() +
+  theme(
+    plot.title = element_text(size = 40, face = "bold", hjust = 0.5, margin = margin(b = 30)),
+    legend.text = element_text(size = 24),
+    legend.title = element_text(size = 26),
+    legend.position = "right",
+    plot.margin = margin(50, 50, 50, 50),
+    axis.text.x = element_text(size = 28, face = "bold")
   )
 
-# 设置分组顺序
-group_response_order <- c(
-  "Group1_YES", "Group1_NO",
-  "Group2_YES", "Group2_NO"
-)
+dev.off()
 
-cell_proportions$group_response <- factor(cell_proportions$group_response, 
-                                         levels = group_response_order)
 
-# 设置颜色
+#堆叠图
+plot_data <- myeloid
+
 npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(15)
-# 绘制气泡图
-pdf("t_cells_bubble_plot.pdf", width = 8000/300, height = 4000/300)
+npg_extended <- colorRampPalette(npg_pal)(14)
+proportion_data <- plot_data@meta.data %>%
+    group_by(Group, cell_type) %>%
+    summarise(count = n()) %>%
+    mutate(proportion = count / sum(count))
 
-p <- ggplot(cell_proportions, aes(x = cell_type, y = group_response, 
-                                 size = proportion, color = cell_type)) +
-  geom_point(alpha = 0.8) +  # 使用geom_point绘制气泡
-  scale_size_continuous(name = "Proportion", 
-                       range = c(1, 10),  # 调整气泡大小范围
-                       limits = c(0, 1),
-                       breaks = c(0.2, 0.4, 0.6, 0.8),
-                       labels = scales::percent_format()) +  # 设置图例刻度
-  scale_color_manual(values = npg_extended) +
-  scale_y_discrete(limits = rev(levels(cell_proportions$group_response))) +  # 反转y轴顺序
-  labs(x = "Cell Type", y = "Group & Response", 
-       title = "T Cells Proportions Across Groups and Responses") +
+pdf("myeloid_group_stack.pdf", width = 4000/300, height = 3000/300) 
+
+ggplot(proportion_data, aes(x = Group, y = proportion, fill = cell_type)) +
+  scale_fill_manual(values = npg_extended) +
+  geom_bar(stat = "identity", position = "stack") +
+  labs(x = "", y = "Proportion", fill = "Cell Type") +
   theme_classic() +
   theme(
-    text = element_text(size = 12, face = "bold"),
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 20, face = "bold", color = "black"),
-    axis.text.y = element_text(size = 20, face = "bold", color = "black"),
-    axis.title.x = element_text(size = 24, face = "bold", color = "black", margin = margin(t = 10)),
-    axis.title.y = element_text(size = 24, face = "bold", color = "black", margin = margin(r = 20)),
-    legend.title = element_text(size = 18, face = "bold"),
-    legend.text = element_text(size = 16, face = "bold"),
-    legend.position = "right",
-    legend.key.size = unit(0.8, "cm"),
-    # 移除网格线
+    axis.text.x = element_text(size = 18, angle = 0, hjust = 1, vjust = 0.5),
+    axis.line = element_line(color = "black"),
     panel.grid.major = element_blank(),
     panel.grid.minor = element_blank(),
-    # 确保坐标轴框线显示
-    axis.line = element_line(color = "black", linewidth = 0.5),
-    panel.background = element_rect(fill = "white", color = "black", linewidth = 0.5),
-    plot.title = element_text(size = 28, face = "bold", hjust = 0.5)
-  ) +
-  guides(color = "none")  # 移除颜色图例，只保留大小图例
+    legend.text = element_text(size = 18),
+    legend.title = element_text(size = 18),
+    axis.text.y = element_text(size = 18),
+    axis.title.y = element_text(size = 18)
+  )
 
-print(p)
 dev.off()
 ```
 # response
 ```
+macro <- subset(myeloid,subset=major_cell=="Macro")
+DC <- subset(myeloid,subset=major_cell=="DC")
 #箱图
-#箱图 - Group1的Response
 library(ggpubr)
 library(dplyr)
 library(ggsci)
 library(tidyr)
-
 # 只处理Group1的数据
 current_group <- "Group1"
 
-cat("正在处理:", current_group, "\n")
-
-# 筛选Group1的数据
-cell_counts <- t_cells@meta.data %>%
+cell_counts <- macro@meta.data %>%
   filter(Group == current_group) %>%
   group_by(patients, cell_type, Response) %>%
   summarise(count = n(), .groups = "drop")
 
-# 计算每个样本的总细胞数（在Group1内）
 sample_totals <- cell_counts %>%
   group_by(patients) %>%
   summarise(total = sum(count), .groups = "drop")
 
-# 计算细胞类型比例
 cell_proportions <- cell_counts %>%
   left_join(sample_totals, by = "patients") %>%
   mutate(proportion = count / total)
 
-# === 设置Response的顺序为YES, NO ===
 cell_proportions$Response <- factor(cell_proportions$Response, levels = c("YES", "NO"))
 
-# === 找出哪个细胞类型在某个Response中缺失 ===
 celltype_response_presence <- cell_proportions %>%
   group_by(cell_type, Response) %>%
   summarise(has_data = n() > 0, .groups = "drop") %>%
   pivot_wider(names_from = Response, values_from = has_data, values_fill = FALSE)
 
-# 获取所有Response类型（按照YES, NO顺序）
 all_responses <- c("YES", "NO")
 
-# 找出在某个Response中存在但在其他Response中缺失的细胞类型
 missing_in_NO <- celltype_response_presence %>%
   filter(YES == TRUE & NO == FALSE) %>%
   pull(cell_type)
@@ -612,10 +548,8 @@ missing_in_YES <- celltype_response_presence %>%
 cat("在NO中缺失的细胞类型:", paste(missing_in_NO, collapse = ", "), "\n")
 cat("在YES中缺失的细胞类型:", paste(missing_in_YES, collapse = ", "), "\n")
 
-# === 为缺失的细胞类型添加0值 ===
-plot_data <- cell_proportions
 
-# 为NO缺失的细胞类型在NO中添加0值
+plot_data <- cell_proportions
 if (length(missing_in_NO) > 0) {
   NO_patients <- unique(cell_proportions$patients[cell_proportions$Response == "NO"])
   missing_records_NO <- expand_grid(
@@ -628,8 +562,6 @@ if (length(missing_in_NO) > 0) {
   
   plot_data <- plot_data %>% bind_rows(missing_records_NO)
 }
-
-# 为YES缺失的细胞类型在YES中添加0值
 if (length(missing_in_YES) > 0) {
   YES_patients <- unique(cell_proportions$patients[cell_proportions$Response == "YES"])
   missing_records_YES <- expand_grid(
@@ -643,19 +575,13 @@ if (length(missing_in_YES) > 0) {
   plot_data <- plot_data %>% bind_rows(missing_records_YES)
 }
 
-# === 关键修复：确保分组数量匹配 ===
 all_celltypes <- unique(plot_data$cell_type)
-
-# 确保Response顺序为YES, NO
 plot_data$Response <- factor(plot_data$Response, levels = c("YES", "NO"))
-
-# 构建完整的细胞类型-Response组合并填充0
 full_combinations <- expand_grid(
   cell_type = all_celltypes,
   Response = factor(c("YES", "NO"), levels = c("YES", "NO"))
 )
 
-# 按细胞类型和Response汇总计数
 cell_response_counts <- cell_counts %>%
   group_by(cell_type, Response) %>%
   summarise(total_count = sum(count), .groups = "drop") %>%
@@ -663,7 +589,6 @@ cell_response_counts <- cell_counts %>%
   mutate(total_count = replace(total_count, is.na(total_count), 0)) %>%
   arrange(cell_type, Response)
 
-# 计算每个Response的总细胞数（在Group1内）
 global_response_totals <- cell_counts %>%
   group_by(Response) %>%
   summarise(response_total = sum(count), .groups = "drop") %>%
@@ -671,7 +596,6 @@ global_response_totals <- cell_counts %>%
   mutate(response_total = replace(response_total, is.na(response_total), 0)) %>%
   arrange(Response)
 
-# === 修复卡方检验逻辑 - 确保顺序不影响结果 ===
 chisq_results <- cell_response_counts %>%
   group_by(cell_type) %>%
   summarise(
@@ -718,10 +642,9 @@ celltype_alphabetical <- sort(all_celltypes)
 plot_data$cell_type <- factor(plot_data$cell_type, levels = celltype_alphabetical)
 chisq_results$cell_type <- factor(chisq_results$cell_type, levels = celltype_alphabetical)
 
-# === 绘制图形 ===
 y_max <- max(plot_data$proportion, na.rm = TRUE) * 1.1
 
-pdf("t_cells_Group1_response_箱图.pdf", width = 6000/300, height = 3000/300)
+pdf("macro_Group1_response_箱图.pdf", width = 6000/300, height = 3000/300)
 ggplot(plot_data, aes(x = cell_type, y = proportion, fill = Response)) +
   geom_boxplot(width = 0.7) +
   geom_text(
@@ -746,169 +669,75 @@ ggplot(plot_data, aes(x = cell_type, y = proportion, fill = Response)) +
   scale_y_continuous(limits = c(0, y_max))
 dev.off()
 
-cat("已完成: Group1\n")
 
-#箱图 - Group2的Response
-library(ggpubr)
-library(dplyr)
-library(ggsci)
-library(tidyr)
+current_group <- "Group2"
+#同上
+pdf("macro_Group2_response_箱图.pdf", width = 6000/300, height = 3000/300)
+ggplot(plot_data, aes(x = cell_type, y = proportion, fill = Response)) +
+  geom_boxplot(width = 0.7) +
+  geom_text(
+    data = chisq_results, 
+    aes(x = cell_type, y = y_max, label = significance),
+    size = 12, 
+    inherit.aes = FALSE
+  ) +
+  labs(x = "", y = "Cell Proportion", fill = "Response") +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 20),
+    axis.text.y = element_text(size = 20),
+    axis.title.y = element_text(size = 32),
+    axis.line = element_line(color = "black"),
+    panel.grid = element_blank(),
+    legend.text = element_text(size = 36),
+    legend.title = element_text(size = 40),
+    legend.position = "right"
+  ) +
+  scale_fill_npg() +
+  scale_y_continuous(limits = c(0, y_max))
+dev.off()
 
-# 只处理Group2的数据
+#DC
+current_group <- "Group1"
+
+cell_counts <- DC@meta.data %>%
+  filter(Group == current_group) %>%
+  group_by(patients, cell_type, Response) %>%
+  summarise(count = n(), .groups = "drop")
+#同上
+pdf("DC_Group1_response_箱图.pdf", width = 6000/300, height = 3000/300)
+ggplot(plot_data, aes(x = cell_type, y = proportion, fill = Response)) +
+  geom_boxplot(width = 0.7) +
+  geom_text(
+    data = chisq_results, 
+    aes(x = cell_type, y = y_max, label = significance),
+    size = 12, 
+    inherit.aes = FALSE
+  ) +
+  labs(x = "", y = "Cell Proportion", fill = "Response") +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 20),
+    axis.text.y = element_text(size = 20),
+    axis.title.y = element_text(size = 32),
+    axis.line = element_line(color = "black"),
+    panel.grid = element_blank(),
+    legend.text = element_text(size = 36),
+    legend.title = element_text(size = 40),
+    legend.position = "right"
+  ) +
+  scale_fill_npg() +
+  scale_y_continuous(limits = c(0, y_max))
+dev.off()
+
 current_group <- "Group2"
 
-cat("正在处理:", current_group, "\n")
-
-# 筛选Group2的数据
-cell_counts <- t_cells@meta.data %>%
+cell_counts <- DC@meta.data %>%
   filter(Group == current_group) %>%
   group_by(patients, cell_type, Response) %>%
   summarise(count = n(), .groups = "drop")
 
-# 计算每个样本的总细胞数（在Group2内）
-sample_totals <- cell_counts %>%
-  group_by(patients) %>%
-  summarise(total = sum(count), .groups = "drop")
-
-# 计算细胞类型比例
-cell_proportions <- cell_counts %>%
-  left_join(sample_totals, by = "patients") %>%
-  mutate(proportion = count / total)
-
-# === 设置Response的顺序为YES, NO ===
-cell_proportions$Response <- factor(cell_proportions$Response, levels = c("YES", "NO"))
-
-# === 找出哪个细胞类型在某个Response中缺失 ===
-celltype_response_presence <- cell_proportions %>%
-  group_by(cell_type, Response) %>%
-  summarise(has_data = n() > 0, .groups = "drop") %>%
-  pivot_wider(names_from = Response, values_from = has_data, values_fill = FALSE)
-
-# 获取所有Response类型（按照YES, NO顺序）
-all_responses <- c("YES", "NO")
-
-# 找出在某个Response中存在但在其他Response中缺失的细胞类型
-missing_in_NO <- celltype_response_presence %>%
-  filter(YES == TRUE & NO == FALSE) %>%
-  pull(cell_type)
-
-missing_in_YES <- celltype_response_presence %>%
-  filter(YES == FALSE & NO == TRUE) %>%
-  pull(cell_type)
-
-cat("在NO中缺失的细胞类型:", paste(missing_in_NO, collapse = ", "), "\n")
-cat("在YES中缺失的细胞类型:", paste(missing_in_YES, collapse = ", "), "\n")
-
-# === 为缺失的细胞类型添加0值 ===
-plot_data <- cell_proportions
-
-# 为NO缺失的细胞类型在NO中添加0值
-if (length(missing_in_NO) > 0) {
-  NO_patients <- unique(cell_proportions$patients[cell_proportions$Response == "NO"])
-  missing_records_NO <- expand_grid(
-    patients = NO_patients,
-    cell_type = missing_in_NO,
-    Response = "NO"
-  ) %>%
-  left_join(sample_totals, by = "patients") %>%
-  mutate(count = 0, proportion = 0)
-  
-  plot_data <- plot_data %>% bind_rows(missing_records_NO)
-}
-
-# 为YES缺失的细胞类型在YES中添加0值
-if (length(missing_in_YES) > 0) {
-  YES_patients <- unique(cell_proportions$patients[cell_proportions$Response == "YES"])
-  missing_records_YES <- expand_grid(
-    patients = YES_patients,
-    cell_type = missing_in_YES,
-    Response = "YES"
-  ) %>%
-  left_join(sample_totals, by = "patients") %>%
-  mutate(count = 0, proportion = 0)
-  
-  plot_data <- plot_data %>% bind_rows(missing_records_YES)
-}
-
-# === 关键修复：确保分组数量匹配 ===
-all_celltypes <- unique(plot_data$cell_type)
-
-# 确保Response顺序为YES, NO
-plot_data$Response <- factor(plot_data$Response, levels = c("YES", "NO"))
-
-# 构建完整的细胞类型-Response组合并填充0
-full_combinations <- expand_grid(
-  cell_type = all_celltypes,
-  Response = factor(c("YES", "NO"), levels = c("YES", "NO"))
-)
-
-# 按细胞类型和Response汇总计数
-cell_response_counts <- cell_counts %>%
-  group_by(cell_type, Response) %>%
-  summarise(total_count = sum(count), .groups = "drop") %>%
-  right_join(full_combinations, by = c("cell_type", "Response")) %>%
-  mutate(total_count = replace(total_count, is.na(total_count), 0)) %>%
-  arrange(cell_type, Response)
-
-# 计算每个Response的总细胞数（在Group2内）
-global_response_totals <- cell_counts %>%
-  group_by(Response) %>%
-  summarise(response_total = sum(count), .groups = "drop") %>%
-  right_join(data.frame(Response = factor(c("YES", "NO"), levels = c("YES", "NO"))), by = "Response") %>%
-  mutate(response_total = replace(response_total, is.na(response_total), 0)) %>%
-  arrange(Response)
-
-# === 修复卡方检验逻辑 - 确保顺序不影响结果 ===
-chisq_results <- cell_response_counts %>%
-  group_by(cell_type) %>%
-  summarise(
-    p_value = {
-      # 明确指定YES和NO的计数，不受顺序影响
-      yes_count <- total_count[Response == "YES"]
-      no_count <- total_count[Response == "NO"]
-      yes_total <- global_response_totals$response_total[global_response_totals$Response == "YES"]
-      no_total <- global_response_totals$response_total[global_response_totals$Response == "NO"]
-      
-      if (sum(c(yes_count, no_count)) < 5) {
-        NA_real_
-      } else {
-        # 构建固定的2x2列联表
-        # 第一行：YES组的该细胞类型计数 vs 其他细胞计数
-        # 第二行：NO组的该细胞类型计数 vs 其他细胞计数
-        cont_table <- matrix(c(yes_count, yes_total - yes_count,
-                               no_count, no_total - no_count),
-                             nrow = 2, byrow = FALSE)  # 固定按行填充
-        
-        if (any(cont_table < 0) || sum(cont_table) == 0) {
-          NA_real_
-        } else if (any(cont_table < 5)) {
-          fisher.test(cont_table)$p.value
-        } else {
-          chisq.test(cont_table)$p.value
-        }
-      }
-    },
-    .groups = "drop"
-  ) %>%
-  mutate(
-    significance = case_when(
-      is.na(p_value) ~ "ns",
-      p_value < 0.001 ~ "***",
-      p_value < 0.01 ~ "**", 
-      p_value < 0.05 ~ "*",
-      TRUE ~ "ns"
-    )
-  )
-
-# === 按首字母排序 ===
-celltype_alphabetical <- sort(all_celltypes)
-plot_data$cell_type <- factor(plot_data$cell_type, levels = celltype_alphabetical)
-chisq_results$cell_type <- factor(chisq_results$cell_type, levels = celltype_alphabetical)
-
-# === 绘制图形 ===
-y_max <- max(plot_data$proportion, na.rm = TRUE) * 1.1
-
-pdf("t_cells_Group2_response_箱图.pdf", width = 6000/300, height = 3000/300)
+pdf("DC_Group2_response_箱图.pdf", width = 6000/300, height = 3000/300)
 ggplot(plot_data, aes(x = cell_type, y = proportion, fill = Response)) +
   geom_boxplot(width = 0.7) +
   geom_text(
@@ -933,79 +762,201 @@ ggplot(plot_data, aes(x = cell_type, y = proportion, fill = Response)) +
   scale_y_continuous(limits = c(0, y_max))
 dev.off()
 
-cat("已完成: Group2\n")
 
-#桑葚图
-# 准备包含细胞类型的数据
-sankey_data_celltype <- t_cells@meta.data %>%
-  group_by(Group, Response, cell_type) %>%
-  summarise(cell_count = n(), .groups = 'drop') %>%
-  group_by(Group, Response) %>%
-  mutate(total = sum(cell_count),
-         proportion = cell_count / total) %>%
-  ungroup()
-
-# 三层桑葚图
-pdf("t_cells_sankey_3layer.pdf", width = 8000/300, height = 5000/300)
-
-ggplot(sankey_data_celltype,
-       aes(axis1 = Group, axis2 = Response, axis3 = cell_type, 
-           y = cell_count)) +
-  geom_alluvium(aes(fill = cell_type), width = 1/8) +
-  geom_stratum(width = 1/8, fill = "grey", color = "black") +
-  geom_text(stat = "stratum", aes(label = after_stat(stratum)), 
-            size = 6, fontface = "bold") +
-  scale_x_discrete(limits = c("Group", "Response", "Cell Type"), 
-                   expand = c(0.05, 0.05)) +
-  scale_fill_manual(values = npg_extended) +
-  labs(title = "Cell Distribution: Group → Response → Cell Type",
-       y = "Number of Cells") +
-  theme_void() +
-  theme(
-    plot.title = element_text(size = 28, face = "bold", hjust = 0.5),
-    legend.text = element_text(size = 16),
-    legend.title = element_text(size = 18),
-    legend.position = "right"
-  )
-
-dev.off()
-
-
-library(ggalluvial)
+#柱状图
+#柱状图
+library(tidyr)
 library(dplyr)
+library(ggplot2)
 library(ggsci)
 
-# 准备包含patients的数据
-sankey_data_patients <- t_cells@meta.data %>%
-  group_by(patients, Group, Response, cell_type) %>%
-  summarise(cell_count = n(), .groups = 'drop') %>%
-  group_by(patients, Group, Response) %>%
-  mutate(total = sum(cell_count),
-         proportion = cell_count / total) %>%
+# 计算细胞比例
+cell_proportions <- macro@meta.data %>%
+  group_by(Group, Response, cell_type) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  group_by(Group, Response) %>%
+  mutate(proportion = count / sum(count)) %>%
   ungroup()
 
-# 四层桑葚图
-pdf("t_cells_sankey_4layer_patients.pdf", width = 10000/300, height = 6000/300)
+# 获取颜色
+npg_pal <- pal_npg()(10)
+npg_extended <- colorRampPalette(npg_pal)(14)
+selected_colors <- npg_extended[6:13]
+# 获取所有细胞类型
+all_cell_types <- unique(macro@meta.data$cell_type)
 
-ggplot(sankey_data_patients,
-       aes(axis1 = patients, axis2 = Group, axis3 = Response, axis4 = cell_type, 
-           y = cell_count)) +
-  geom_alluvium(aes(fill = cell_type), width = 1/12) +
-  geom_stratum(width = 1/12, fill = "grey", color = "black") +
-  geom_text(stat = "stratum", aes(label = after_stat(stratum)), 
-            size = 3, fontface = "bold") +
-  scale_x_discrete(limits = c("Patients", "Group", "Response", "Cell Type"), 
-                   expand = c(0.02, 0.02)) +
-  scale_fill_manual(values = npg_extended) +
-  labs(title = "Cell Distribution: Patients → Group → Response → Cell Type",
-       y = "Number of Cells") +
-  theme_void() +
+# 创建完整的数据（包含所有组合）
+cell_proportions_complete <- cell_proportions %>%
+  complete(Group, Response, cell_type = all_cell_types, fill = list(count = 0, proportion = 0))
+
+# 创建分面变量，按照指定顺序
+cell_proportions_complete <- cell_proportions_complete %>%
+  mutate(
+    Group_Response = paste(Group, Response, sep = "-"),
+    Group_Response = factor(Group_Response, 
+                           levels = c("Group1-YES", "Group1-NO", "Group2-YES", "Group2-NO"))
+  )
+
+# 绘制分面柱状图
+pdf("macro_group_response_proportion.pdf", width = 4000/300, height = 4000/300)
+
+p <- ggplot(cell_proportions_complete, aes(x = cell_type, y = proportion, fill = cell_type)) +
+  geom_col() +
+  scale_fill_manual(values = selected_colors, name = "Cell Type") +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(x = "", y = "Proportion") +
+  theme_classic() +
   theme(
-    plot.title = element_text(size = 24, face = "bold", hjust = 0.5),
-    legend.text = element_text(size = 12),
-    legend.title = element_text(size = 14),
-    legend.position = "right"
+    # 横坐标设置
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.line.x = element_line(color = "black", linewidth = 0.5),
+    
+    # 纵坐标设置
+    axis.text.y = element_text(size = 20, color = "black", face = "bold"),
+    axis.title.y = element_text(size = 24, face = "bold", color = "black", margin = margin(r = 20)),
+    
+    # 图例位置
+    legend.position = "top",
+    legend.direction = "horizontal",
+    legend.justification = "center",
+    legend.text = element_text(size = 16, face = "bold"),
+    legend.title = element_blank(),
+    legend.box = "horizontal",
+    legend.key.size = unit(0.8, "cm"),
+    
+    # 分面标题设置
+    strip.background = element_blank(),
+    strip.text = element_text(size = 20, face = "bold", vjust = 1),
+    strip.placement = "outside",
+    
+    # 其他设置
+    panel.spacing = unit(1.5, "lines")
+  ) +
+  facet_wrap(~ Group_Response, ncol = 2, scales = "free_x")  # 改为2列布局
+
+print(p)
+dev.off()
+
+#DC
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(ggsci)
+
+# 计算细胞比例
+cell_proportions <- DC@meta.data %>%
+  group_by(Group, Response, cell_type) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  group_by(Group, Response) %>%
+  mutate(proportion = count / sum(count)) %>%
+  ungroup()
+
+# 获取颜色
+npg_pal <- pal_npg()(10)
+npg_extended <- colorRampPalette(npg_pal)(14)
+selected_colors <- npg_extended[1:5]
+# 获取所有细胞类型
+all_cell_types <- unique(DC@meta.data$cell_type)
+
+# 创建完整的数据（包含所有组合）
+cell_proportions_complete <- cell_proportions %>%
+  complete(Group, Response, cell_type = all_cell_types, fill = list(count = 0, proportion = 0))
+
+# 创建分面变量，按照指定顺序
+cell_proportions_complete <- cell_proportions_complete %>%
+  mutate(
+    Group_Response = paste(Group, Response, sep = "-"),
+    Group_Response = factor(Group_Response, 
+                           levels = c("Group1-YES", "Group1-NO", "Group2-YES", "Group2-NO"))
+  )
+
+# 绘制分面柱状图
+pdf("DC_group_response_proportion.pdf", width = 4000/300, height = 4000/300)
+
+p <- ggplot(cell_proportions_complete, aes(x = cell_type, y = proportion, fill = cell_type)) +
+  geom_col() +
+  scale_fill_manual(values = selected_colors, name = "Cell Type") +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(x = "", y = "Proportion") +
+  theme_classic() +
+  theme(
+    # 横坐标设置
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.line.x = element_line(color = "black", linewidth = 0.5),
+    
+    # 纵坐标设置
+    axis.text.y = element_text(size = 20, color = "black", face = "bold"),
+    axis.title.y = element_text(size = 24, face = "bold", color = "black", margin = margin(r = 20)),
+    
+    # 图例位置
+    legend.position = "top",
+    legend.direction = "horizontal",
+    legend.justification = "center",
+    legend.text = element_text(size = 16, face = "bold"),
+    legend.title = element_blank(),
+    legend.box = "horizontal",
+    legend.key.size = unit(0.8, "cm"),
+    
+    # 分面标题设置
+    strip.background = element_blank(),
+    strip.text = element_text(size = 20, face = "bold", vjust = 1),
+    strip.placement = "outside",
+    
+    # 其他设置
+    panel.spacing = unit(1.5, "lines")
+  ) +
+  facet_wrap(~ Group_Response, ncol = 2, scales = "free_x")  # 改为2列布局
+
+print(p)
+dev.off()
+
+
+
+
+#韦恩图
+library(ggvenn)
+library(dplyr)
+library(ggplot2)
+
+# 获取Group1和Group2的细胞类型
+group1_celltypes <- myeloid@meta.data %>%
+  filter(Group == "Group1") %>%
+  pull(cell_type) %>%
+  unique()
+
+group2_celltypes <- myeloid@meta.data %>%
+  filter(Group == "Group2") %>%
+  pull(cell_type) %>%
+  unique()
+
+# 创建韦恩图数据
+venn_data <- list(
+  Group1 = group1_celltypes,
+  Group2 = group2_celltypes
+)
+
+# 检查数据
+cat("Group1细胞类型数量:", length(group1_celltypes), "\n")
+cat("Group2细胞类型数量:", length(group2_celltypes), "\n")
+cat("共有细胞类型数量:", length(intersect(group1_celltypes, group2_celltypes)), "\n")
+
+# 绘制韦恩图 - 修复参数
+pdf("myeloid_venn_celltype.pdf", width = 4000/300, height = 4000/300)
+ggvenn(
+  venn_data,
+  columns = names(venn_data),  # 明确指定列
+  fill_color = c("#E64B35FF", "#4DBBD5FF"),  # 保持原来的红蓝配色（这个已经是淡色调）
+  stroke_size = 1.5,
+  set_name_size = 10,
+  text_size = 8,
+  show_percentage = TRUE,
+  auto_scale = TRUE  # 添加自动缩放
+) +
+  labs(title = "Venn Diagram: Cell Types in Group1 vs Group2") +
+  theme(
+    plot.title = element_text(size = 32, face = "bold", hjust = 0.5, margin = margin(b = 20))
   )
 
 dev.off()
-```
