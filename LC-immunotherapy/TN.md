@@ -264,8 +264,12 @@ plot_data <- merged_seurat_obj
 
 plot_data$cancer_response <- paste(plot_data$cancer_type, plot_data$Response, sep = "_")
 
+plot_data$cancer_response <- factor(plot_data$cancer_response,
+                                    levels = c("LUAD_YES", "LUAD_NO", "LUSC_YES", "LUSC_NO"))
+
 npg_pal <- pal_npg()(10)
 npg_extended <- colorRampPalette(npg_pal)(15)
+
 pdf("combined_annotation_by_cancer_response.pdf", width = 12000/300, height = 3000/300)
 
 p <- DimPlot(plot_data, 
@@ -274,8 +278,8 @@ p <- DimPlot(plot_data,
              pt.size = 1, 
              group.by = "cell_type", 
              label.size = 4,
-             split.by = "cancer_response",  # 同时按癌症类型和应答分组
-             ncol = 4) +  # 改为4列：LUAD_Good, LUAD_Poor, LUSC_Good, LUSC_Poor
+             split.by = "cancer_response",  # 现在会按因子顺序分面
+             ncol = 4) +  # 4列对应4个分组
     xlab("UMAP_1") +
     ylab("UMAP_2") +
     ggtitle(NULL) +
@@ -353,68 +357,123 @@ dev.off()
 library(ggpubr)
 library(dplyr)
 library(ggsci)
+library(tidyr)
+
+
+current_cancer <- "LUAD"
 
 cell_counts <- merged_seurat_obj@meta.data %>%
-  group_by(patients, cell_type, cancer_type, Response) %>%
-  summarise(count = n()) %>%
-  ungroup()
+  filter(cancer_type == current_cancer) %>%
+  group_by(patients, cell_type, Response) %>%
+  summarise(count = n(), .groups = "drop")
 
-# 计算每个样本的总细胞数
 sample_totals <- cell_counts %>%
   group_by(patients) %>%
-  summarise(total = sum(count)) %>%
-  ungroup()
+  summarise(total = sum(count), .groups = "drop")
 
-# 计算细胞类型比例
-cell_proportions <- merged_seurat_obj@meta.data %>%
-  group_by(patients, cell_type, cancer_type, Response) %>%
-  summarise(count = n()) %>%
-  ungroup() %>%
+cell_proportions <- cell_counts %>%
   left_join(sample_totals, by = "patients") %>%
-  mutate(proportion = count / total) %>%
-  # 创建组合变量
-  mutate(cancer_response = paste0(cancer_type, "-", Response)) %>%
-  # 设置组合变量的顺序
-  mutate(cancer_response = factor(cancer_response,
-                                 levels = c("LUAD-YES", "LUAD-NO",
-                                           "LUSC-YES", "LUSC-NO")))
+  mutate(proportion = count / total)
 
-# === 修改卡方检验：比较四个癌症-应答组的比例差异 ===
-chisq_results <- cell_proportions %>%
+cell_proportions$Response <- factor(cell_proportions$Response, levels = c("YES", "NO"))
+
+celltype_response_presence <- cell_proportions %>%
+  group_by(cell_type, Response) %>%
+  summarise(has_data = n() > 0, .groups = "drop") %>%
+  pivot_wider(names_from = Response, values_from = has_data, values_fill = FALSE)
+
+all_responses <- c("YES", "NO")
+
+missing_in_NO <- celltype_response_presence %>%
+  filter(YES == TRUE & NO == FALSE) %>%
+  pull(cell_type)
+
+missing_in_YES <- celltype_response_presence %>%
+  filter(YES == FALSE & NO == TRUE) %>%
+  pull(cell_type)
+
+cat("在NO中缺失的细胞类型:", paste(missing_in_NO, collapse = ", "), "\n")
+cat("在YES中缺失的细胞类型:", paste(missing_in_YES, collapse = ", "), "\n")
+
+
+plot_data <- cell_proportions
+if (length(missing_in_NO) > 0) {
+  NO_patients <- unique(cell_proportions$patients[cell_proportions$Response == "NO"])
+  missing_records_NO <- expand_grid(
+    patients = NO_patients,
+    cell_type = missing_in_NO,
+    Response = "NO"
+  ) %>%
+  left_join(sample_totals, by = "patients") %>%
+  mutate(count = 0, proportion = 0)
+  
+  plot_data <- plot_data %>% bind_rows(missing_records_NO)
+}
+if (length(missing_in_YES) > 0) {
+  YES_patients <- unique(cell_proportions$patients[cell_proportions$Response == "YES"])
+  missing_records_YES <- expand_grid(
+    patients = YES_patients,
+    cell_type = missing_in_YES,
+    Response = "YES"
+  ) %>%
+  left_join(sample_totals, by = "patients") %>%
+  mutate(count = 0, proportion = 0)
+  
+  plot_data <- plot_data %>% bind_rows(missing_records_YES)
+}
+
+all_celltypes <- unique(plot_data$cell_type)
+plot_data$Response <- factor(plot_data$Response, levels = c("YES", "NO"))
+full_combinations <- expand_grid(
+  cell_type = all_celltypes,
+  Response = factor(c("YES", "NO"), levels = c("YES", "NO"))
+)
+
+cell_response_counts <- cell_counts %>%
+  group_by(cell_type, Response) %>%
+  summarise(total_count = sum(count), .groups = "drop") %>%
+  right_join(full_combinations, by = c("cell_type", "Response")) %>%
+  mutate(total_count = replace(total_count, is.na(total_count), 0)) %>%
+  arrange(cell_type, Response)
+
+global_response_totals <- cell_counts %>%
+  group_by(Response) %>%
+  summarise(response_total = sum(count), .groups = "drop") %>%
+  right_join(data.frame(Response = factor(c("YES", "NO"), levels = c("YES", "NO"))), by = "Response") %>%
+  mutate(response_total = replace(response_total, is.na(response_total), 0)) %>%
+  arrange(Response)
+
+chisq_results <- cell_response_counts %>%
   group_by(cell_type) %>%
   summarise(
     p_value = {
-      # 构建每个细胞类型在四个癌症-应答组中的观察值
-      obs_counts <- c(
-        sum(count[cancer_response == "LUAD-YES"]),
-        sum(count[cancer_response == "LUAD-NO"]), 
-        sum(count[cancer_response == "LUSC-YES"]),
-        sum(count[cancer_response == "LUSC-NO"])
-      )
+      # 明确指定YES和NO的计数，不受顺序影响
+      yes_count <- total_count[Response == "YES"]
+      no_count <- total_count[Response == "NO"]
+      yes_total <- global_response_totals$response_total[global_response_totals$Response == "YES"]
+      no_total <- global_response_totals$response_total[global_response_totals$Response == "NO"]
       
-      # 计算四个癌症-应答组的总细胞数（作为期望值的基础）
-      total_counts <- c(
-        sum(total[cancer_response == "LUAD-YES"]),
-        sum(total[cancer_response == "LUAD-NO"]),
-        sum(total[cancer_response == "LUSC-YES"]),
-        sum(total[cancer_response == "LUSC-NO"])
-      )
-      
-      # 如果任何组的计数为0或总计数太小，返回NA
-      if (sum(obs_counts) < 10 || any(obs_counts == 0)) {
+      if (sum(c(yes_count, no_count)) < 5) {
         NA_real_
       } else {
-        # 使用卡方检验比较观察比例与期望比例
-        # 期望值基于总细胞数的分布
-        expected_prop <- total_counts / sum(total_counts)
-        chisq.test(obs_counts, p = expected_prop)$p.value
+        # 构建固定的2x2列联表
+        # 第一行：YES组的该细胞类型计数 vs 其他细胞计数
+        # 第二行：NO组的该细胞类型计数 vs 其他细胞计数
+        cont_table <- matrix(c(yes_count, yes_total - yes_count,
+                               no_count, no_total - no_count),
+                             nrow = 2, byrow = FALSE)  # 固定按行填充
+        
+        if (any(cont_table < 0) || sum(cont_table) == 0) {
+          NA_real_
+        } else if (any(cont_table < 5)) {
+          fisher.test(cont_table)$p.value
+        } else {
+          chisq.test(cont_table)$p.value
+        }
       }
-    }
+    },
+    .groups = "drop"
   ) %>%
-  ungroup()
-
-# 添加显著性标记
-chisq_results <- chisq_results %>%
   mutate(
     significance = case_when(
       is.na(p_value) ~ "ns",
@@ -425,54 +484,42 @@ chisq_results <- chisq_results %>%
     )
   )
 
-# === 排序部分 ===
-celltype_by_proportion <- cell_proportions %>%
-  group_by(cell_type) %>%
-  summarise(mean_prop = mean(proportion)) %>%
-  arrange(desc(mean_prop)) %>%
-  pull(cell_type)
+# === 按首字母排序 ===
+celltype_alphabetical <- sort(all_celltypes)
+plot_data$cell_type <- factor(plot_data$cell_type, levels = celltype_alphabetical)
+chisq_results$cell_type <- factor(chisq_results$cell_type, levels = celltype_alphabetical)
 
-# 设置因子顺序
-cell_proportions$cell_type <- factor(cell_proportions$cell_type, 
-                                    levels = celltype_by_proportion)
+y_max <- max(plot_data$proportion, na.rm = TRUE) * 1.1
 
-if ("cell_type" %in% colnames(chisq_results)) {
-  chisq_results$cell_type <- factor(chisq_results$cell_type, 
-                                   levels = celltype_by_proportion)
-}
-
-# 绘制图形
-pdf("箱图_proportion_cancer_response.pdf", width = 6000/300, height = 3000/300)
-ggplot(cell_proportions, aes(x = cell_type, y = proportion, fill = cancer_response)) +
-  geom_boxplot() +
+pdf("LUAD_response_boxplot.pdf", width = 6000/300, height = 3000/300)
+ggplot(plot_data, aes(x = cell_type, y = proportion, fill = Response)) +
+  geom_boxplot(width = 0.7) +
   geom_text(
     data = chisq_results, 
-    aes(x = cell_type, y = max(cell_proportions$proportion, na.rm = TRUE) * 1.05, 
-        label = significance),
+    aes(x = cell_type, y = y_max, label = significance),
     size = 12, 
-    vjust = 0.5,
     inherit.aes = FALSE
   ) +
-  labs(x = "", y = "Cell Proportion", fill = "Cancer-Response") +
+  labs(x = "", y = "Cell Proportion", fill = "Response") +
   theme_classic() +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 28),
-    axis.text.y = element_text(size = 28),
-    axis.title.y = element_text(size = 40),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 20),
+    axis.text.y = element_text(size = 20),
+    axis.title.y = element_text(size = 32),
     axis.line = element_line(color = "black"),
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
+    panel.grid = element_blank(),
     legend.text = element_text(size = 36),
     legend.title = element_text(size = 40),
     legend.position = "right"
   ) +
   scale_fill_npg() +
-  scale_y_continuous(limits = c(0, 0.8))
+  scale_y_continuous(limits = c(0, y_max))
 dev.off()
+
 ```
 # LUSC 2groups difference
 ```
-LUSC <- subset(merged_seurat_obj,subset=cancer_type=="LUSC")
+LUSC <- subset(merged_seurat_obj, subset = cancer_type == "LUSC")
 library(Seurat)
 library(ggplot2)
 library(ggsci)
@@ -480,6 +527,17 @@ library(dplyr)
 plot_data <- LUSC
 
 plot_data$group_response <- paste(plot_data$Group, plot_data$Response, sep = "_")
+
+
+desired_order <- c("Group1_YES", "Group1_NO", 
+                   "Group2_YES", "Group2_NO")
+
+plot_data$group_response <- factor(plot_data$group_response,
+                                   levels = desired_order)
+
+
+print("存在的组合：")
+print(table(plot_data$group_response))
 
 npg_pal <- pal_npg()(10)
 npg_extended <- colorRampPalette(npg_pal)(15)
@@ -491,8 +549,8 @@ p <- DimPlot(plot_data,
              pt.size = 1, 
              group.by = "cell_type", 
              label.size = 4,
-             split.by = "group_response",  # 同时按癌症类型和应答分组
-             ncol = 4) + 
+             split.by = "group_response",  # 现在会按因子顺序分面
+             ncol = 4) +  # 固定4列：Group1_YES, Group1_NO, Group2_YES, Group2_NO
     xlab("UMAP_1") +
     ylab("UMAP_2") +
     ggtitle(NULL) +
@@ -544,7 +602,7 @@ proportion_data <- plot_data@meta.data %>%
                                  levels = c("Group1-YES", "Group1-NO",
                                            "Group2-YES", "Group2-NO")))
 
-pdf("LUSC_Response_group.pdf", width = 8000/300, height = 3000/300) 
+pdf("LUSC_Response_group_stacked.pdf", width = 8000/300, height = 3000/300) 
 
 ggplot(proportion_data, aes(x = group_sample, y = proportion, fill = cell_type)) +
   scale_fill_manual(values = npg_extended) +
@@ -657,7 +715,7 @@ if ("cell_type" %in% colnames(chisq_results)) {
 }
 
 # 绘制图形
-pdf("LUSC_箱图_proportion_group_response.pdf", width = 6000/300, height = 3000/300)
+pdf("LUSC_box_proportion_group_response.pdf", width = 6000/300, height = 3000/300)
 ggplot(cell_proportions, aes(x = cell_type, y = proportion, fill = group_response)) +
   geom_boxplot() +
   geom_text(
