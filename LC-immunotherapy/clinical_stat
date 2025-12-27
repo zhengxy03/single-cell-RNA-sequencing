@@ -1,0 +1,917 @@
+library(tidyverse)
+library(ggsci)
+library(ggpubr)
+
+# 读取数据
+df <- read.csv("clinical_info1.csv", stringsAsFactors = FALSE)
+
+# 数据清洗和分组
+df_clean <- df %>%
+  # 提取T分期和N分期 - 使用正确的列名
+  mutate(
+    T_stage = str_extract(Pre.treatment.TNM, "T[0-9]+[a-c]?"),
+    N_stage = str_extract(Pre.treatment.TNM, "N[0-9]+"),
+    
+    # 将T分期转换为数值以便比较
+    T_numeric = as.numeric(str_extract(T_stage, "[0-9]+")),
+    N_numeric = as.numeric(str_extract(N_stage, "[0-9]+")),
+    
+    # 创建分组：按照您的要求命名为Group1和Group2
+    TN_group = case_when(
+      T_numeric %in% c(1, 2) & N_numeric %in% c(1, 2) ~ "Group1 (T1-2 & N1-2)",
+      T_numeric %in% c(3, 4) & N_numeric == 0 ~ "Group2 (T3-4 & N0)",
+      TRUE ~ "Other"
+    ),
+    
+    # 简化病理反应为三分类
+    Response_simple = case_when(
+      Pathological.Response == "pCR" ~ "pCR",
+      Pathological.Response == "MPR" ~ "MPR",
+      TRUE ~ "non-MPR"
+    ),
+    
+    # 确保因子顺序
+    Response_simple = factor(Response_simple, 
+                             levels = c("pCR", "MPR", "non-MPR")),
+    TN_group = factor(TN_group, 
+                      levels = c("Group1 (T1-2 & N1-2)", "Group2 (T3-4 & N0)", "Other")),
+    pathology = factor(pathology, levels = c("LUAD", "LUSC"))
+  )
+
+# 检查分组结果
+cat("分组统计:\n")
+print(table(df_clean$TN_group, df_clean$pathology))
+
+# 过滤掉Other组
+df_clean_filtered <- df_clean %>%
+  filter(TN_group != "Other")
+
+# 检查过滤后数据
+cat("\n过滤后分组统计:\n")
+print(table(df_clean_filtered$TN_group, df_clean_filtered$pathology))
+
+# 计算每个分组的计数和百分比
+plot_data <- df_clean_filtered %>%
+  group_by(pathology, TN_group, Response_simple) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(pathology, TN_group) %>%
+  mutate(
+    total = sum(count),
+    percent = count / total * 100,
+    percent_label = sprintf("%.1f%%", percent)
+  ) %>%
+  ungroup()
+
+p <- ggplot(plot_data, aes(x = TN_group, y = percent, fill = Response_simple)) +
+  geom_col(width = 0.7, color = "black", size = 0.3) +
+  geom_text(aes(label = percent_label), 
+            position = position_stack(vjust = 0.5),
+            size = 3.5, color = "white", fontface = "bold") +
+  # 在每个柱子顶部添加总样本数
+  geom_text(data = plot_data %>% 
+              group_by(pathology, TN_group) %>% 
+              summarise(total = first(total), .groups = "drop"),
+            aes(x = TN_group, y = 102, label = paste("n =", total)),
+            inherit.aes = FALSE, size = 3.5, vjust = 0) +
+  facet_wrap(~ pathology, scales = "free_x", nrow = 1) +
+  
+  # 使用更美观的颜色方案
+  scale_fill_manual(
+    name = "Pathological Response",
+    values = c(
+      "pCR" = "#1B9E77",  # 深绿色
+      "MPR" = "#E6AB02",  # 金黄色
+      "non-MPR" = "#D95F02"  # 深橙色
+    ),
+    labels = c("pCR", "MPR", "non-MPR")
+  ) +
+  
+  scale_y_continuous(
+    limits = c(0, 105), 
+    breaks = seq(0, 100, 25),
+    labels = function(x) paste0(x, "%"),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
+  
+  # 直接指定横坐标标签（确保TN_group的顺序正确）
+  scale_x_discrete(
+    labels = c(
+      "Group1 (T1-2 & N1-2)" = "Group1\n(T1-2 & N1-2)",
+      "Group2 (T3-4 & N0)" = "Group2\n(T3-4 & N0)"
+    )
+  ) +
+  
+  labs(
+    x = "TNM Subgroups",
+    y = "Patient Proportion (%)"
+  ) +
+  
+  theme_classic(base_size = 12) +
+  theme(
+    axis.title = element_text(face = "bold", color = "black"),
+    axis.text.x = element_text(
+      angle = 0, 
+      hjust = 0.5, 
+      color = "black", 
+      size = 10, 
+      margin = margin(t = 5),
+      lineheight = 0.9  # 控制行间距
+    ),
+    axis.text.y = element_text(color = "black"),
+    axis.line = element_line(color = "black", linewidth = 0.5),
+    axis.ticks = element_line(color = "black"),
+    
+    # 图例设置
+    legend.position = "top",
+    legend.title = element_text(face = "bold", size = 11),
+    legend.text = element_text(size = 10),
+    legend.key.size = unit(0.5, "cm"),
+    legend.margin = margin(b = 5, t = 5),
+    
+    # 分面设置 - 移除背景和边框
+    strip.background = element_blank(),  # 移除背景
+    strip.text = element_text(face = "bold", size = 11, color = "black"),
+    
+    # 移除分面边框线（如果存在）
+    panel.border = element_blank(),
+    
+    # 网格和间距
+    panel.spacing = unit(1, "lines"),
+    plot.margin = margin(10, 10, 10, 10),
+    
+    # 整体背景
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA)
+  )
+
+print(p)
+ggsave(
+  filename = "group_response_proportion.tiff",  # 保存路径与文件名
+  plot = p,                                 # 要保存的图对象
+  device = "tiff",                          # 指定 TIFF 设备
+  width = 10,                               # 宽度（英寸，按需调整）
+  height = 6,                               # 高度（英寸，按需调整）
+  dpi = 600,                                # 分辨率，600dpi 适合论文发表
+  compression = "lzw",                      # LZW 无损压缩，减小文件体积
+  type = "cairo"                            # 用 Cairo 渲染，文字更清晰（Windows/macOS/Linux 通用）
+)
+
+#重新分组
+df_clean <- df %>%
+  mutate(
+    # 提取T分期和N分期
+    T_stage = str_extract(Pre.treatment.TNM, "T[0-9]+[a-c]?"),
+    N_stage = str_extract(Pre.treatment.TNM, "N[0-9]+"),
+    
+    # 将T分期和N分期转换为数值
+    T_numeric = as.numeric(str_extract(T_stage, "[0-9]+")),
+    N_numeric = as.numeric(str_extract(N_stage, "[0-9]+")),
+    
+    # 创建6个精细分组
+    TN_group_detail = case_when(
+      T_numeric == 1 & N_numeric == 1 ~ "T1N1",
+      T_numeric == 1 & N_numeric == 2 ~ "T1N2",
+      T_numeric == 2 & N_numeric == 1 ~ "T2N1",
+      T_numeric == 2 & N_numeric == 2 ~ "T2N2",
+      T_numeric == 3 & N_numeric == 0 ~ "T3N0",
+      T_numeric == 4 & N_numeric == 0 ~ "T4N0",
+      TRUE ~ "Other"
+    ),
+    
+    # 同时保留原来的分组用于比较
+    TN_group_simple = case_when(
+      T_numeric %in% c(1, 2) & N_numeric %in% c(1, 2) ~ "Group1 (T1-2 & N1-2)",
+      T_numeric %in% c(3, 4) & N_numeric == 0 ~ "Group2 (T3-4 & N0)",
+      TRUE ~ "Other"
+    ),
+    
+    # 简化病理反应
+    Response_simple = case_when(
+      Pathological.Response == "pCR" ~ "pCR",
+      Pathological.Response == "MPR" ~ "MPR",
+      TRUE ~ "non-MPR"
+    ),
+    
+    # 确保因子顺序
+    Response_simple = factor(Response_simple, levels = c("pCR", "MPR", "non-MPR")),
+    TN_group_detail = factor(TN_group_detail, 
+                           levels = c("T1N1", "T1N2", "T2N1", "T2N2", "T3N0", "T4N0", "Other")),
+    TN_group_simple = factor(TN_group_simple, 
+                           levels = c("Group1 (T1-2 & N1-2)", "Group2 (T3-4 & N0)", "Other")),
+    pathology = factor(pathology, levels = c("LUAD", "LUSC"))
+  )
+
+# 检查详细分组结果
+cat("=== 详细分组统计 ===\n")
+print(table(df_clean$TN_group_detail, df_clean$pathology))
+
+# 检查简化分组结果
+cat("\n=== 简化分组统计 ===\n")
+print(table(df_clean$TN_group_simple, df_clean$pathology))
+
+# 过滤掉Other组
+df_clean_filtered <- df_clean %>%
+  filter(TN_group_detail != "Other")
+
+cat("\n=== 过滤后详细分组统计 ===\n")
+print(table(df_clean_filtered$TN_group_detail, df_clean_filtered$pathology))
+
+# 计算每个详细分组的计数和百分比
+plot_data_detail <- df_clean_filtered %>%
+  group_by(pathology, TN_group_detail, Response_simple) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(pathology, TN_group_detail) %>%
+  mutate(
+    total = sum(count),
+    percent = ifelse(total > 0, count / total * 100, 0),
+    percent_label = ifelse(total > 0, sprintf("%.1f%%", percent), "0.0%")
+  ) %>%
+  ungroup()
+
+cat("\n=== 详细分组数据 ===\n")
+print(plot_data_detail)
+
+# 创建详细分组的堆叠柱状图
+p_detail <- ggplot(plot_data_detail, aes(x = TN_group_detail, y = percent, fill = Response_simple)) +
+  geom_col(width = 0.7, color = "black", size = 0.3) +
+  geom_text(aes(label = percent_label), 
+            position = position_stack(vjust = 0.5),
+            size = 3.2, color = "white", fontface = "bold") +
+  
+  # 在每个柱子顶部添加总样本数
+  geom_text(data = plot_data_detail %>% 
+              group_by(pathology, TN_group_detail) %>% 
+              summarise(total = first(total), .groups = "drop"),
+            aes(x = TN_group_detail, y = 102, label = paste("n =", total)),
+            inherit.aes = FALSE, size = 3.2, vjust = 0) +
+  
+  facet_wrap(~ pathology, scales = "free_x", nrow = 1) +
+  
+  # 颜色方案
+  scale_fill_manual(
+    name = "Pathological Response",
+    values = c(
+      "pCR" = "#1B9E77",  # 深绿色
+      "MPR" = "#E6AB02",  # 金黄色
+      "non-MPR" = "#D95F02"  # 深橙色
+    ),
+    labels = c("pCR", "MPR", "non-MPR")
+  ) +
+  
+  scale_y_continuous(
+    limits = c(0, 105), 
+    breaks = seq(0, 100, 25),
+    labels = function(x) paste0(x, "%"),
+    expand = expansion(mult = c(0, 0.05))
+  ) +  
+  labs(
+    x = "TNM Subgroups",
+    y = "Patient Proportion (%)"
+  ) +
+  
+  theme_classic(base_size = 11) +  # 稍微减小基础字号以适应更多分组
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 13),
+    axis.title = element_text(face = "bold", color = "black"),
+    axis.text.x = element_text(
+      angle = 0, 
+      hjust = 0.5, 
+      color = "black", 
+      size = 9,
+      lineheight = 0.8
+    ),
+    axis.text.y = element_text(color = "black"),
+    axis.line = element_line(color = "black", linewidth = 0.5),
+    axis.ticks = element_line(color = "black"),
+    
+    # 图例设置
+    legend.position = "top",
+    legend.title = element_text(face = "bold", size = 10),
+    legend.text = element_text(size = 9),
+    legend.key.size = unit(0.4, "cm"),
+    legend.margin = margin(b = 3, t = 3),
+    
+    # 分面设置
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold", size = 10, color = "black"),
+    
+    # 网格和间距
+    panel.spacing = unit(0.8, "lines"),
+    plot.margin = margin(8, 8, 8, 8),
+    
+    # 整体背景
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA)
+  )
+
+print(p_detail)
+
+#2-4分组临床分期
+# 重新分组：将TNM分期转换为临床分期
+df_clean <- df %>%
+  mutate(
+    # 提取T分期和N分期
+    T_stage = str_extract(Pre.treatment.TNM, "T[0-9]+[a-c]?"),
+    N_stage = str_extract(Pre.treatment.TNM, "N[0-9]+"),
+    
+    # 将T分期和N分期转换为数值
+    T_numeric = as.numeric(str_extract(T_stage, "[0-9]+")),
+    N_numeric = as.numeric(str_extract(N_stage, "[0-9]+")),
+    
+    # 创建临床分期分组（根据NSCLC分期指南）
+    Clinical_stage = case_when(
+      # T1N1为IIA期
+      T_numeric == 1 & N_numeric == 1 ~ "IIA",
+      # T1N2为IIB期
+      T_numeric == 1 & N_numeric == 2 ~ "IIB",
+      # T2N1为IIB期
+      T_numeric == 2 & N_numeric == 1 ~ "IIB",
+      # T2N2为IIIA期
+      T_numeric == 2 & N_numeric == 2 ~ "IIIA",
+      # T3N0为IIB期
+      T_numeric == 3 & N_numeric == 0 ~ "IIB",
+      # T4N0为IIIA期
+      T_numeric == 4 & N_numeric == 0 ~ "IIIA",
+      TRUE ~ "Other"
+    ),
+    
+    # 同时保留TNM详细分期用于参考
+    TN_group_detail = case_when(
+      T_numeric == 1 & N_numeric == 1 ~ "T1N1",
+      T_numeric == 1 & N_numeric == 2 ~ "T1N2",
+      T_numeric == 2 & N_numeric == 1 ~ "T2N1",
+      T_numeric == 2 & N_numeric == 2 ~ "T2N2",
+      T_numeric == 3 & N_numeric == 0 ~ "T3N0",
+      T_numeric == 4 & N_numeric == 0 ~ "T4N0",
+      TRUE ~ "Other"
+    ),
+    
+    # 简化病理反应
+    Response_simple = case_when(
+      Pathological.Response == "pCR" ~ "pCR",
+      Pathological.Response == "MPR" ~ "MPR",
+      TRUE ~ "non-MPR"
+    ),
+    
+    # 确保因子顺序（按临床分期顺序）
+    Clinical_stage = factor(Clinical_stage, 
+                           levels = c("IIA", "IIB", "IIIA", "Other")),
+    TN_group_detail = factor(TN_group_detail,
+                           levels = c("T1N1", "T1N2", "T2N1", "T2N2", "T3N0", "T4N0", "Other")),
+    Response_simple = factor(Response_simple, levels = c("pCR", "MPR", "non-MPR")),
+    pathology = factor(pathology, levels = c("LUAD", "LUSC"))
+  )
+
+# 检查临床分期分组结果
+cat("=== 临床分期分组统计 ===\n")
+print(table(df_clean$Clinical_stage, df_clean$pathology))
+
+# 检查详细TNM分期
+cat("\n=== 详细TNM分期统计 ===\n")
+print(table(df_clean$TN_group_detail, df_clean$pathology))
+
+# 过滤掉Other组
+df_clean_filtered <- df_clean %>%
+  filter(Clinical_stage != "Other")
+
+cat("\n=== 过滤后临床分期统计 ===\n")
+print(table(df_clean_filtered$Clinical_stage, df_clean_filtered$pathology))
+
+# 创建映射表：临床分期 -> 包含的TNM分期
+stage_mapping <- df_clean_filtered %>%
+  distinct(Clinical_stage, TN_group_detail) %>%
+  arrange(Clinical_stage, TN_group_detail)
+
+cat("\n=== 临床分期与TNM分期映射 ===\n")
+print(stage_mapping)
+
+# 计算每个临床分期的计数和百分比
+plot_data_clinical <- df_clean_filtered %>%
+  group_by(pathology, Clinical_stage, Response_simple) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(pathology, Clinical_stage) %>%
+  mutate(
+    total = sum(count),
+    percent = ifelse(total > 0, count / total * 100, 0),
+    percent_label = ifelse(total > 0, sprintf("%.1f%%", percent), "0.0%")
+  ) %>%
+  ungroup()
+
+cat("\n=== 临床分期数据 ===\n")
+print(plot_data_clinical)
+
+# 为每个临床分期添加包含的TNM分期信息
+stage_info <- df_clean_filtered %>%
+  group_by(pathology, Clinical_stage, TN_group_detail) %>%
+  summarise(tnm_count = n(), .groups = "drop") %>%
+  group_by(pathology, Clinical_stage) %>%
+  summarise(
+    tnm_composition = paste0(
+      "(", 
+      paste(sprintf("%s(n=%d)", TN_group_detail, tnm_count), collapse = ", "), 
+      ")"
+    ),
+    .groups = "drop"
+  )
+
+# 合并到绘图数据
+plot_data_clinical <- plot_data_clinical %>%
+  left_join(stage_info, by = c("pathology", "Clinical_stage"))
+
+# 创建临床分期的堆叠柱状图
+p_clinical <- ggplot(plot_data_clinical, aes(x = Clinical_stage, y = percent, fill = Response_simple)) +
+  geom_col(width = 0.7, color = "black", size = 0.3) +
+  geom_text(aes(label = percent_label), 
+            position = position_stack(vjust = 0.5),
+            size = 3.5, color = "white", fontface = "bold") +
+  
+  # 在每个柱子顶部添加总样本数和TNM组成
+  geom_text(data = plot_data_clinical %>% 
+              group_by(pathology, Clinical_stage) %>% 
+              summarise(total = first(total), 
+                       tnm_composition = first(tnm_composition), 
+                       .groups = "drop"),
+            aes(x = Clinical_stage, y = 102, 
+                label = paste("n =", total, "\n", tnm_composition)),
+            inherit.aes = FALSE, size = 3, vjust = 0, lineheight = 0.9) +
+  
+  facet_wrap(~ pathology, scales = "free_x", nrow = 1) +
+  
+  # 颜色方案
+  scale_fill_manual(
+    name = "Pathological Response",
+    values = c(
+      "pCR" = "#1B9E77",  # 深绿色
+      "MPR" = "#E6AB02",  # 金黄色
+      "non-MPR" = "#D95F02"  # 深橙色
+    ),
+    labels = c("pCR", "MPR", "non-MPR")
+  ) +
+  
+  scale_y_continuous(
+    limits = c(0, 112),  # 增加上限以容纳额外信息
+    breaks = seq(0, 100, 25),
+    labels = function(x) paste0(x, "%"),
+    expand = expansion(mult = c(0, 0))
+  ) +
+  
+  labs(
+    title = "Pathological Response by Clinical Stage",
+    subtitle = "NSCLC Staging: IIA, IIB, IIIA",
+    x = "Clinical Stage (NSCLC)",
+    y = "Patient Proportion (%)"
+  ) +
+  
+  theme_classic(base_size = 12) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    plot.subtitle = element_text(hjust = 0.5, size = 11, color = "gray40"),
+    axis.title = element_text(face = "bold", color = "black"),
+    axis.text.x = element_text(
+      angle = 0, 
+      hjust = 0.5, 
+      color = "black", 
+      size = 11,
+      face = "bold"
+    ),
+    axis.text.y = element_text(color = "black"),
+    axis.line = element_line(color = "black", linewidth = 0.5),
+    axis.ticks = element_line(color = "black"),
+    
+    # 图例设置
+    legend.position = "top",
+    legend.title = element_text(face = "bold", size = 11),
+    legend.text = element_text(size = 10),
+    legend.key.size = unit(0.5, "cm"),
+    legend.margin = margin(b = 5, t = 5),
+    
+    # 分面设置
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold", size = 11, color = "black"),
+    
+    # 网格和间距
+    panel.spacing = unit(1, "lines"),
+    plot.margin = margin(10, 10, 10, 10),
+    
+    # 整体背景
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA)
+  )
+
+print(p_clinical)
+
+df <- read.csv("clinical_info.csv", stringsAsFactors = FALSE)
+#再根据转移 
+df_clean <- df %>%
+  mutate(
+    # 提取T分期和N分期 - 需要提取T分期中的字母后缀（如T2b）
+    T_stage = str_extract(Pre.treatment.TNM, "T[0-9]+[a-c]?"),
+    N_stage = str_extract(Pre.treatment.TNM, "N[0-9]+"),
+    
+    # 提取T分期的数值部分和字母后缀
+    T_numeric = as.numeric(str_extract(T_stage, "[0-9]+")),
+    T_suffix = str_extract(T_stage, "[a-c]$"),  # 提取a,b,c后缀
+    N_numeric = as.numeric(str_extract(N_stage, "[0-9]+")),
+    
+    # 判断淋巴结转移状态
+    Lymph_node_status = case_when(
+      N_numeric == 0 ~ "nLNM",    # 无淋巴结转移
+      N_numeric %in% c(1, 2) ~ "LNM",  # 有淋巴结转移
+      TRUE ~ "Unknown"
+    ),
+    
+    # 创建详细分组：临床分期 + 淋巴结状态
+    Clinical_stage_detail = case_when(
+      # T1N1为IIA期 - 有淋巴结转移
+      T_numeric == 1 & N_numeric == 1 ~ "IIA-LNM",
+      # T2bN0为IIA期 - 无淋巴结转移（新添加）
+      T_numeric == 2 & !is.na(T_suffix) & T_suffix == "b" & N_numeric == 0 ~ "IIA-nLNM",
+      # T1N2为IIB期 - 有淋巴结转移
+      T_numeric == 1 & N_numeric == 2 ~ "IIIA-LNM",
+      # T2N1为IIB期 - 有淋巴结转移
+      T_numeric == 2 & N_numeric == 1 ~ "IIB-LNM",
+      # T2N2为IIIA期 - 有淋巴结转移
+      T_numeric == 2 & N_numeric == 2 ~ "IIIA-LNM",
+      # T3N0为IIB期 - 无淋巴结转移
+      T_numeric == 3 & N_numeric == 0 ~ "IIB-nLNM",
+      # T4N0为IIIA期 - 无淋巴结转移
+      T_numeric == 4 & N_numeric == 0 ~ "IIIA-nLNM",
+      TRUE ~ "Other"
+    ),
+    
+    # 创建简化分组：仅临床分期
+    Clinical_stage_simple = case_when(
+      T_numeric == 1 & N_numeric == 1 ~ "IIA",
+      T_numeric == 2 & !is.na(T_suffix) & T_suffix == "b" & N_numeric == 0 ~ "IIA",
+      T_numeric == 1 & N_numeric == 2 ~ "IIIA",
+      T_numeric == 2 & N_numeric == 1 ~ "IIB",
+      T_numeric == 2 & N_numeric == 2 ~ "IIIA",
+      T_numeric == 3 & N_numeric == 0 ~ "IIB",
+      T_numeric == 4 & N_numeric == 0 ~ "IIIA",
+      TRUE ~ "Other"
+    ),
+    
+    # 保留TNM详细分期
+    TN_group_detail = case_when(
+      T_numeric == 1 & N_numeric == 1 ~ "T1N1",
+      T_numeric == 2 & !is.na(T_suffix) & T_suffix == "b" & N_numeric == 0 ~ "T2bN0",
+      T_numeric == 1 & N_numeric == 2 ~ "T1N2",
+      T_numeric == 2 & N_numeric == 1 ~ "T2N1",
+      T_numeric == 2 & N_numeric == 2 ~ "T2N2",
+      T_numeric == 3 & N_numeric == 0 ~ "T3N0",
+      T_numeric == 4 & N_numeric == 0 ~ "T4N0",
+      TRUE ~ "Other"
+    ),
+    
+    # 简化病理反应
+    Response_simple = case_when(
+      Pathological.Response == "pCR" ~ "pCR",
+      Pathological.Response == "MPR" ~ "MPR",
+      TRUE ~ "non-MPR"
+    ),
+    
+    # 确保因子顺序
+    Clinical_stage_detail = factor(Clinical_stage_detail, 
+                                  levels = c("IIA-LNM", "IIA-nLNM", "IIB-LNM", "IIB-nLNM", 
+                                            "IIIA-LNM", "IIIA-nLNM", "Other")),
+    Clinical_stage_simple = factor(Clinical_stage_simple,
+                                  levels = c("IIA", "IIB", "IIIA", "Other")),
+    Lymph_node_status = factor(Lymph_node_status,
+                              levels = c("LNM", "nLNM", "Unknown")),
+    TN_group_detail = factor(TN_group_detail,
+                            levels = c("T1N1", "T2bN0", "T1N2", "T2N1", "T2N2", "T3N0", "T4N0", "Other")),
+    Response_simple = factor(Response_simple, levels = c("pCR", "MPR", "non-MPR")),
+    pathology = factor(pathology, levels = c("LUAD", "LUSC"))
+  )
+
+# 检查详细分组结果
+cat("=== 临床分期+淋巴结状态分组统计 ===\n")
+print(table(df_clean$Clinical_stage_detail, df_clean$pathology))
+
+# 检查淋巴结状态分布
+cat("\n=== 淋巴结转移状态统计 ===\n")
+print(table(df_clean$Lymph_node_status, df_clean$pathology))
+
+# 检查简化临床分期
+cat("\n=== 简化临床分期统计 ===\n")
+print(table(df_clean$Clinical_stage_simple, df_clean$pathology))
+
+# 过滤掉Other组
+df_clean_filtered <- df_clean %>%
+  filter(Clinical_stage_detail != "Other")
+
+cat("\n=== 过滤后详细分组统计 ===\n")
+print(table(df_clean_filtered$Clinical_stage_detail, df_clean_filtered$pathology))
+
+# 创建映射表
+stage_mapping <- df_clean_filtered %>%
+  distinct(Clinical_stage_detail, Clinical_stage_simple, 
+           TN_group_detail, Lymph_node_status) %>%
+  arrange(Clinical_stage_detail)
+
+cat("\n=== 分组映射关系 ===\n")
+print(stage_mapping)
+
+# 计算每个详细分组的计数和百分比
+plot_data_detail <- df_clean_filtered %>%
+  group_by(pathology, Clinical_stage_detail, Response_simple) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(pathology, Clinical_stage_detail) %>%
+  mutate(
+    total = sum(count),
+    percent = ifelse(total > 0, count / total * 100, 0),
+    percent_label = ifelse(total > 0, sprintf("%.1f%%", percent), "0.0%")
+  ) %>%
+  ungroup()
+
+# 添加分组信息
+plot_data_detail <- plot_data_detail %>%
+  left_join(
+    df_clean_filtered %>%
+      distinct(Clinical_stage_detail, Clinical_stage_simple, Lymph_node_status),
+    by = "Clinical_stage_detail"
+  ) %>%
+  mutate(
+    # 创建显示标签
+    stage_display = paste0(Clinical_stage_simple, "\n(", 
+                          ifelse(Lymph_node_status == "LNM", "LN+", "LN-"), ")")
+  )
+
+cat("\n=== 详细分组数据 ===\n")
+print(plot_data_detail)
+
+# 创建堆叠柱状图（按详细分组）
+p_detail <- ggplot(plot_data_detail, aes(x = Clinical_stage_detail, y = percent, fill = Response_simple)) +
+  geom_col(width = 0.7, color = "black", size = 0.3) +
+  geom_text(aes(label = percent_label), 
+            position = position_stack(vjust = 0.5),
+            size = 3.5, color = "white", fontface = "bold") +
+  
+  # 在每个柱子顶部添加总样本数
+  geom_text(data = plot_data_detail %>% 
+              group_by(pathology, Clinical_stage_detail) %>% 
+              summarise(total = first(total), .groups = "drop"),
+            aes(x = Clinical_stage_detail, y = 102, label = paste("n =", total)),
+            inherit.aes = FALSE, size = 3.2, vjust = 0) +
+  
+  facet_wrap(~ pathology, scales = "free_x", nrow = 1) +
+  
+  # 颜色方案
+  scale_fill_manual(
+    name = "Pathological Response",
+    values = c(
+      "pCR" = "#1B9E77",  # 深绿色
+      "MPR" = "#E6AB02",  # 金黄色
+      "non-MPR" = "#D95F02"  # 深橙色
+    ),
+    labels = c("pCR", "MPR", "non-MPR")
+  ) +
+  
+    scale_x_discrete(
+        labels = function(x) {
+        sapply(x, function(label) {
+      # 根据标签中的"-LNM"或"-nLNM"来区分淋巴结状态
+            if(grepl("-LNM$", label) && !grepl("-nLNM$", label)) {
+        # 有淋巴结转移（LNM）
+                stage <- gsub("-LNM", "", label)
+                paste0(stage, "\n(LN+)")
+            } else if(grepl("-nLNM$", label)) {
+        # 无淋巴结转移（nLNM）
+                stage <- gsub("-nLNM", "", label)
+                paste0(stage, "\n(LN-)")
+            } else {
+        # 其他情况，直接显示
+                label
+            }
+            })
+        }
+    ) +
+  
+  scale_y_continuous(
+    limits = c(0, 105), 
+    breaks = seq(0, 100, 25),
+    labels = function(x) paste0(x, "%"),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
+  
+  labs(
+    x = "Clinical Stage (LN Status)",
+    y = "Patient Proportion (%)"
+  ) +
+  
+  theme_classic(base_size = 12) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    plot.subtitle = element_text(hjust = 0.5, size = 11, color = "gray40"),
+    axis.title = element_text(face = "bold", color = "black"),
+    axis.text.x = element_text(
+      angle = 0, 
+      hjust = 0.5, 
+      color = "black", 
+      size = 10,
+      lineheight = 0.9
+    ),
+    axis.text.y = element_text(color = "black"),
+    axis.line = element_line(color = "black", linewidth = 0.5),
+    axis.ticks = element_line(color = "black"),
+    
+    # 图例设置
+    legend.position = "top",
+    legend.title = element_text(face = "bold", size = 11),
+    legend.text = element_text(size = 10),
+    legend.key.size = unit(0.5, "cm"),
+    legend.margin = margin(b = 5, t = 5),
+    
+    # 分面设置
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold", size = 11, color = "black"),
+    
+    # 网格和间距
+    panel.spacing = unit(1, "lines"),
+    plot.margin = margin(10, 10, 10, 10),
+    
+    # 整体背景
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA)
+  )
+
+print(p_detail)
+
+#直接赋值
+library(tidyverse)
+
+# 读取数据并清洗
+df <- read.csv("clinical_info4.csv", stringsAsFactors = FALSE)
+df_clean <- df %>%
+  mutate(
+    # 提取 N 分期（只用于 LN 状态）
+    N_stage = str_extract(Pre.treatment.TNM, "N[0-9]+"),
+    N_numeric = as.numeric(str_extract(N_stage, "[0-9]+")),
+    
+    # LN 状态
+    Lymph_node_status = case_when(
+      N_numeric == 0 ~ "nLNM",
+      N_numeric %in% c(1, 2, 3) ~ "LNM",
+      TRUE ~ "Unknown"
+    ),
+    
+    # 直接用已有临床分期
+    Clinical_stage_simple = Pre.treatment.Staging,
+    
+    # 病理反应
+    Response_simple = case_when(
+      Pathological.Response == "pCR" ~ "pCR",
+      Pathological.Response == "MPR" ~ "MPR",
+      TRUE ~ "non-MPR"
+    ),
+    
+    # 因子顺序（只定义，不筛选）
+    Clinical_stage_simple = factor(
+      Clinical_stage_simple,
+      levels = c("IIA", "IIB", "IIIA")
+    ),
+    
+    Lymph_node_status = factor(
+      Lymph_node_status,
+      levels = c("LNM", "nLNM", "Unknown")
+    ),
+    
+    Response_simple = factor(
+      Response_simple,
+      levels = c("pCR", "MPR", "non-MPR")
+    ),
+    
+    pathology = factor(pathology, levels = c("LUAD", "LUSC"))
+  )
+
+df_clean_filtered <- df_clean %>%
+  filter(
+    Clinical_stage_simple %in% c("IIA", "IIB", "IIIA"),
+    Lymph_node_status != "Unknown"
+  ) %>%
+  mutate(
+    Clinical_stage_detail = paste0(
+      Clinical_stage_simple, "-",
+      ifelse(Lymph_node_status == "LNM", "LNM", "nLNM")
+    ),
+    
+    # 核心修改：调整因子水平顺序，LN+（LNM）在前，LN-（nLNM）在后
+    Clinical_stage_detail = factor(
+      Clinical_stage_detail,
+      levels = c(
+        "IIA-LNM", "IIA-nLNM",  # IIA 先LN+ 后LN-
+        "IIB-LNM", "IIB-nLNM",  # IIB 先LN+ 后LN-
+        "IIIA-LNM", "IIIA-nLNM" # IIIA 先LN+ 后LN-
+      )
+    )
+  )
+
+# 统计绘图数据
+plot_data_detail <- df_clean_filtered %>%
+  group_by(pathology, Clinical_stage_detail, Response_simple) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(pathology, Clinical_stage_detail) %>%
+  mutate(
+    total = sum(count),
+    percent = count / total * 100,
+    percent_label = sprintf("%.1f%%", percent)
+  ) %>%
+  ungroup()
+
+# 绘制图形
+p_detail <- ggplot(plot_data_detail, aes(x = Clinical_stage_detail, y = percent, fill = Response_simple)) +
+  geom_col(width = 0.7, color = "black", size = 0.3) +
+  geom_text(aes(label = percent_label), 
+            position = position_stack(vjust = 0.5),
+            size = 3.5, color = "white", fontface = "bold") +
+  
+  # 在每个柱子顶部添加总样本数
+  geom_text(data = plot_data_detail %>% 
+              group_by(pathology, Clinical_stage_detail) %>% 
+              summarise(total = first(total), .groups = "drop"),
+            aes(x = Clinical_stage_detail, y = 102, label = paste("n =", total)),
+            inherit.aes = FALSE, size = 3.2, vjust = 0) +
+  
+  facet_wrap(~ pathology, scales = "free_x", nrow = 1) +
+  
+  # 颜色方案
+  scale_fill_manual(
+    name = "Pathological Response",
+    values = c(
+      "pCR" = "#1B9E77",  # 深绿色
+      "MPR" = "#E6AB02",  # 金黄色
+      "non-MPR" = "#D95F02"  # 深橙色
+    ),
+    labels = c("pCR", "MPR", "non-MPR")
+  ) +
+  
+  scale_x_discrete(
+    labels = function(x) {
+      sapply(x, function(label) {
+        # 根据标签中的"-LNM"或"-nLNM"来区分淋巴结状态
+        if(grepl("-LNM$", label) && !grepl("-nLNM$", label)) {
+          # 有淋巴结转移（LNM）
+          stage <- gsub("-LNM", "", label)
+          paste0(stage, "\n(LN+)")
+        } else if(grepl("-nLNM$", label)) {
+          # 无淋巴结转移（nLNM）
+          stage <- gsub("-nLNM", "", label)
+          paste0(stage, "\n(LN-)")
+        } else {
+          # 其他情况，直接显示
+          label
+        }
+      })
+    }
+  ) +
+  
+  scale_y_continuous(
+    limits = c(0, 105), 
+    breaks = seq(0, 100, 25),
+    labels = function(x) paste0(x, "%"),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
+  
+  labs(
+    x = "Clinical Stage (LN Status)",
+    y = "Patient Proportion (%)"
+  ) +
+  
+  theme_classic(base_size = 12) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    plot.subtitle = element_text(hjust = 0.5, size = 11, color = "gray40"),
+    axis.title = element_text(face = "bold", color = "black"),
+    axis.text.x = element_text(
+      angle = 0, 
+      hjust = 0.5, 
+      color = "black", 
+      size = 10,
+      lineheight = 0.9
+    ),
+    axis.text.y = element_text(color = "black"),
+    axis.line = element_line(color = "black", linewidth = 0.5),
+    axis.ticks = element_line(color = "black"),
+    
+    # 图例设置
+    legend.position = "top",
+    legend.title = element_text(face = "bold", size = 11),
+    legend.text = element_text(size = 10),
+    legend.key.size = unit(0.5, "cm"),
+    legend.margin = margin(b = 5, t = 5),
+    
+    # 分面设置
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold", size = 11, color = "black"),
+    
+    # 网格和间距
+    panel.spacing = unit(1, "lines"),
+    plot.margin = margin(10, 10, 10, 10),
+    
+    # 整体背景
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA)
+  )
+
+# 显示图形
+print(p_detail)
