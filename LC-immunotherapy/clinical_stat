@@ -16,10 +16,10 @@ df_clean <- df %>%
     T_numeric = as.numeric(str_extract(T_stage, "[0-9]+")),
     N_numeric = as.numeric(str_extract(N_stage, "[0-9]+")),
     
-    # 创建分组：按照您的要求命名为Group1和Group2
+    # 创建分组：改为LN+和LN-命名
     TN_group = case_when(
-      T_numeric %in% c(1, 2) & N_numeric %in% c(1, 2) ~ "Group1 (T1-2 & N1-2)",
-      T_numeric %in% c(3, 4) & N_numeric == 0 ~ "Group2 (T3-4 & N0)",
+      T_numeric %in% c(1, 2) & N_numeric %in% c(1, 2) ~ "LN+ (T1-2 & N1-2)",
+      T_numeric %in% c(3, 4) & N_numeric == 0 ~ "LN- (T3-4 & N0)",
       TRUE ~ "Other"
     ),
     
@@ -34,7 +34,7 @@ df_clean <- df %>%
     Response_simple = factor(Response_simple, 
                              levels = c("pCR", "MPR", "non-MPR")),
     TN_group = factor(TN_group, 
-                      levels = c("Group1 (T1-2 & N1-2)", "Group2 (T3-4 & N0)", "Other")),
+                      levels = c("LN+ (T1-2 & N1-2)", "LN- (T3-4 & N0)", "Other")),
     pathology = factor(pathology, levels = c("LUAD", "LUSC"))
   )
 
@@ -93,16 +93,16 @@ p <- ggplot(plot_data, aes(x = TN_group, y = percent, fill = Response_simple)) +
     expand = expansion(mult = c(0, 0.05))
   ) +
   
-  # 直接指定横坐标标签（确保TN_group的顺序正确）
+  # 直接指定横坐标标签（改为LN+和LN-）
   scale_x_discrete(
     labels = c(
-      "Group1 (T1-2 & N1-2)" = "Group1\n(T1-2 & N1-2)",
-      "Group2 (T3-4 & N0)" = "Group2\n(T3-4 & N0)"
+      "LN+ (T1-2 & N1-2)" = "LN+\n(T1-2 & N1-2)",
+      "LN- (T3-4 & N0)" = "LN-\n(T3-4 & N0)"
     )
   ) +
   
   labs(
-    x = "TNM Subgroups",
+    x = "Lymph Node Metastasis Status",
     y = "Patient Proportion (%)"
   ) +
   
@@ -155,6 +155,182 @@ ggsave(
   compression = "lzw",                      # LZW 无损压缩，减小文件体积
   type = "cairo"                            # 用 Cairo 渲染，文字更清晰（Windows/macOS/Linux 通用）
 )
+
+
+
+#两张图分开
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(stringr)
+
+df <- read.csv("clinical_info1.csv", stringsAsFactors = FALSE)
+
+# 数据清洗和分组
+df_clean <- df %>%
+  # 提取T分期和N分期 - 使用正确的列名
+  mutate(
+    T_stage = str_extract(Pre.treatment.TNM, "T[0-9]+[a-c]?"),
+    N_stage = str_extract(Pre.treatment.TNM, "N[0-9]+"),
+    
+    # 将T分期转换为数值以便比较
+    T_numeric = as.numeric(str_extract(T_stage, "[0-9]+")),
+    N_numeric = as.numeric(str_extract(N_stage, "[0-9]+")),
+    
+    # 创建分组：改为LN+和LN-命名
+    TN_group = case_when(
+      T_numeric %in% c(1, 2) & N_numeric %in% c(1, 2) ~ "LN+ (T1-2 & N1-2)",
+      T_numeric %in% c(3, 4) & N_numeric == 0 ~ "LN- (T3-4 & N0)",
+      TRUE ~ "Other"
+    ),
+    
+    # 简化病理反应为三分类
+    Response_simple = case_when(
+      Pathological.Response == "pCR" ~ "pCR",
+      Pathological.Response == "MPR" ~ "MPR",
+      TRUE ~ "non-MPR"
+    ),
+    
+    # 确保因子顺序
+    Response_simple = factor(Response_simple, 
+                             levels = c("pCR", "MPR", "non-MPR")),
+    TN_group = factor(TN_group, 
+                      levels = c("LN+ (T1-2 & N1-2)", "LN- (T3-4 & N0)", "Other")),
+    pathology = factor(pathology, levels = c("LUAD", "LUSC"))
+  )
+
+# 过滤掉Other组
+df_clean_filtered <- df_clean %>%
+  filter(TN_group != "Other")
+
+# 为每个病理类型分别生成图表
+pathology_types <- c("LUAD", "LUSC")
+
+for (path_type in pathology_types) {
+  
+  # 筛选当前病理类型的数据
+  df_subset <- df_clean_filtered %>%
+    filter(pathology == path_type)
+  
+  # 检查是否有数据
+  if (nrow(df_subset) == 0) {
+    cat(sprintf("\n%s: 没有数据可绘制\n", path_type))
+    next
+  }
+  
+  # 计算每个分组的计数和百分比
+  plot_data <- df_subset %>%
+    group_by(TN_group, Response_simple) %>%
+    summarise(count = n(), .groups = "drop") %>%
+    group_by(TN_group) %>%
+    mutate(
+      total = sum(count),
+      percent = count / total * 100,
+      percent_label = sprintf("%.1f%%", percent)
+    ) %>%
+    ungroup()
+  
+  # 创建当前病理类型的图表
+  p <- ggplot(plot_data, aes(x = TN_group, y = percent, fill = Response_simple)) +
+    geom_col(width = 0.7, color = "black", size = 0.3) +
+    geom_text(aes(label = percent_label), 
+              position = position_stack(vjust = 0.5),
+              size = 3.5, color = "white", fontface = "bold") +
+    # 在每个柱子顶部添加总样本数
+    geom_text(data = plot_data %>% 
+                group_by(TN_group) %>% 
+                summarise(total = first(total), .groups = "drop"),
+              aes(x = TN_group, y = 102, label = paste("n =", total)),
+              inherit.aes = FALSE, size = 3.5, vjust = 0) +
+    
+    # 使用更美观的颜色方案
+    scale_fill_manual(
+      name = "Pathological Response",
+      values = c(
+        "pCR" = "#1B9E77",  # 深绿色
+        "MPR" = "#E6AB02",  # 金黄色
+        "non-MPR" = "#D95F02"  # 深橙色
+      ),
+      labels = c("pCR", "MPR", "non-MPR")
+    ) +
+    
+    scale_y_continuous(
+      limits = c(0, 105), 
+      breaks = seq(0, 100, 25),
+      labels = function(x) paste0(x, "%"),
+      expand = expansion(mult = c(0, 0.05))
+    ) +
+    
+    # 直接指定横坐标标签（改为LN+和LN-）
+    scale_x_discrete(
+      labels = c(
+        "LN+ (T1-2 & N1-2)" = "LN+\n(T1-2 & N1-2)",
+        "LN- (T3-4 & N0)" = "LN-\n(T3-4 & N0)"
+      )
+    ) +
+    
+    labs(
+      x = "Lymph Node Metastasis Status",
+      y = "Patient Proportion (%)",
+      fill = "Response"
+    ) +
+    
+    theme_classic(base_size = 12) +
+    theme(
+      plot.title = element_text(
+        hjust = 0.5, 
+        face = "bold", 
+        size = 14,
+        margin = margin(b = 10)
+      ),
+      axis.title = element_text(face = "bold", color = "black"),
+      axis.text.x = element_text(
+        angle = 0, 
+        hjust = 0.5, 
+        color = "black", 
+        size = 10, 
+        margin = margin(t = 5),
+        lineheight = 0.9  # 控制行间距
+      ),
+      axis.text.y = element_text(color = "black"),
+      axis.line = element_line(color = "black", linewidth = 0.5),
+      axis.ticks = element_line(color = "black"),
+      
+      # 图例设置
+      legend.position = "top",
+      legend.title = element_text(face = "bold", size = 11),
+      legend.text = element_text(size = 10),
+      legend.key.size = unit(0.5, "cm"),
+      legend.margin = margin(b = 5, t = 5),
+      
+      # 整体背景
+      panel.background = element_rect(fill = "white", color = NA),
+      plot.background = element_rect(fill = "white", color = NA),
+      plot.margin = margin(15, 15, 15, 15)
+    )
+  
+  # 显示图表
+  print(p)
+  
+  # 保存为TIFF格式
+  filename <- sprintf("response_proportion_%s.tiff", path_type)
+  ggsave(
+    filename = filename,
+    plot = p,
+    device = "tiff",
+    width = 6,        # 单张图可以调整宽度
+    height = 6,       # 保持正方形或适当调整
+    dpi = 600,
+    compression = "lzw",
+    type = "cairo"
+  )
+  
+  cat(sprintf("\n已保存图表: %s\n", filename))
+  
+  # 显示分组统计
+  cat(sprintf("\n%s 分组统计:\n", path_type))
+  print(table(df_subset$TN_group))
+}
 
 #重新分组
 df_clean <- df %>%

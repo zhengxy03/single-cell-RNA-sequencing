@@ -72,18 +72,58 @@ saveRDS(seurat_obj,file="GSE243013.rds") #only immune cells
 filtered_samples <- read_csv("GSE243013_filtered.csv")
 matching_samples <- intersect(seurat_obj$sampleID, filtered_samples$Tumor_Sample_Barcode)
 print(paste("匹配的样本数:", length(matching_samples)))
-#51
-seurat_filtered <- subset(seurat_obj, subset = sampleID %in% matching_samples)
-print(seurat_filtered)
+#220
+seurat_obj <- subset(seurat_obj, subset = sampleID %in% matching_samples)
+print(seurat_obj)
 
 
 library(dplyr)
 
 stage_mapping <- setNames(filtered_samples$Stage, filtered_samples$Tumor_Sample_Barcode)
-Stage <- stage_mapping[seurat_filtered@meta.data$sampleID]
-seurat_filtered@meta.data$Stage <- Stage
+Stage <- stage_mapping[seurat_obj@meta.data$sampleID]
+seurat_obj@meta.data$Stage <- Stage
+
+#TNM filter
+print(table(seurat_obj$Stage, useNA = "always"))
+library(dplyr)
+library(tidyr)
+
+seurat_obj@meta.data <- seurat_obj@meta.data %>%
+  mutate(
+    # 提取T分期 (T1, T2, T3, T4)
+    T_stage = str_extract(Stage, "T[0-9]+[a-c]?"),
+    # 提取N分期 (N0, N1, N2, N3)
+    N_stage = str_extract(Stage, "N[0-9]+"),
+    # 提取M分期 (如果有)
+    M_stage = str_extract(Stage, "M[0-9]+"),
+    
+    # 转换为数值以便比较
+    T_numeric = as.numeric(str_extract(T_stage, "[0-9]+")),
+    N_numeric = as.numeric(str_extract(N_stage, "[0-9]+")),
+    
+    # 创建LN分组
+    LN_group = case_when(
+      T_numeric %in% c(1, 2) & N_numeric %in% c(1, 2) ~ "LN+",
+      T_numeric %in% c(3, 4) & N_numeric == 0 ~ "LN-",
+      TRUE ~ NA_character_  # 其他情况设为NA
+    ),
+    
+    # 创建详细的TNM分组用于查看
+    TNM_detailed = case_when(
+      T_numeric %in% c(1, 2) & N_numeric %in% c(1, 2) ~ paste0("T", T_numeric, "N", N_numeric),
+      T_numeric %in% c(3, 4) & N_numeric == 0 ~ paste0("T", T_numeric, "N0"),
+      TRUE ~ "Other"
+    )
+  )
+
+print(table(seurat_obj$LN_group, useNA = "always"))
+print(table(seurat_obj$TNM_detailed, useNA = "always"))
+seurat_filtered <- subset(seurat_obj, subset = LN_group %in% c("LN+","LN-"))
+
 saveRDS(seurat_filtered,file="GSE243013_TN.rds")
-#31831 features across 256006 samples within 1 assay
+#31831 features across 643837 samples within 1 assay
+LUAD <- subset(seurat_obj, subset = cancer_type == "LUAD")
+saveRDS(LUAD,file="GSE243013_TN_LUAD.rds")
 
 #GSE241934
 library(Seurat)
@@ -149,22 +189,57 @@ immune <- subset(LUAD, subset = major_cell_type %in% c("B","Mast","Myeloid","NK"
 saveRDS(immune,file="GSE241934_immune.rds")
 
 filtered_samples <- read_csv("GSE241934_filtered.csv")
-matching_samples <- intersect(immune$sampleID, filtered_samples$SampleID)
+matching_samples <- intersect(seurat_obj$sampleID, filtered_samples$SampleID)
 print(paste("匹配的样本数:", length(matching_samples)))
-#5
-seurat_filtered <- subset(immune, subset = sampleID %in% matching_samples)
-print(seurat_filtered)
-#27693 features across 36709 samples within 1 assay
+#33
+seurat_obj <- subset(seurat_obj, subset = sampleID %in% matching_samples)
+print(seurat_obj)
+27693 features across 226518 samples within 1 assay
+
 library(dplyr)
 
 stage_mapping <- setNames(filtered_samples$Stage, filtered_samples$SampleID)
-Stage <- stage_mapping[seurat_filtered@meta.data$sampleID]
-seurat_filtered@meta.data$Stage <- Stage
+Stage <- stage_mapping[seurat_obj@meta.data$sampleID]
+seurat_obj@meta.data$Stage <- Stage
 
+print(table(seurat_obj$Stage, useNA = "always"))
+library(dplyr)
+library(tidyr)
+library(stringr) 
+seurat_obj@meta.data <- seurat_obj@meta.data %>%
+  mutate(
+    # 提取T分期 (T1, T2, T3, T4)
+    T_stage = str_extract(Stage, "T[0-9]+[a-c]?"),
+    # 提取N分期 (N0, N1, N2, N3)
+    N_stage = str_extract(Stage, "N[0-9]+"),
+    # 提取M分期 (如果有)
+    M_stage = str_extract(Stage, "M[0-9]+"),
+    
+    # 转换为数值以便比较
+    T_numeric = as.numeric(str_extract(T_stage, "[0-9]+")),
+    N_numeric = as.numeric(str_extract(N_stage, "[0-9]+")),
+    
+    # 创建LN分组
+    LN_group = case_when(
+      T_numeric %in% c(1, 2) & N_numeric %in% c(1, 2) ~ "LN+",
+      T_numeric %in% c(3, 4) & N_numeric == 0 ~ "LN-",
+      TRUE ~ NA_character_  # 其他情况设为NA
+    ),
+    
+    # 创建详细的TNM分组用于查看
+    TNM_detailed = case_when(
+      T_numeric %in% c(1, 2) & N_numeric %in% c(1, 2) ~ paste0("T", T_numeric, "N", N_numeric),
+      T_numeric %in% c(3, 4) & N_numeric == 0 ~ paste0("T", T_numeric, "N0"),
+      TRUE ~ "Other"
+    )
+  )
 
-saveRDS(seurat_filtered,file="GSE241934_TN.rds")
+print(table(seurat_obj$LN_group, useNA = "always"))
+print(table(seurat_obj$TNM_detailed, useNA = "always"))
+seurat_filtered <- subset(seurat_obj, subset = LN_group %in% c("LN+","LN-"))
 
-
+saveRDS(seurat_filtered,file="GSE241934_TN_LUAD.rds")#only LUAD
+#27693 features across 147560 samples within 1 assay
 
 
 
