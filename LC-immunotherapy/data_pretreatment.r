@@ -240,7 +240,9 @@ seurat_filtered <- subset(seurat_obj, subset = LN_group %in% c("LN+","LN-"))
 
 saveRDS(seurat_filtered,file="GSE241934_TN_LUAD.rds")#only LUAD
 #27693 features across 147560 samples within 1 assay
-
+immune <- subset(seurat_filtered, subset = major_cell_type %in% c("B","Mast","Myeloid","NK","T"))
+#27693 features across 118054 samples within 1 assay
+saveRDS(immune,file="GSE241934_TN_LUAD_immune.rds")
 
 
 #GSE229353
