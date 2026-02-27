@@ -1,0 +1,2039 @@
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(stringr)
+setwd("E:/project/LUNG-scRNA")
+df <- read.csv("clinical_info1.csv", stringsAsFactors = FALSE)
+
+# 数据清洗和分组
+df_clean <- df %>%
+  # 提取T分期和N分期 - 使用正确的列名
+  mutate(
+    T_stage = str_extract(Pre.treatment.TNM, "T[0-9]+[a-c]?"),
+    N_stage = str_extract(Pre.treatment.TNM, "N[0-9]+"),
+    
+    # 将T分期转换为数值以便比较
+    T_numeric = as.numeric(str_extract(T_stage, "[0-9]+")),
+    N_numeric = as.numeric(str_extract(N_stage, "[0-9]+")),
+    
+    # 创建分组：改为LN+和LN-命名
+    TN_group = case_when(
+      T_numeric %in% c(1, 2) & N_numeric %in% c(1, 2) ~ "LN+ (T1-2 & N1-2)",
+      T_numeric %in% c(3, 4) & N_numeric == 0 ~ "LN- (T3-4 & N0)",
+      TRUE ~ "Other"
+    ),
+    
+    # 简化病理反应为三分类
+    Response_simple = case_when(
+      Pathological.Response == "pCR" ~ "pCR",
+      Pathological.Response == "MPR" ~ "MPR",
+      TRUE ~ "non-MPR"
+    ),
+    
+    # 确保因子顺序
+    Response_simple = factor(Response_simple, 
+                             levels = c("pCR", "MPR", "non-MPR")),
+    TN_group = factor(TN_group, 
+                      levels = c("LN+ (T1-2 & N1-2)", "LN- (T3-4 & N0)", "Other")),
+    pathology = factor(pathology, levels = c("LUAD", "LUSC"))
+  )
+
+# 过滤掉Other组
+df_clean_filtered <- df_clean %>%
+  filter(TN_group != "Other")
+
+# 为每个病理类型分别生成图表
+pathology_types <- c("LUAD", "LUSC")
+
+for (path_type in pathology_types) {
+  
+  # 筛选当前病理类型的数据
+  df_subset <- df_clean_filtered %>%
+    filter(pathology == path_type)
+  
+  # 检查是否有数据
+  if (nrow(df_subset) == 0) {
+    cat(sprintf("\n%s: 没有数据可绘制\n", path_type))
+    next
+  }
+  
+  # 计算每个分组的计数和百分比
+  plot_data <- df_subset %>%
+    group_by(TN_group, Response_simple) %>%
+    summarise(count = n(), .groups = "drop") %>%
+    group_by(TN_group) %>%
+    mutate(
+      total = sum(count),
+      percent = count / total * 100,
+      percent_label = sprintf("%.1f%%", percent)
+    ) %>%
+    ungroup()
+  
+  # 创建当前病理类型的图表
+  p <- ggplot(plot_data, aes(x = TN_group, y = percent, fill = Response_simple)) +
+    geom_col(width = 0.7, color = "black", size = 0.3) +
+    geom_text(aes(label = percent_label), 
+              position = position_stack(vjust = 0.5),
+              size = 3.5, color = "white", fontface = "bold") +
+    # 在每个柱子顶部添加总样本数
+    geom_text(data = plot_data %>% 
+                group_by(TN_group) %>% 
+                summarise(total = first(total), .groups = "drop"),
+              aes(x = TN_group, y = 102, label = paste("n =", total)),
+              inherit.aes = FALSE, size = 3.5, vjust = 0) +
+    
+    # 使用更美观的颜色方案
+    scale_fill_manual(
+      name = "Pathological Response",
+      values = c(
+        "pCR" = "#00A087FF",  # 深绿色
+        "MPR" = "#F39B7FFF",  # 金黄色
+        "non-MPR" = "#E64B35FF"  # 深橙色
+      ),
+      labels = c("pCR", "MPR", "non-MPR")
+    ) +
+    
+    scale_y_continuous(
+      limits = c(0, 105), 
+      breaks = seq(0, 100, 25),
+      labels = function(x) paste0(x, "%"),
+      expand = expansion(mult = c(0, 0.05))
+    ) +
+    
+    # 直接指定横坐标标签（改为LN+和LN-）
+    scale_x_discrete(
+      labels = c(
+        "LN+ (T1-2 & N1-2)" = "LN+\n(T1-2 & N1-2)",
+        "LN- (T3-4 & N0)" = "LN-\n(T3-4 & N0)"
+      )
+    ) +
+    
+    labs(
+      x = "Lymph Node Metastasis Status",
+      y = "Patient Proportion (%)",
+      fill = "Response"
+    ) +
+    
+    theme_classic(base_size = 12) +
+    theme(
+      plot.title = element_text(
+        hjust = 0.5, 
+        face = "bold", 
+        size = 14,
+        margin = margin(b = 10)
+      ),
+      axis.title = element_text(face = "bold", color = "black"),
+      axis.text.x = element_text(
+        angle = 0, 
+        hjust = 0.5, 
+        color = "black", 
+        size = 10, 
+        margin = margin(t = 5),
+        lineheight = 0.9  # 控制行间距
+      ),
+      axis.text.y = element_text(color = "black"),
+      axis.line = element_line(color = "black", linewidth = 0.5),
+      axis.ticks = element_line(color = "black"),
+      
+      # 图例设置
+      legend.position = "top",
+      legend.title = element_text(face = "bold", size = 11),
+      legend.text = element_text(size = 10),
+      legend.key.size = unit(0.5, "cm"),
+      legend.margin = margin(b = 5, t = 5),
+      
+      # 整体背景
+      panel.background = element_rect(fill = "white", color = NA),
+      plot.background = element_rect(fill = "white", color = NA),
+      plot.margin = margin(15, 15, 15, 15)
+    )
+  
+  # 显示图表
+  print(p)
+  
+  # 保存为TIFF格式
+  filename <- sprintf("response_proportion_%s.tiff", path_type)
+  ggsave(
+    filename = filename,
+    plot = p,
+    device = "tiff",
+    width = 6,        # 单张图可以调整宽度
+    height = 6,       # 保持正方形或适当调整
+    dpi = 600,
+    compression = "lzw",
+    type = "cairo"
+  )
+  
+  cat(sprintf("\n已保存图表: %s\n", filename))
+  
+  # 显示分组统计
+  cat(sprintf("\n%s 分组统计:\n", path_type))
+  print(table(df_subset$TN_group))
+}
+
+
+#N0下
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(stringr)
+
+# 读取数据
+df <- read.csv("clinical_info1.csv", stringsAsFactors = FALSE)
+
+# 数据清洗和分组（核心：新增N0情况下的T大小分组）
+df_clean <- df %>%
+  # 提取T分期和N分期
+  mutate(
+    T_stage = str_extract(Pre.treatment.TNM, "T[0-9]+[a-c]?"),
+    N_stage = str_extract(Pre.treatment.TNM, "N[0-9]+"),
+    
+    # 将T/N分期转换为数值以便比较
+    T_numeric = as.numeric(str_extract(T_stage, "[0-9]+")),
+    N_numeric = as.numeric(str_extract(N_stage, "[0-9]+")),
+    
+    # 核心修改：N0情况下，区分T小（T1-2）和T大（T3-4）
+    T_size_group = case_when(
+      N_numeric == 0 & T_numeric %in% c(1, 2) ~ "T-small (T1-2 & N0)",
+      N_numeric == 0 & T_numeric %in% c(3, 4) ~ "T-large (T3-4 & N0)",
+      TRUE ~ "Other"
+    ),
+    
+    # 简化病理反应为三分类（与原代码一致）
+    Response_simple = case_when(
+      Pathological.Response == "pCR" ~ "pCR",
+      Pathological.Response == "MPR" ~ "MPR",
+      TRUE ~ "non-MPR"
+    ),
+    
+    # 确保因子顺序（与原代码一致）
+    Response_simple = factor(Response_simple, 
+                             levels = c("pCR", "MPR", "non-MPR")),
+    T_size_group = factor(T_size_group, 
+                          levels = c("T-small (T1-2 & N0)", "T-large (T3-4 & N0)", "Other")),
+    pathology = factor(pathology, levels = c("LUAD", "LUSC"))
+  )
+
+# 过滤：仅保留N0情况下的T小/T大分组，排除Other
+df_clean_filtered <- df_clean %>%
+  filter(T_size_group != "Other")
+
+# 为每个病理类型（LUAD、LUSC）分别生成图表
+pathology_types <- c("LUAD", "LUSC")
+
+for (path_type in pathology_types) {
+  
+  # 筛选当前病理类型的数据
+  df_subset <- df_clean_filtered %>%
+    filter(pathology == path_type)
+  
+  # 检查是否有数据，无数据则跳过
+  if (nrow(df_subset) == 0) {
+    cat(sprintf("\n%s: 没有N0情况下的有效数据可绘制\n", path_type))
+    next
+  }
+  
+  # 计算每个分组的计数和百分比（与原代码逻辑一致）
+  plot_data <- df_subset %>%
+    group_by(T_size_group, Response_simple) %>%
+    summarise(count = n(), .groups = "drop") %>%
+    group_by(T_size_group) %>%
+    mutate(
+      total = sum(count),
+      percent = count / total * 100,
+      percent_label = sprintf("%.1f%%", percent)
+    ) %>%
+    ungroup()
+  
+  # 创建当前病理类型的图表（保持原风格，仅调整分组相关配置）
+  p <- ggplot(plot_data, aes(x = T_size_group, y = percent, fill = Response_simple)) +
+    # 堆叠柱状图（与原代码一致）
+    geom_col(width = 0.7, color = "black", size = 0.3) +
+    # 堆叠内部百分比标签（与原代码一致）
+    geom_text(aes(label = percent_label), 
+              position = position_stack(vjust = 0.5),
+              size = 3.5, color = "white", fontface = "bold") +
+    # 柱子顶部总样本数标注（与原代码一致）
+    geom_text(data = plot_data %>% 
+                group_by(T_size_group) %>% 
+                summarise(total = first(total), .groups = "drop"),
+              aes(x = T_size_group, y = 102, label = paste("n =", total)),
+              inherit.aes = FALSE, size = 3.5, vjust = 0) +
+    
+    # 颜色方案（与原代码一致，保证风格统一）
+    scale_fill_manual(
+      name = "Pathological Response",
+      values = c(
+        "pCR" = "#00A087FF",  # 深绿色
+        "MPR" = "#F39B7FFF",  # 金黄色
+        "non-MPR" = "#E64B35FF"  # 深橙色
+      ),
+      labels = c("pCR", "MPR", "non-MPR")
+    ) +
+    
+    # Y轴配置（百分比，与原代码一致）
+    scale_y_continuous(
+      limits = c(0, 105), 
+      breaks = seq(0, 100, 25),
+      labels = function(x) paste0(x, "%"),
+      expand = expansion(mult = c(0, 0.05))
+    ) +
+    
+    # 横轴标签优化（换行显示，更美观）
+    scale_x_discrete(
+      labels = c(
+        "T-small (T1-2 & N0)" = "T-small\n(T1-2 & N0)",
+        "T-large (T3-4 & N0)" = "T-large\n(T3-4 & N0)"
+      )
+    ) +
+    
+    # 图表标题和坐标轴标签（适配新分组）
+    labs(
+      title = sprintf("Pathological Response in %s (N0 Subgroup)", path_type),
+      x = "T Stage Size (N0)",
+      y = "Patient Proportion (%)",
+      fill = "Response"
+    ) +
+    
+    # 主题设置（与原代码一致，保证风格统一）
+    theme_classic(base_size = 12) +
+    theme(
+      plot.title = element_text(
+        hjust = 0.5, 
+        face = "bold", 
+        size = 14,
+        margin = margin(b = 10)
+      ),
+      axis.title = element_text(face = "bold", color = "black"),
+      axis.text.x = element_text(
+        angle = 0, 
+        hjust = 0.5, 
+        color = "black", 
+        size = 10, 
+        margin = margin(t = 5),
+        lineheight = 0.9
+      ),
+      axis.text.y = element_text(color = "black"),
+      axis.line = element_line(color = "black", linewidth = 0.5),
+      axis.ticks = element_line(color = "black"),
+      # 图例设置（与原代码一致）
+      legend.position = "top",
+      legend.title = element_text(face = "bold", size = 11),
+      legend.text = element_text(size = 10),
+      legend.key.size = unit(0.5, "cm"),
+      legend.margin = margin(b = 5, t = 5),
+      # 整体背景（与原代码一致）
+      panel.background = element_rect(fill = "white", color = NA),
+      plot.background = element_rect(fill = "white", color = NA),
+      plot.margin = margin(15, 15, 15, 15)
+    )
+  
+  # 显示图表
+  print(p)
+  
+  # 保存为TIFF格式（高分辨率，适合学术发表）
+  filename <- sprintf("response_proportion_N0_%s.tiff", path_type)
+  ggsave(
+    filename = filename,
+    plot = p,
+    device = "tiff",
+    width = 7,  # 适配新分组，微调宽度更美观
+    height = 6,
+    dpi = 600,
+    compression = "lzw",
+    type = "cairo"
+  )
+  
+  # 控制台输出保存信息和分组统计
+  cat(sprintf("\n已保存图表: %s\n", filename))
+  cat(sprintf("\n%s (N0亚组) 分组统计:\n", path_type))
+  print(table(df_subset$T_size_group))
+}
+
+#N>0
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(stringr)
+
+# 读取数据
+df <- read.csv("clinical_info1.csv", stringsAsFactors = FALSE)
+
+# 数据清洗和分组（核心：新增N>0情况下的T大小分组）
+df_clean <- df %>%
+  # 提取T分期和N分期
+  mutate(
+    T_stage = str_extract(Pre.treatment.TNM, "T[0-9]+[a-c]?"),
+    N_stage = str_extract(Pre.treatment.TNM, "N[0-9]+"),
+    
+    # 将T/N分期转换为数值以便比较
+    T_numeric = as.numeric(str_extract(T_stage, "[0-9]+")),
+    N_numeric = as.numeric(str_extract(N_stage, "[0-9]+")),
+    
+    # 核心修改：N>0情况下，区分T小（T1-2）和T大（T3-4）
+    T_size_group_Npos = case_when(
+      N_numeric > 0 & T_numeric %in% c(1, 2) ~ "T-small (T1-2 & N>0)",
+      N_numeric > 0 & T_numeric %in% c(3, 4) ~ "T-large (T3-4 & N>0)",
+      TRUE ~ "Other"
+    ),
+    
+    # 简化病理反应为三分类（与原代码一致）
+    Response_simple = case_when(
+      Pathological.Response == "pCR" ~ "pCR",
+      Pathological.Response == "MPR" ~ "MPR",
+      TRUE ~ "non-MPR"
+    ),
+    
+    # 确保因子顺序
+    Response_simple = factor(Response_simple, 
+                             levels = c("pCR", "MPR", "non-MPR")),
+    T_size_group_Npos = factor(T_size_group_Npos, 
+                               levels = c("T-small (T1-2 & N>0)", "T-large (T3-4 & N>0)", "Other")),
+    pathology = factor(pathology, levels = c("LUAD", "LUSC"))
+  )
+
+# 过滤：仅保留N>0情况下的T小/T大分组，排除Other
+df_clean_filtered <- df_clean %>%
+  filter(T_size_group_Npos != "Other")
+
+# 为每个病理类型（LUAD、LUSC）分别生成图表
+pathology_types <- c("LUAD", "LUSC")
+
+for (path_type in pathology_types) {
+  
+  # 筛选当前病理类型的数据
+  df_subset <- df_clean_filtered %>%
+    filter(pathology == path_type)
+  
+  # 检查是否有数据，无数据则跳过
+  if (nrow(df_subset) == 0) {
+    cat(sprintf("\n%s: 没有N>0情况下的有效数据可绘制\n", path_type))
+    next
+  }
+  
+  # 计算每个分组的计数和百分比
+  plot_data <- df_subset %>%
+    group_by(T_size_group_Npos, Response_simple) %>%
+    summarise(count = n(), .groups = "drop") %>%
+    group_by(T_size_group_Npos) %>%
+    mutate(
+      total = sum(count),
+      percent = count / total * 100,
+      percent_label = sprintf("%.1f%%", percent)
+    ) %>%
+    ungroup()
+  
+  # 创建当前病理类型的图表（风格与之前一致）
+  p <- ggplot(plot_data, aes(x = T_size_group_Npos, y = percent, fill = Response_simple)) +
+    # 堆叠柱状图+黑色边框
+    geom_col(width = 0.7, color = "black", size = 0.3) +
+    # 堆叠内部百分比标签
+    geom_text(aes(label = percent_label), 
+              position = position_stack(vjust = 0.5),
+              size = 3.5, color = "white", fontface = "bold") +
+    # 柱子顶部总样本数标注
+    geom_text(data = plot_data %>% 
+                group_by(T_size_group_Npos) %>% 
+                summarise(total = first(total), .groups = "drop"),
+              aes(x = T_size_group_Npos, y = 102, label = paste("n =", total)),
+              inherit.aes = FALSE, size = 3.5, vjust = 0) +
+    
+    # 复用原颜色方案，保证风格统一
+    scale_fill_manual(
+      name = "Pathological Response",
+      values = c(
+        "pCR" = "#00A087FF",  
+        "MPR" = "#F39B7FFF",  
+        "non-MPR" = "#E64B35FF"  
+      ),
+      labels = c("pCR", "MPR", "non-MPR")
+    ) +
+    
+    # Y轴百分比配置
+    scale_y_continuous(
+      limits = c(0, 105), 
+      breaks = seq(0, 100, 25),
+      labels = function(x) paste0(x, "%"),
+      expand = expansion(mult = c(0, 0.05))
+    ) +
+    
+    # 横轴标签换行优化
+    scale_x_discrete(
+      labels = c(
+        "T-small (T1-2 & N>0)" = "T-small\n(T1-2 & N>0)",
+        "T-large (T3-4 & N>0)" = "T-large\n(T3-4 & N>0)"
+      )
+    ) +
+    
+    # 图表标题和坐标轴标签（适配N>0亚组）
+    labs(
+      title = sprintf("Pathological Response in %s (N>0 Subgroup)", path_type),
+      x = "T Stage Size (N>0)",
+      y = "Patient Proportion (%)",
+      fill = "Response"
+    ) +
+    
+    # 主题设置（与之前完全一致，保证风格统一）
+    theme_classic(base_size = 12) +
+    theme(
+      plot.title = element_text(
+        hjust = 0.5, 
+        face = "bold", 
+        size = 14,
+        margin = margin(b = 10)
+      ),
+      axis.title = element_text(face = "bold", color = "black"),
+      axis.text.x = element_text(
+        angle = 0, 
+        hjust = 0.5, 
+        color = "black", 
+        size = 10, 
+        margin = margin(t = 5),
+        lineheight = 0.9
+      ),
+      axis.text.y = element_text(color = "black"),
+      axis.line = element_line(color = "black", linewidth = 0.5),
+      axis.ticks = element_line(color = "black"),
+      # 图例设置
+      legend.position = "top",
+      legend.title = element_text(face = "bold", size = 11),
+      legend.text = element_text(size = 10),
+      legend.key.size = unit(0.5, "cm"),
+      legend.margin = margin(b = 5, t = 5),
+      # 背景设置
+      panel.background = element_rect(fill = "white", color = NA),
+      plot.background = element_rect(fill = "white", color = NA),
+      plot.margin = margin(15, 15, 15, 15)
+    )
+  
+  # 显示图表
+  print(p)
+  
+  # 保存为高分辨率TIFF（适合学术发表）
+  filename <- sprintf("response_proportion_Npos_%s.tiff", path_type)
+  ggsave(
+    filename = filename,
+    plot = p,
+    device = "tiff",
+    width = 7,
+    height = 6,
+    dpi = 600,
+    compression = "lzw",
+    type = "cairo"
+  )
+  
+  # 控制台输出信息
+  cat(sprintf("\n已保存图表: %s\n", filename))
+  cat(sprintf("\n%s (N>0亚组) 分组统计:\n", path_type))
+  print(table(df_subset$T_size_group_Npos))
+}
+
+#和在一张图比较
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(stringr)
+
+# 1. 数据读取与预处理（整合N0/N>0 + T大小分组）
+df <- read.csv("clinical_info1.csv", stringsAsFactors = FALSE)
+df_clean <- df %>%
+  mutate(
+    # 提取T/N分期并转数值
+    T_stage = str_extract(Pre.treatment.TNM, "T[0-9]+[a-c]?"),
+    N_stage = str_extract(Pre.treatment.TNM, "N[0-9]+"),
+    T_numeric = as.numeric(str_extract(T_stage, "[0-9]+")),
+    N_numeric = as.numeric(str_extract(N_stage, "[0-9]+")),
+    
+    # 定义双因素分组
+    T_size = case_when(
+      T_numeric %in% c(1,2) ~ "T-small (T1-2)",
+      T_numeric %in% c(3,4) ~ "T-large (T3-4)"
+    ),
+    N_status = case_when(
+      N_numeric == 0 ~ "N0",
+      N_numeric > 0 ~ "N>0"
+    ),
+    # 简化病理反应
+    Response_simple = case_when(
+      Pathological.Response == "pCR" ~ "pCR",
+      Pathological.Response == "MPR" ~ "MPR",
+      TRUE ~ "non-MPR"
+    ),
+    # 因子顺序（保证图表顺序一致）
+    Response_simple = factor(Response_simple, levels = c("pCR", "MPR", "non-MPR")),
+    T_size = factor(T_size, levels = c("T-small (T1-2)", "T-large (T3-4)")),
+    N_status = factor(N_status, levels = c("N0", "N>0")),
+    pathology = factor(pathology, levels = c("LUAD", "LUSC"))
+  ) %>%
+  # 过滤有效分组（排除T/N分期不明确的样本）
+  filter(!is.na(T_size) & !is.na(N_status))
+
+# 2. 定义病理类型循环
+pathology_types <- c("LUAD", "LUSC")
+
+# ========== 图1：同一T大小下，N状态对缓解率的影响（添加n标注） ==========
+for (path_type in pathology_types) {
+  df_subset <- df_clean %>% filter(pathology == path_type)
+  if (nrow(df_subset) == 0) {
+    cat(sprintf("\n%s: 无有效数据（图1）\n", path_type))
+    next
+  }
+  
+  # 统计百分比
+  plot_data <- df_subset %>%
+    group_by(T_size, N_status, Response_simple) %>%
+    summarise(count = n(), .groups = "drop") %>%
+    group_by(T_size, N_status) %>%
+    mutate(percent = count/sum(count)*100, percent_label = sprintf("%.1f%%", percent)) %>%
+    ungroup()
+  
+  # 新增：计算每组（T_size + N_status）的总样本数（用于标注n=XXX）
+  total_n_data <- plot_data %>%
+    group_by(T_size, N_status) %>%
+    summarise(total_n = sum(count), .groups = "drop")  # 总样本数=该分组下各缓解类型计数之和
+  
+  # 绘图
+  p1 <- ggplot(plot_data, aes(x = T_size, y = percent, fill = Response_simple)) +
+    geom_col(width = 0.7, color = "black", size = 0.3, position = "stack") +
+    geom_text(aes(label = percent_label), position = position_stack(vjust = 0.5), size = 3, color = "white", fontface = "bold") +
+    # 新增：标注n=XXX（柱子顶部）
+    geom_text(
+      data = total_n_data,  # 调用总样本数数据
+      aes(x = T_size, y = 102, label = paste("n =", total_n)),  # Y=102略高于100%，避免遮挡
+      inherit.aes = FALSE,  # 关闭继承，避免fill映射冲突
+      size = 3.5,  # 字体大小与百分比标签匹配
+      color = "black",
+      fontface = "bold"
+    ) +
+    # 分面：同一T大小下对比N0/N>0
+    facet_wrap(~N_status, ncol = 2, labeller = label_both) +
+    # 颜色与坐标轴
+    scale_fill_manual(values = c("pCR"="#00A087FF", "MPR"="#F39B7FFF", "non-MPR"="#E64B35FF")) +
+    scale_y_continuous(limits = c(0,105), breaks = seq(0,100,25), labels = ~paste0(.,"%")) +
+    # 标题与主题
+    labs(title = sprintf("%s: 同一N状态下，T大小对缓解率的影响", path_type),
+         x = "T Stage Size", y = "Patient Proportion (%)", fill = "Response") +
+    theme_classic(base_size = 12) +
+    theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+          legend.position = "top",
+          strip.background = element_rect(fill = "gray90"),
+          strip.text = element_text(face = "bold"))
+  
+  # 保存
+  ggsave(sprintf("Effect_of_T_size_%s.tiff", path_type), p1, width = 10, height = 6, dpi = 600, device = "tiff", compression = "lzw")
+  print(p1)
+  cat(sprintf("\n已保存：Effect_of_T_size_%s.tiff\n", path_type))
+}
+
+# ========== 图2：同一N状态下，T大小对缓解率的影响（添加n标注） ==========
+for (path_type in pathology_types) {
+  df_subset <- df_clean %>% filter(pathology == path_type)
+  if (nrow(df_subset) == 0) {
+    cat(sprintf("\n%s: 无有效数据（图2）\n", path_type))
+    next
+  }
+  
+  # 统计百分比
+  plot_data <- df_subset %>%
+    group_by(N_status, T_size, Response_simple) %>%
+    summarise(count = n(), .groups = "drop") %>%
+    group_by(N_status, T_size) %>%
+    mutate(percent = count/sum(count)*100, percent_label = sprintf("%.1f%%", percent)) %>%
+    ungroup()
+  
+  # 新增：计算每组（N_status + T_size）的总样本数（用于标注n=XXX）
+  total_n_data <- plot_data %>%
+    group_by(N_status, T_size) %>%
+    summarise(total_n = sum(count), .groups = "drop")  # 总样本数=该分组下各缓解类型计数之和
+  
+  # 绘图
+  p2 <- ggplot(plot_data, aes(x = N_status, y = percent, fill = Response_simple)) +
+    geom_col(width = 0.7, color = "black", size = 0.3, position = "stack") +
+    geom_text(aes(label = percent_label), position = position_stack(vjust = 0.5), size = 3, color = "white", fontface = "bold") +
+    # 新增：标注n=XXX（柱子顶部）
+    geom_text(
+      data = total_n_data,  # 调用总样本数数据
+      aes(x = N_status, y = 102, label = paste("n =", total_n)),  # Y=102略高于100%，避免遮挡
+      inherit.aes = FALSE,  # 关闭继承，避免fill映射冲突
+      size = 3.5,  # 字体大小与百分比标签匹配
+      color = "black",
+      fontface = "bold"
+    ) +
+    # 分面：同一N状态下对比T大小
+    facet_wrap(~T_size, ncol = 2, labeller = label_both) +
+    # 颜色与坐标轴
+    scale_fill_manual(values = c("pCR"="#00A087FF", "MPR"="#F39B7FFF", "non-MPR"="#E64B35FF")) +
+    scale_y_continuous(limits = c(0,105), breaks = seq(0,100,25), labels = ~paste0(.,"%")) +
+    # 标题与主题
+    labs(title = sprintf("%s: 同一T大小下，N状态对缓解率的影响", path_type),
+         x = "Lymph Node Status", y = "Patient Proportion (%)", fill = "Response") +
+    theme_classic(base_size = 12) +
+    theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+          legend.position = "top",
+          strip.background = element_rect(fill = "gray90"),
+          strip.text = element_text(face = "bold"))
+  
+  # 保存
+  ggsave(sprintf("Effect_of_N_status_%s.tiff", path_type), p2, width = 10, height = 6, dpi = 600, device = "tiff", compression = "lzw")
+  print(p2)
+  cat(sprintf("\n已保存：Effect_of_N_status_%s.tiff\n", path_type))
+}
+
+
+#pie
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(stringr)
+
+# 1. 数据读取与预处理（整合N0/N>0 + T大小分组）
+df <- read.csv("clinical_info1.csv", stringsAsFactors = FALSE)
+df_clean <- df %>%
+  mutate(
+    # 提取T/N分期并转数值
+    T_stage = str_extract(Pre.treatment.TNM, "T[0-9]+[a-c]?"),
+    N_stage = str_extract(Pre.treatment.TNM, "N[0-9]+"),
+    T_numeric = as.numeric(str_extract(T_stage, "[0-9]+")),
+    N_numeric = as.numeric(str_extract(N_stage, "[0-9]+")),
+    
+    # 定义双因素分组
+    T_size = case_when(
+      T_numeric %in% c(1,2) ~ "T-small (T1-2)",
+      T_numeric %in% c(3,4) ~ "T-large (T3-4)"
+    ),
+    N_status = case_when(
+      N_numeric == 0 ~ "N=0",
+      N_numeric > 0 ~ "N>0"
+    ),
+    # 简化病理反应
+    Response_simple = case_when(
+      Pathological.Response == "pCR" ~ "pCR",
+      Pathological.Response == "MPR" ~ "MPR",
+      TRUE ~ "non-MPR"
+    ),
+    # 因子顺序（保证图表顺序一致）
+    Response_simple = factor(Response_simple, levels = c("pCR", "MPR", "non-MPR")),
+    T_size = factor(T_size, levels = c("T-small (T1-2)", "T-large (T3-4)")),
+    N_status = factor(N_status, levels = c("N=0", "N>0")),
+    pathology = factor(pathology, levels = c("LUAD", "LUSC"))
+  ) %>%
+  filter(!is.na(T_size) & !is.na(N_status))
+
+# 2. 定义病理类型循环
+pathology_types <- c("LUAD", "LUSC")
+
+# ========== 图1：同一N状态下，T大小对缓解率的影响 ==========
+for (path_type in pathology_types) {
+  df_subset <- df_clean %>% filter(pathology == path_type)
+  if (nrow(df_subset) == 0) {
+    cat(sprintf("\n%s: 无有效数据（图1）\n", path_type))
+    next
+  }
+  
+  # 统计百分比
+  plot_data <- df_subset %>%
+    count(N_status, T_size, Response_simple) %>%
+    group_by(N_status, T_size) %>%
+    mutate(
+      fraction = n / sum(n),
+      percent = fraction * 100,
+      label = sprintf("%.1f%%", percent)
+    ) %>%
+    ungroup()
+  
+  # 计算样本总数
+  total_n_data <- plot_data %>%
+    group_by(N_status, T_size) %>%
+    summarise(total = sum(n), .groups = "drop")
+  
+  # 绘图
+  p1 <- ggplot(plot_data, aes(x = "", y = fraction, fill = Response_simple)) +
+    geom_col(width = 1, color = "white", size = 0.5) +
+    coord_polar(theta = "y") +
+    
+    # 百分比标签
+    geom_text(
+      aes(
+        label = ifelse(percent > 5, label, ""),
+        group = Response_simple,
+        x = 1
+      ),
+      position = position_stack(vjust = 0.5),
+      size = 4,
+      fontface = "bold",
+      color = "black",
+      inherit.aes = TRUE
+    ) +
+    
+    # 中心样本量标注
+    geom_text(
+      data = total_n_data,
+      aes(x = 0, y = 0, label = paste0("n=", total)),
+      inherit.aes = FALSE,
+      size = 5,
+      fontface = "bold",
+      color = "black"
+    ) +
+    
+    # 颜色设置
+    scale_fill_manual(
+      values = c(
+        "pCR" = "#00A087FF",
+        "MPR" = "#F39B7FFF",
+        "non-MPR" = "#E64B35FF"
+      ),
+      name = "Response"
+    ) +
+    
+    # 分面
+    facet_grid(N_status ~ T_size) +
+    
+    scale_y_continuous(expand = c(0, 0)) +
+    labs(
+      title = sprintf("%s: 同一N状态下，T大小对缓解率的影响", path_type)
+    ) +
+    theme_void() +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14, margin = margin(b = 10)),
+      strip.text = element_text(size = 11, face = "bold", color = "black"),
+      strip.background = element_blank(),  # 无分面标题背景
+      legend.position = "top",
+      legend.title = element_text(face = "bold", size = 11),
+      legend.text = element_text(size = 10),
+      legend.key = element_rect(fill = "white", color = NA),  # 图例键无边框
+      legend.background = element_blank(),  # 图例背景无方框
+      legend.box.background = element_blank(),  # 图例框背景无方框
+      legend.box = element_blank(),  # 移除图例框
+      legend.box.margin = margin(0, 0, 0, 0),  # 调整图例边距
+      legend.margin = margin(0, 0, 0, 0),  # 调整图例边距
+      panel.spacing = unit(1.5, "lines"),
+      plot.background = element_rect(fill = "white", color = NA),
+      panel.background = element_rect(fill = "white", color = NA)
+    )
+  
+  # 保存
+  ggsave(
+    sprintf("Effect_of_T_size_pie_%s.tiff", path_type),
+    p1,
+    width = 10,
+    height = 8,
+    dpi = 600,
+    compression = "lzw",
+    bg = "white"
+  )
+  print(p1)
+  cat(sprintf("\n已保存：Effect_of_T_size_pie_%s.tiff\n", path_type))
+}
+
+for (path_type in pathology_types) {
+  df_subset <- df_clean %>% filter(pathology == path_type)
+  if (nrow(df_subset) == 0) {
+    cat(sprintf("\n%s: 无有效数据（图2）\n", path_type))
+    next
+  }
+  
+  # 统计百分比
+  plot_data <- df_subset %>%
+    count(T_size, N_status, Response_simple) %>%
+    group_by(T_size, N_status) %>%
+    mutate(
+      fraction = n / sum(n),
+      percent = fraction * 100,
+      label = sprintf("%.1f%%", percent)
+    ) %>%
+    ungroup()
+  
+  # 计算样本总数
+  total_n_data <- plot_data %>%
+    group_by(T_size, N_status) %>%
+    summarise(total = sum(n), .groups = "drop")
+  
+  # 绘图
+  p2 <- ggplot(plot_data, aes(x = "", y = fraction, fill = Response_simple)) +
+    geom_col(width = 1, color = "white", size = 0.5) +
+    coord_polar(theta = "y") +
+    
+    # 百分比标签
+    geom_text(
+      aes(
+        label = ifelse(percent > 5, label, ""),
+        group = Response_simple,
+        x = 1
+      ),
+      position = position_stack(vjust = 0.5),
+      size = 4,
+      fontface = "bold",
+      color = "black",
+      inherit.aes = TRUE
+    ) +
+    
+    # 中心样本量标注
+    geom_text(
+      data = total_n_data,
+      aes(x = 0, y = 0, label = paste0("n=", total)),
+      inherit.aes = FALSE,
+      size = 5,
+      fontface = "bold",
+      color = "black"
+    ) +
+    
+    # 颜色设置
+    scale_fill_manual(
+      values = c(
+        "pCR" = "#00A087FF",
+        "MPR" = "#F39B7FFF",
+        "non-MPR" = "#E64B35FF"
+      ),
+      name = "Response"
+    ) +
+    
+    # 分面
+    facet_grid(T_size ~ N_status) +
+    
+    scale_y_continuous(expand = c(0, 0)) +
+    labs(
+      title = sprintf("%s: 同一T大小下，N状态对缓解率的影响", path_type)
+    ) +
+    theme_void() +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14, margin = margin(b = 10)),
+      strip.text = element_text(size = 11, face = "bold", color = "black"),
+      strip.background = element_blank(),  # 无分面标题背景
+      legend.position = "top",
+      legend.title = element_text(face = "bold", size = 11),
+      legend.text = element_text(size = 10),
+      legend.key = element_rect(fill = "white", color = NA),  # 图例键无边框
+      legend.background = element_blank(),  # 图例背景无方框
+      legend.box.background = element_blank(),  # 图例框背景无方框
+      legend.box = element_blank(),  # 移除图例框
+      legend.box.margin = margin(0, 0, 0, 0),  # 调整图例边距
+      legend.margin = margin(0, 0, 0, 0),  # 调整图例边距
+      panel.spacing = unit(1.5, "lines"),
+      plot.background = element_rect(fill = "white", color = NA),
+      panel.background = element_rect(fill = "white", color = NA)
+    )
+  
+  # 保存
+  ggsave(
+    sprintf("Effect_of_N_status_pie_%s.tiff", path_type),
+    p2,
+    width = 10,
+    height = 8,
+    dpi = 600,
+    compression = "lzw",
+    bg = "white"
+  )
+  print(p2)
+  cat(sprintf("\n已保存：Effect_of_N_status_pie_%s.tiff\n", path_type))
+}
+
+
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(stringr)
+
+# 1. 数据读取与预处理
+df <- read.csv("clinical_info1.csv", stringsAsFactors = FALSE)
+df_clean <- df %>%
+  mutate(
+    # 提取T/N分期并转数值
+    T_stage = str_extract(Pre.treatment.TNM, "T[0-9]+[a-c]?"),
+    N_stage = str_extract(Pre.treatment.TNM, "N[0-9]+"),
+    T_numeric = as.numeric(str_extract(T_stage, "[0-9]+")),
+    N_numeric = as.numeric(str_extract(N_stage, "[0-9]+")),
+    
+    # 定义双因素分组
+    T_size = case_when(
+      T_numeric %in% c(1,2) ~ "T-small (T1-2)",
+      T_numeric %in% c(3,4) ~ "T-large (T3-4)"
+    ),
+    N_status = case_when(
+      N_numeric == 0 ~ "N=0",
+      N_numeric > 0 ~ "N>0"
+    ),
+    # 简化病理反应
+    Response_simple = case_when(
+      Pathological.Response == "pCR" ~ "pCR",
+      Pathological.Response == "MPR" ~ "MPR",
+      TRUE ~ "non-MPR"
+    ),
+    # 因子顺序 - 按照要求调整
+    Response_simple = factor(Response_simple, levels = c("pCR", "MPR", "non-MPR")),
+    T_size = factor(T_size, levels = c("T-small (T1-2)", "T-large (T3-4)")),
+    N_status = factor(N_status, levels = c("N=0", "N>0")),
+    pathology = factor(pathology, levels = c("LUAD", "LUSC"))
+  ) %>%
+  filter(!is.na(T_size) & !is.na(N_status))
+
+# 2. 定义病理类型循环
+pathology_types <- c("LUAD", "LUSC")
+
+# ========== 图1：同一T大小下，N状态对缓解率的影响 ==========
+for (path_type in pathology_types) {
+  df_subset <- df_clean %>% filter(pathology == path_type)
+  if (nrow(df_subset) == 0) {
+    cat(sprintf("\n%s: 无有效数据（图1）\n", path_type))
+    next
+  }
+  
+  # 统计百分比和样本量
+  plot_data <- df_subset %>%
+    group_by(T_size, N_status, Response_simple) %>%
+    summarise(count = n(), .groups = "drop") %>%
+    group_by(T_size, N_status) %>%
+    mutate(
+      total = sum(count),
+      percent = count / total * 100,
+      percent_label = sprintf("%.1f%%", percent),
+      label_y_offset = case_when(
+        Response_simple == "pCR" ~ 3,
+        Response_simple == "MPR" ~ 0,
+        Response_simple == "non-MPR" ~ -3
+      )
+    ) %>%
+    ungroup()
+  
+  # 创建样本量数据框
+  total_n_data <- plot_data %>%
+    distinct(T_size, N_status, total)
+  
+  # 打印调试信息
+  cat(sprintf("\n=== %s - 图1样本量 ===\n", path_type))
+  cat("T-small × N=0: ", total_n_data$total[total_n_data$T_size == "T-small (T1-2)" & total_n_data$N_status == "N=0"], "\n")
+  cat("T-small × N>0: ", total_n_data$total[total_n_data$T_size == "T-small (T1-2)" & total_n_data$N_status == "N>0"], "\n")
+  cat("T-large × N=0: ", total_n_data$total[total_n_data$T_size == "T-large (T3-4)" & total_n_data$N_status == "N=0"], "\n")
+  cat("T-large × N>0: ", total_n_data$total[total_n_data$T_size == "T-large (T3-4)" & total_n_data$N_status == "N>0"], "\n")
+  
+  # 方法1：使用单独的数据框创建横坐标标签
+  # 创建包含正确标签的独立数据框
+  x_label_data <- total_n_data %>%
+    mutate(
+      x_label = paste0(N_status, "\n(n=", total, ")")
+    )
+  
+  # 绘图
+  p1 <- ggplot(plot_data, aes(x = N_status, y = percent, 
+                               color = Response_simple, group = Response_simple)) +
+    geom_line(linewidth = 1.2, alpha = 0.8) +
+    geom_point(size = 3.5, alpha = 0.9) +
+    
+    # 添加百分比标签
+    geom_text(
+      aes(y = percent + label_y_offset, label = percent_label),
+      size = 3.2,
+      fontface = "bold",
+      vjust = 0.5,
+      hjust = 0.5,
+      show.legend = FALSE
+    ) +
+    
+    # 分面
+    facet_wrap(~ T_size, ncol = 2) +
+    
+    # 颜色设置
+    scale_color_manual(
+      values = c(
+        "pCR" = "#00A087FF",
+        "MPR" = "#F39B7FFF",
+        "non-MPR" = "#E64B35FF"
+      ),
+      name = "Response"
+    ) +
+    
+    # y轴设置
+    scale_y_continuous(
+      limits = c(0, 110),
+      breaks = seq(0, 100, 25),
+      labels = ~paste0(., "%"),
+      expand = expansion(mult = c(0, 0.1))
+    ) +
+    
+    labs(
+      title = sprintf("%s: 同一T大小下，N状态对缓解率的影响", path_type),
+      x = "Lymph Node Status", 
+      y = "Patient Proportion (%)"
+    ) +
+    
+    theme_minimal(base_size = 12) +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14, 
+                                margin = margin(b = 15)),
+      axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5,
+                                 face = "bold", size = 10, lineheight = 0.9),
+      axis.text.y = element_text(size = 10),
+      axis.title.x = element_text(face = "bold", size = 11, margin = margin(t = 10)),
+      axis.title.y = element_text(face = "bold", size = 11, margin = margin(r = 10)),
+      axis.line = element_line(color = "black", linewidth = 0.5),
+      axis.ticks = element_line(color = "black", linewidth = 0.5),
+      strip.text = element_text(face = "bold", size = 11, margin = margin(5, 0, 5, 0)),
+      strip.background = element_rect(fill = "gray90", color = "black", linewidth = 0.5),
+      legend.position = "top",
+      legend.title = element_text(face = "bold", size = 11),
+      legend.text = element_text(size = 10),
+      legend.margin = margin(0, 0, 10, 0),
+      panel.grid.major.y = element_line(color = "gray90", linewidth = 0.3),
+      panel.grid.minor.y = element_blank(),
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor.x = element_blank(),
+      panel.border = element_rect(color = "gray80", fill = NA, linewidth = 0.5),
+      plot.background = element_rect(fill = "white", color = NA),
+      panel.background = element_rect(fill = "white", color = NA),
+      plot.margin = margin(30, 20, 30, 20),
+      panel.spacing = unit(20, "pt")
+    )
+  
+  # 保存前打印预览
+  print(p1)
+  
+  # 方法2：创建正确的横坐标标签（更简单的方法）
+  # 重新绘制，使用不同的方法处理横坐标标签
+  cat(sprintf("\n正在创建修正版图表...\n"))
+  
+  # 方法2：使用geom_text添加样本量，不使用scale_x_discrete
+  p1_corrected <- ggplot(plot_data, aes(x = N_status, y = percent, 
+                                         color = Response_simple, group = Response_simple)) +
+    geom_line(linewidth = 1.2, alpha = 0.8) +
+    geom_point(size = 3.5, alpha = 0.9) +
+    
+    # 添加百分比标签
+    geom_text(
+      aes(y = percent + label_y_offset, label = percent_label),
+      size = 3.2,
+      fontface = "bold",
+      vjust = 0.5,
+      hjust = 0.5,
+      show.legend = FALSE
+    ) +
+    
+    # 添加样本量标签（在x轴下方）
+    geom_text(
+      data = total_n_data,
+      aes(x = N_status, y = -5, label = paste0("n=", total)),
+      inherit.aes = FALSE,
+      size = 3.2,
+      fontface = "bold",
+      color = "black",
+      vjust = 1
+    ) +
+    
+    # 分面
+    facet_wrap(~ T_size, ncol = 2) +
+    
+    # 颜色设置
+    scale_color_manual(
+      values = c(
+        "pCR" = "#00A087FF",
+        "MPR" = "#F39B7FFF",
+        "non-MPR" = "#E64B35FF"
+      ),
+      name = "Response"
+    ) +
+    
+    # y轴设置，为样本量标签留出空间
+    scale_y_continuous(
+      limits = c(-10, 110),  # 底部留出空间给样本量标签
+      breaks = seq(0, 100, 25),
+      labels = ~paste0(., "%"),
+      expand = expansion(mult = c(0, 0.1))
+    ) +
+    
+    labs(
+      title = sprintf("%s: 同一T大小下，N状态对缓解率的影响", path_type),
+      x = "Lymph Node Status", 
+      y = "Patient Proportion (%)"
+    ) +
+    
+    theme_minimal(base_size = 12) +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14, 
+                                margin = margin(b = 15)),
+      axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5,
+                                 face = "bold", size = 10),
+      axis.text.y = element_text(size = 10),
+      axis.title.x = element_text(face = "bold", size = 11, margin = margin(t = 20)),  # 增加上边距
+      axis.title.y = element_text(face = "bold", size = 11, margin = margin(r = 10)),
+      axis.line = element_line(color = "black", linewidth = 0.5),
+      axis.ticks = element_line(color = "black", linewidth = 0.5),
+      strip.text = element_text(face = "bold", size = 11, margin = margin(5, 0, 5, 0)),
+      strip.background = element_rect(fill = "gray90", color = "black", linewidth = 0.5),
+      legend.position = "top",
+      legend.title = element_text(face = "bold", size = 11),
+      legend.text = element_text(size = 10),
+      legend.margin = margin(0, 0, 10, 0),
+      panel.grid.major.y = element_line(color = "gray90", linewidth = 0.3),
+      panel.grid.minor.y = element_blank(),
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor.x = element_blank(),
+      panel.border = element_rect(color = "gray80", fill = NA, linewidth = 0.5),
+      plot.background = element_rect(fill = "white", color = NA),
+      panel.background = element_rect(fill = "white", color = NA),
+      plot.margin = margin(30, 20, 30, 20),
+      panel.spacing = unit(20, "pt")
+    ) +
+    coord_cartesian(ylim = c(0, 110), clip = "off")  # 允许在绘图区域外绘制标签
+  
+  # 打印修正版
+  print(p1_corrected)
+  
+  # 保存修正版
+  tryCatch({
+    ggsave(
+      sprintf("Line_Chart_N_Effect_by_T_CORRECTED_%s.tiff", path_type),
+      p1_corrected,
+      width = 12,
+      height = 8,
+      dpi = 600,
+      device = "tiff",
+      compression = "lzw",
+      bg = "white"
+    )
+    cat(sprintf("\n✓ 已成功保存修正版：Line_Chart_N_Effect_by_T_%s.tiff\n", path_type))
+  }, error = function(e) {
+    cat(sprintf("\n✗ 修正版保存失败：%s\n", e$message))
+  })
+}
+
+# ========== 图2：同一N状态下，T大小对缓解率的影响 ==========
+for (path_type in pathology_types) {
+  df_subset <- df_clean %>% filter(pathology == path_type)
+  if (nrow(df_subset) == 0) {
+    cat(sprintf("\n%s: 无有效数据（图2）\n", path_type))
+    next
+  }
+  
+  # 统计百分比
+  plot_data <- df_subset %>%
+    group_by(N_status, T_size, Response_simple) %>%
+    summarise(count = n(), .groups = "drop") %>%
+    group_by(N_status, T_size) %>%
+    mutate(
+      total = sum(count),
+      percent = count / total * 100,
+      percent_label = sprintf("%.1f%%", percent),
+      label_y_offset = case_when(
+        Response_simple == "pCR" ~ 3,
+        Response_simple == "MPR" ~ 0,
+        Response_simple == "non-MPR" ~ -3
+      ),
+      # 简化T_size标签
+      T_size_label = case_when(
+        T_size == "T-small (T1-2)" ~ "T-small",
+        T_size == "T-large (T3-4)" ~ "T-large"
+      )
+    ) %>%
+    ungroup() %>%
+    mutate(T_size_label = factor(T_size_label, levels = c("T-small", "T-large")))
+  
+  # 样本量数据
+  total_n_data <- plot_data %>%
+    distinct(N_status, T_size, T_size_label, total)
+  
+  # 打印调试信息
+  cat(sprintf("\n=== %s - 图2样本量 ===\n", path_type))
+  cat("N=0 × T-small: ", total_n_data$total[total_n_data$N_status == "N=0" & total_n_data$T_size_label == "T-small"], "\n")
+  cat("N=0 × T-large: ", total_n_data$total[total_n_data$N_status == "N=0" & total_n_data$T_size_label == "T-large"], "\n")
+  cat("N>0 × T-small: ", total_n_data$total[total_n_data$N_status == "N>0" & total_n_data$T_size_label == "T-small"], "\n")
+  cat("N>0 × T-large: ", total_n_data$total[total_n_data$N_status == "N>0" & total_n_data$T_size_label == "T-large"], "\n")
+  
+  # 绘图 - 使用相同的方法
+  p2_corrected <- ggplot(plot_data, aes(x = T_size_label, y = percent, 
+                                         color = Response_simple, group = Response_simple)) +
+    geom_line(linewidth = 1.2, alpha = 0.8) +
+    geom_point(size = 3.5, alpha = 0.9) +
+    
+    # 添加百分比标签
+    geom_text(
+      aes(y = percent + label_y_offset, label = percent_label),
+      size = 3.2,
+      fontface = "bold",
+      vjust = 0.5,
+      hjust = 0.5,
+      show.legend = FALSE
+    ) +
+    
+    # 添加样本量标签
+    geom_text(
+      data = total_n_data,
+      aes(x = T_size_label, y = -5, label = paste0("n=", total)),
+      inherit.aes = FALSE,
+      size = 3.2,
+      fontface = "bold",
+      color = "black",
+      vjust = 1
+    ) +
+    
+    # 分面
+    facet_wrap(~ N_status, ncol = 2) +
+    
+    # 颜色设置
+    scale_color_manual(
+      values = c(
+        "pCR" = "#00A087FF",
+        "MPR" = "#F39B7FFF",
+        "non-MPR" = "#E64B35FF"
+      ),
+      name = "Response"
+    ) +
+    
+    # y轴设置
+    scale_y_continuous(
+      limits = c(-10, 110),
+      breaks = seq(0, 100, 25),
+      labels = ~paste0(., "%"),
+      expand = expansion(mult = c(0, 0.1))
+    ) +
+    
+    labs(
+      title = sprintf("%s: 同一N状态下，T大小对缓解率的影响", path_type),
+      x = "T Stage Size", 
+      y = "Patient Proportion (%)"
+    ) +
+    
+    theme_minimal(base_size = 12) +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14, 
+                                margin = margin(b = 15)),
+      axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5,
+                                 face = "bold", size = 10),
+      axis.text.y = element_text(size = 10),
+      axis.title.x = element_text(face = "bold", size = 11, margin = margin(t = 20)),
+      axis.title.y = element_text(face = "bold", size = 11, margin = margin(r = 10)),
+      axis.line = element_line(color = "black", linewidth = 0.5),
+      axis.ticks = element_line(color = "black", linewidth = 0.5),
+      strip.text = element_text(face = "bold", size = 11, margin = margin(5, 0, 5, 0)),
+      strip.background = element_rect(fill = "gray90", color = "black", linewidth = 0.5),
+      legend.position = "top",
+      legend.title = element_text(face = "bold", size = 11),
+      legend.text = element_text(size = 10),
+      legend.margin = margin(0, 0, 10, 0),
+      panel.grid.major.y = element_line(color = "gray90", linewidth = 0.3),
+      panel.grid.minor.y = element_blank(),
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor.x = element_blank(),
+      panel.border = element_rect(color = "gray80", fill = NA, linewidth = 0.5),
+      plot.background = element_rect(fill = "white", color = NA),
+      panel.background = element_rect(fill = "white", color = NA),
+      plot.margin = margin(30, 20, 30, 20),
+      panel.spacing = unit(20, "pt")
+    ) +
+    coord_cartesian(ylim = c(0, 110), clip = "off")
+  
+  # 打印修正版
+  print(p2_corrected)
+  
+  # 保存修正版
+  tryCatch({
+    ggsave(
+      sprintf("Line_Chart_T_Effect_by_N_CORRECTED_%s.tiff", path_type),
+      p2_corrected,
+      width = 12,
+      height = 8,
+      dpi = 600,
+      device = "tiff",
+      compression = "lzw",
+      bg = "white"
+    )
+    cat(sprintf("\n✓ 已成功保存修正版：Line_Chart_T_Effect_by_N_%s.tiff\n", path_type))
+  }, error = function(e) {
+    cat(sprintf("\n✗ 修正版保存失败：%s\n", e$message))
+  })
+}
+
+#自己收集的数据
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+# 创建数据框
+plot_data <- data.frame(
+  Response_simple = rep(c("pCR", "MPR", "non-MPR"), 3),
+  Group = c(rep("总数", 3), rep("大T小N", 3), rep("小T大N", 3)),
+  Count = c(4, 8, 30,   # 总数: 4+8+30 = 42
+            2, 4, 16,   # 大T小N: 2+4+16 = 22
+            2, 4, 14)   # 小T大N: 2+4+14 = 20
+)
+
+# 计算每个组的总数和百分比
+plot_data <- plot_data %>%
+  group_by(Group) %>%
+  mutate(
+    total = sum(Count),
+    fraction = Count / total,
+    percent = round(fraction * 100, 1),
+    label = sprintf("%.1f%%", percent)  # 只显示百分比
+  ) %>%
+  ungroup()
+
+# 设置分组顺序
+plot_data$Group <- factor(plot_data$Group, levels = c("总数", "大T小N", "小T大N"))
+plot_data$Response_simple <- factor(plot_data$Response_simple, 
+                                   levels = c("pCR", "MPR", "non-MPR"))
+# 创建中心标签数据
+total_n_data <- plot_data %>%
+  distinct(Group, total)
+
+# 生成饼图
+p1 <- ggplot(plot_data, aes(x = "", y = fraction, fill = Response_simple)) +
+  geom_col(width = 1, color = "white", size = 0.5) +
+  coord_polar(theta = "y") +
+  
+  # 百分比标签
+  geom_text(
+    aes(
+      label = ifelse(percent > 5, label, ""),  # 只显示大于5%的百分比
+      group = Response_simple,
+      x = 1
+    ),
+    position = position_stack(vjust = 0.5),
+    size = 4,
+    fontface = "bold",
+    color = "black",
+    inherit.aes = TRUE
+  ) +
+  
+  # 中心样本量标注
+  geom_text(
+    data = total_n_data,
+    aes(x = 0, y = 0, label = paste0("n=", total)),
+    inherit.aes = FALSE,
+    size = 5,
+    fontface = "bold",
+    color = "black"
+  ) +
+  
+  # 颜色设置
+  scale_fill_manual(
+    values = c(
+      "pCR" = "#00A087FF",      # 完全缓解
+      "MPR" = "#F39B7FFF",      # 显著缓解
+      "non-MPR" = "#E64B35FF"   # 不明显
+    ),
+    name = "Response",
+    labels = c("pCR" = "pCR", "MPR" = "MPR", "non-MPR" = "non-MPR")
+  ) +
+  
+  # 分面 - 三个独立的饼图
+  facet_wrap(~ Group, nrow = 1) +
+  
+  scale_y_continuous(expand = c(0, 0)) +
+  labs(
+    title = "LUAD"
+  ) +
+  theme_void() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 16, margin = margin(b = 15)),
+    strip.text = element_text(size = 12, face = "bold", color = "black", margin = margin(b = 10)),
+    strip.background = element_blank(),
+    legend.position = "top",
+    legend.title = element_text(face = "bold", size = 12),
+    legend.text = element_text(size = 11),
+    legend.key = element_rect(fill = "white", color = NA),
+    legend.background = element_blank(),
+    legend.box.background = element_blank(),
+    legend.box = element_blank(),
+    legend.box.margin = margin(0, 0, 0, 0),
+    legend.margin = margin(0, 0, 10, 0),
+    panel.spacing = unit(2, "lines"),
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA)
+  )
+
+# 显示图形
+print(p1)
+
+# 保存
+ggsave(
+  "腺癌缓解情况饼图.tiff",
+  p1,
+  width = 12,
+  height = 6,
+  dpi = 600,
+  compression = "lzw",
+  bg = "white"
+)
+
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+# 创建数据框 - 使用鳞癌数据
+plot_data <- data.frame(
+  Response_simple = rep(c("pCR", "MPR", "non-MPR"), 3),
+  Group = c(rep("总数", 3), rep("大T小N", 3), rep("小T大N", 3)),
+  Count = c(12, 11, 17,   # 总数: 12+11+17 = 40
+            4, 4, 12,    # 大T小N: 4+4+12 = 20
+            8, 7, 5)     # 小T大N: 8+7+5 = 20
+)
+
+# 计算每个组的总数和百分比
+plot_data <- plot_data %>%
+  group_by(Group) %>%
+  mutate(
+    total = sum(Count),
+    fraction = Count / total,
+    percent = round(fraction * 100, 1),
+    label = sprintf("%.1f%%", percent)  # 只显示百分比
+  ) %>%
+  ungroup()
+
+# 设置分组顺序
+plot_data$Group <- factor(plot_data$Group, levels = c("总数", "大T小N", "小T大N"))
+plot_data$Response_simple <- factor(plot_data$Response_simple, 
+                                   levels = c("pCR", "MPR", "non-MPR"))
+# 创建中心标签数据
+total_n_data <- plot_data %>%
+  distinct(Group, total)
+
+# 生成饼图
+p1 <- ggplot(plot_data, aes(x = "", y = fraction, fill = Response_simple)) +
+  geom_col(width = 1, color = "white", size = 0.5) +
+  coord_polar(theta = "y") +
+  
+  # 百分比标签
+  geom_text(
+    aes(
+      label = ifelse(percent > 5, label, ""),  # 只显示大于5%的百分比
+      group = Response_simple,
+      x = 1
+    ),
+    position = position_stack(vjust = 0.5),
+    size = 4,
+    fontface = "bold",
+    color = "black",
+    inherit.aes = TRUE
+  ) +
+  
+  # 中心样本量标注
+  geom_text(
+    data = total_n_data,
+    aes(x = 0, y = 0, label = paste0("n=", total)),
+    inherit.aes = FALSE,
+    size = 5,
+    fontface = "bold",
+    color = "black"
+  ) +
+  
+  # 颜色设置
+  scale_fill_manual(
+    values = c(
+      "pCR" = "#00A087FF",      # 完全缓解
+      "MPR" = "#F39B7FFF",      # 显著缓解
+      "non-MPR" = "#E64B35FF"   # 不明显
+    ),
+    name = "Response",
+    labels = c("pCR" = "pCR", "MPR" = "MPR", "non-MPR" = "non-MPR")
+  ) +
+  
+  # 分面 - 三个独立的饼图
+  facet_wrap(~ Group, nrow = 1) +
+  
+  scale_y_continuous(expand = c(0, 0)) +
+  labs(
+    title = "LUSC"  # 改为鳞癌(LUSC)
+  ) +
+  theme_void() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 16, margin = margin(b = 15)),
+    strip.text = element_text(size = 12, face = "bold", color = "black", margin = margin(b = 10)),
+    strip.background = element_blank(),
+    legend.position = "top",
+    legend.title = element_text(face = "bold", size = 12),
+    legend.text = element_text(size = 11),
+    legend.key = element_rect(fill = "white", color = NA),
+    legend.background = element_blank(),
+    legend.box.background = element_blank(),
+    legend.box = element_blank(),
+    legend.box.margin = margin(0, 0, 0, 0),
+    legend.margin = margin(0, 0, 10, 0),
+    panel.spacing = unit(2, "lines"),
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA)
+  )
+
+# 显示图形
+print(p1)
+
+# 保存 - 改为鳞癌文件名
+ggsave(
+  "鳞癌缓解情况饼图.tiff",
+  p1,
+  width = 12,
+  height = 6,
+  dpi = 600,
+  compression = "lzw",
+  bg = "white"
+)
+
+#柱状图
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+# 创建数据框 - 使用鳞癌数据
+plot_data <- data.frame(
+  Response_simple = rep(c("pCR", "MPR", "non-MPR"), 3),
+  TN_group = c(rep("总数", 3), rep("T大N小", 3), rep("T小N大", 3)),
+  count = c(12, 11, 17,   # 总数: 12+11+17 = 40
+            4, 4, 12,    # 大T小N: 4+4+12 = 20
+            8, 7, 5)     # 小T大N: 8+7+5 = 20
+)
+
+# 计算百分比和样本量
+plot_data <- plot_data %>%
+  group_by(TN_group) %>%
+  mutate(
+    total = sum(count),
+    percent = count / total * 100,
+    percent_label = sprintf("%.1f%%", percent)
+  ) %>%
+  ungroup()
+
+# 设置分组顺序
+plot_data$TN_group <- factor(plot_data$TN_group, 
+                             levels = c("总数", "T大N小", "T小N大"))
+plot_data$Response_simple <- factor(plot_data$Response_simple, 
+                                   levels = c("pCR", "MPR", "non-MPR"))
+
+# 创建柱状堆叠图
+p <- ggplot(plot_data, aes(x = TN_group, y = percent, fill = Response_simple)) +
+  geom_col(width = 0.7, color = "black", size = 0.3) +
+  
+  # 百分比标签
+  geom_text(aes(label = percent_label), 
+            position = position_stack(vjust = 0.5),
+            size = 3.5, color = "white", fontface = "bold") +
+  
+  # 在每个柱子顶部添加总样本数
+  geom_text(data = plot_data %>% 
+              group_by(TN_group) %>% 
+              summarise(total = first(total), .groups = "drop"),
+            aes(x = TN_group, y = 102, label = paste("n =", total)),
+            inherit.aes = FALSE, size = 3.5, vjust = 0) +
+  
+  # 颜色设置
+  scale_fill_manual(
+    name = "Pathological Response",
+    values = c(
+      "pCR" = "#00A087FF",  # 深绿色
+      "MPR" = "#F39B7FFF",  # 金黄色
+      "non-MPR" = "#E64B35FF"  # 深橙色
+    ),
+    labels = c("pCR", "MPR", "non-MPR")
+  ) +
+  
+  # Y轴设置
+  scale_y_continuous(
+    limits = c(0, 105), 
+    breaks = seq(0, 100, 25),
+    labels = function(x) paste0(x, "%"),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
+  
+  # X轴标签设置
+  scale_x_discrete(
+    labels = c(
+      "总数" = "总数",
+      "T大N小" = "T大N小",
+      "T小N大" = "T小N大"
+    )
+  ) +
+  
+  # 标签
+  labs(
+    title = "LUSC",
+    x = "",
+    y = "Patient Proportion (%)",
+    fill = "Response"
+  ) +
+  
+  # 主题设置
+  theme_classic(base_size = 12) +
+  theme(
+    plot.title = element_text(
+      hjust = 0.5, 
+      face = "bold", 
+      size = 14,
+      margin = margin(b = 10)
+    ),
+    axis.title = element_text(face = "bold", color = "black"),
+    axis.title.y = element_text(margin = margin(r = 10)),
+    axis.text.x = element_text(
+      angle = 0, 
+      hjust = 0.5, 
+      color = "black", 
+      size = 11, 
+      face = "bold",
+      margin = margin(t = 5),
+      lineheight = 0.9
+    ),
+    axis.text.y = element_text(color = "black"),
+    axis.line = element_line(color = "black", linewidth = 0.5),
+    axis.ticks = element_line(color = "black"),
+    
+    # 移除所有网格线
+    panel.grid = element_blank(),
+    
+    # 图例设置
+    legend.position = "top",
+    legend.title = element_text(face = "bold", size = 11),
+    legend.text = element_text(size = 10),
+    legend.key.size = unit(0.5, "cm"),
+    legend.margin = margin(b = 5, t = 5),
+    
+    # 整体背景
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA),
+    plot.margin = margin(15, 15, 15, 15)
+  )
+
+# 显示图形
+print(p)
+
+# 保存
+ggsave(
+  "鳞癌缓解情况柱状堆叠图.tiff",
+  p,
+  width = 9,
+  height = 7,
+  dpi = 600,
+  compression = "lzw",
+  bg = "white"
+)
+
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+# 创建数据框 - 使用腺癌数据
+plot_data <- data.frame(
+  Response_simple = rep(c("pCR", "MPR", "non-MPR"), 3),
+  TN_group = c(rep("总数", 3), rep("大T小N", 3), rep("小T大N", 3)),
+  count = c(4, 8, 30,   # 总数: 4+8+30 = 42
+            2, 4, 16,   # 大T小N: 2+4+16 = 22
+            2, 4, 14)   # 小T大N: 2+4+14 = 20
+)
+
+# 计算百分比和样本量
+plot_data <- plot_data %>%
+  group_by(TN_group) %>%
+  mutate(
+    total = sum(count),
+    percent = count / total * 100,
+    percent_label = sprintf("%.1f%%", percent)
+  ) %>%
+  ungroup()
+
+# 设置分组顺序
+plot_data$TN_group <- factor(plot_data$TN_group, 
+                             levels = c("总数", "大T小N", "小T大N"))
+plot_data$Response_simple <- factor(plot_data$Response_simple, 
+                                   levels = c("pCR", "MPR", "non-MPR"))
+
+# 创建柱状堆叠图
+p <- ggplot(plot_data, aes(x = TN_group, y = percent, fill = Response_simple)) +
+  geom_col(width = 0.7, color = "black", size = 0.3) +
+  
+  # 百分比标签
+  geom_text(aes(label = percent_label), 
+            position = position_stack(vjust = 0.5),
+            size = 3.5, color = "white", fontface = "bold") +
+  
+  # 在每个柱子顶部添加总样本数
+  geom_text(data = plot_data %>% 
+              group_by(TN_group) %>% 
+              summarise(total = first(total), .groups = "drop"),
+            aes(x = TN_group, y = 102, label = paste("n =", total)),
+            inherit.aes = FALSE, size = 3.5, vjust = 0) +
+  
+  # 颜色设置
+  scale_fill_manual(
+    name = "Pathological Response",
+    values = c(
+      "pCR" = "#00A087FF",  # 深绿色
+      "MPR" = "#F39B7FFF",  # 金黄色
+      "non-MPR" = "#E64B35FF"  # 深橙色
+    ),
+    labels = c("pCR", "MPR", "non-MPR")
+  ) +
+  
+  # Y轴设置
+  scale_y_continuous(
+    limits = c(0, 105), 
+    breaks = seq(0, 100, 25),
+    labels = function(x) paste0(x, "%"),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
+  
+  # X轴标签设置
+  scale_x_discrete(
+    labels = c(
+      "总数" = "总数",
+      "大T小N" = "T大N小",
+      "小T大N" = "T小N大"
+    )
+  ) +
+  
+  # 标签
+  labs(
+    title = "LUAD",
+    x = "",
+    y = "Patient Proportion (%)",
+    fill = "Response"
+  ) +
+  
+  # 主题设置
+  theme_classic(base_size = 12) +
+  theme(
+    plot.title = element_text(
+      hjust = 0.5, 
+      face = "bold", 
+      size = 14,
+      margin = margin(b = 10)
+    ),
+    axis.title = element_text(face = "bold", color = "black"),
+    axis.title.y = element_text(margin = margin(r = 10)),
+    axis.text.x = element_text(
+      angle = 0, 
+      hjust = 0.5, 
+      color = "black", 
+      size = 11, 
+      face = "bold",
+      margin = margin(t = 5),
+      lineheight = 0.9
+    ),
+    axis.text.y = element_text(color = "black"),
+    axis.line = element_line(color = "black", linewidth = 0.5),
+    axis.ticks = element_line(color = "black"),
+    
+    # 移除所有网格线
+    panel.grid = element_blank(),
+    
+    # 图例设置
+    legend.position = "top",
+    legend.title = element_text(face = "bold", size = 11),
+    legend.text = element_text(size = 10),
+    legend.key.size = unit(0.5, "cm"),
+    legend.margin = margin(b = 5, t = 5),
+    
+    # 整体背景
+    panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA),
+    plot.margin = margin(15, 15, 15, 15)
+  )
+
+# 显示图形
+print(p)
+
+# 保存
+ggsave(
+  "腺癌缓解情况柱状堆叠图.tiff",
+  p,
+  width = 9,
+  height = 7,
+  dpi = 600,
+  compression = "lzw",
+  bg = "white"
+)
+
+#柱状图不要总体
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+# 鳞癌数据（去掉总数，只保留两组）
+plot_data <- data.frame(
+  Response_simple = rep(c("pCR", "MPR", "non-MPR"), 2),
+  TN_group = c(rep("T小N大", 3), rep("T大N小", 3)),  # 先T小N大（对应LN+），后T大N小（对应LN-）
+  count = c(8, 7, 5,     # T小N大（LN+）
+            4, 4, 12)    # T大N小（LN-）
+)
+
+plot_data <- plot_data %>%
+  group_by(TN_group) %>%
+  mutate(
+    total = sum(count),
+    percent = count / total * 100,
+    percent_label = sprintf("%.1f%%", percent)
+  ) %>%
+  ungroup()
+
+# 核心修改：调整因子顺序，先T小N大（LN+），后T大N小（LN-）
+plot_data$TN_group <- factor(plot_data$TN_group, 
+                             levels = c("T小N大", "T大N小"))  # 顺序调整
+plot_data$Response_simple <- factor(plot_data$Response_simple, 
+                                   levels = c("pCR", "MPR", "non-MPR"))
+
+# 画图（完全和你最早风格一致）
+p <- ggplot(plot_data, aes(x = TN_group, y = percent, fill = Response_simple)) +
+  geom_col(width = 0.7, color = "black", size = 0.3) +
+  
+  geom_text(aes(label = percent_label), 
+            position = position_stack(vjust = 0.5),
+            size = 3.5, color = "white", fontface = "bold") +
+  
+  geom_text(data = plot_data %>% 
+              group_by(TN_group) %>% 
+              summarise(total = first(total), .groups = "drop"),
+            aes(x = TN_group, y = 102, label = paste("n =", total)),
+            inherit.aes = FALSE, size = 3.5, vjust = 0) +
+  
+  scale_fill_manual(
+    name = "Pathological Response",
+    values = c("pCR"="#00A087FF", "MPR"="#F39B7FFF", "non-MPR"="#E64B35FF")
+  ) +
+  
+  scale_y_continuous(
+    limits = c(0, 105), 
+    breaks = seq(0, 100, 25),
+    labels = function(x) paste0(x, "%"),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
+  
+  # X 轴标签：先LN+，后LN-
+  scale_x_discrete(
+    labels = c(
+      "T小N大"  = "LN+\n(T1-2 & N1-2)",  # 第一个位置：LN+
+      "T大N小"  = "LN-\n(T3-4 & N0)"     # 第二个位置：LN-
+    )
+  ) +
+  
+  labs(
+    title = "LUSC",
+    x = "Lymph Node Metastasis Status",
+    y = "Patient Proportion (%)",
+    fill = "Response"
+  ) +
+  
+  # 主题、字体、大小 100% 统一
+  theme_classic(base_size = 12) +
+  theme(
+    plot.title = element_text(hjust=0.5, face="bold", size=14, margin=margin(b=10)),
+    axis.title = element_text(face="bold", color="black"),
+    axis.text.x = element_text(angle=0, hjust=0.5, color="black", size=10, lineheight=0.9),
+    axis.text.y = element_text(color="black"),
+    axis.line = element_line(color="black", linewidth=0.5),
+    axis.ticks = element_line(color="black"),
+    
+    legend.position = "top",
+    legend.title = element_text(face="bold", size=11),
+    legend.text = element_text(size=10),
+    legend.key.size = unit(0.5, "cm"),
+    
+    panel.background = element_rect(fill="white", color=NA),
+    plot.background = element_rect(fill="white", color=NA),
+    plot.margin = margin(15,15,15,15)
+  )
+
+print(p)
+
+# 保存 PDF，尺寸和你最早完全一样：6×6
+ggsave(
+  "LUSC_response.pdf",
+  p,
+  device = "pdf",
+  width = 6,
+  height = 6,
+  useDingbats = FALSE,
+  bg = "white"
+)
+
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+# 腺癌数据（去掉总数，调整顺序）
+plot_data <- data.frame(
+  Response_simple = rep(c("pCR", "MPR", "non-MPR"), 2),
+  TN_group = c(rep("小T大N", 3), rep("大T小N", 3)),  # 先小T大N（LN+），后大T小N（LN-）
+  count = c(2, 4, 14,    # 小T大N（LN+）
+            2, 4, 16)    # 大T小N（LN-）
+)
+
+plot_data <- plot_data %>%
+  group_by(TN_group) %>%
+  mutate(
+    total = sum(count),
+    percent = count / total * 100,
+    percent_label = sprintf("%.1f%%", percent)
+  ) %>%
+  ungroup()
+
+# 核心修改：调整因子顺序，先小T大N（LN+），后大T小N（LN-）
+plot_data$TN_group <- factor(plot_data$TN_group, 
+                             levels = c("小T大N", "大T小N"))  # 顺序调整
+plot_data$Response_simple <- factor(plot_data$Response_simple, 
+                                   levels = c("pCR", "MPR", "non-MPR"))
+
+# 画图（风格完全统一）
+p <- ggplot(plot_data, aes(x = TN_group, y = percent, fill = Response_simple)) +
+  geom_col(width = 0.7, color = "black", size = 0.3) +
+  
+  geom_text(aes(label = percent_label), 
+            position = position_stack(vjust = 0.5),
+            size = 3.5, color = "white", fontface = "bold") +
+  
+  geom_text(data = plot_data %>% 
+              group_by(TN_group) %>% 
+              summarise(total = first(total), .groups = "drop"),
+            aes(x = TN_group, y = 102, label = paste("n =", total)),
+            inherit.aes = FALSE, size = 3.5, vjust = 0) +
+  
+  scale_fill_manual(
+    name = "Pathological Response",
+    values = c("pCR"="#00A087FF", "MPR"="#F39B7FFF", "non-MPR"="#E64B35FF")
+  ) +
+  
+  scale_y_continuous(
+    limits = c(0, 105), 
+    breaks = seq(0, 100, 25),
+    labels = function(x) paste0(x, "%"),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
+  
+  # X 轴标签：先LN+，后LN-
+  scale_x_discrete(
+    labels = c(
+      "小T大N"  = "LN+\n(T1-2 & N1-2)",  # 第一个位置：LN+
+      "大T小N"  = "LN-\n(T3-4 & N0)"     # 第二个位置：LN-
+    )
+  ) +
+  
+  labs(
+    title = "LUAD",
+    x = "Lymph Node Metastasis Status",
+    y = "Patient Proportion (%)",
+    fill = "Response"
+  ) +
+  
+  theme_classic(base_size = 12) +
+  theme(
+    plot.title = element_text(hjust=0.5, face="bold", size=14, margin=margin(b=10)),
+    axis.title = element_text(face="bold", color="black"),
+    axis.text.x = element_text(angle=0, hjust=0.5, color="black", size=10, lineheight=0.9),
+    axis.text.y = element_text(color="black"),
+    axis.line = element_line(color="black", linewidth=0.5),
+    axis.ticks = element_line(color="black"),
+    
+    legend.position = "top",
+    legend.title = element_text(face="bold", size=11),
+    legend.text = element_text(size=10),
+    legend.key.size = unit(0.5, "cm"),
+    
+    panel.background = element_rect(fill="white", color=NA),
+    plot.background = element_rect(fill="white", color=NA),
+    plot.margin = margin(15,15,15,15)
+  )
+
+print(p)
+
+# 保存 PDF，6×6 和原图完全一致
+ggsave(
+  "LUAD_response.pdf",
+  p,
+  device = "pdf",
+  width = 6,
+  height = 6,
+  useDingbats = FALSE,
+  bg = "white"
+)
