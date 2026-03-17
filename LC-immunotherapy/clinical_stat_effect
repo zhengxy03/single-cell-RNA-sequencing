@@ -563,13 +563,13 @@ df_clean <- df %>%
     Response_simple = factor(Response_simple, levels = c("pCR", "MPR", "non-MPR")),
     T_size = factor(T_size, levels = c("T-small (T1-2)", "T-large (T3-4)")),
     N_status = factor(N_status, levels = c("N0", "N>0")),
-    pathology = factor(pathology, levels = c("LUAD", "LUSC"))
+    pathology = factor(pathology, levels = c("LUAD"))
   ) %>%
   # 过滤有效分组（排除T/N分期不明确的样本）
   filter(!is.na(T_size) & !is.na(N_status))
 
 # 2. 定义病理类型循环
-pathology_types <- c("LUAD", "LUSC")
+pathology_types <- c("LUAD")
 
 # ========== 图1：同一T大小下，N状态对缓解率的影响（添加n标注） ==========
 for (path_type in pathology_types) {
@@ -621,8 +621,15 @@ for (path_type in pathology_types) {
   
   # 保存
   ggsave(sprintf("Effect_of_T_size_%s.tiff", path_type), p1, width = 10, height = 6, dpi = 600, device = "tiff", compression = "lzw")
-  print(p1)
-  cat(sprintf("\n已保存：Effect_of_T_size_%s.tiff\n", path_type))
+  ggsave(sprintf("Effect_of_T_size_%s.pdf", path_type), 
+       plot = p1, 
+       width = 10, 
+       height = 6, 
+       dpi = 600, 
+       device = "pdf",  # 关键：将tiff改为pdf
+       # 移除compression参数（PDF无需LZW压缩）
+       useDingbats = FALSE  # 可选：解决PDF中字体/符号显示异常问题
+  )
 }
 
 # ========== 图2：同一N状态下，T大小对缓解率的影响（添加n标注） ==========
@@ -677,8 +684,18 @@ for (path_type in pathology_types) {
   ggsave(sprintf("Effect_of_N_status_%s.tiff", path_type), p2, width = 10, height = 6, dpi = 600, device = "tiff", compression = "lzw")
   print(p2)
   cat(sprintf("\n已保存：Effect_of_N_status_%s.tiff\n", path_type))
-}
+  # 保存为PDF格式（核心修改版）
+  ggsave(sprintf("Effect_of_N_status_%s.pdf", path_type), 
+       plot = p2, 
+       width = 10, 
+       height = 6, 
+       dpi = 600, 
+       device = "pdf",  # 关键：将tiff改为pdf
+       # 移除compression参数（PDF无需LZW压缩）
+       useDingbats = FALSE  # 可选：解决PDF中字体/符号显示异常问题
+  )
 
+}
 
 #pie
 library(dplyr)
@@ -824,6 +841,16 @@ for (path_type in pathology_types) {
   print(p1)
   cat(sprintf("\n已保存：Effect_of_T_size_pie_%s.tiff\n", path_type))
 }
+ggsave(sprintf("Effect_of_T_size_pie_%s.pdf", path_type), 
+       plot = p1, 
+       width = 10, 
+       height = 6, 
+       dpi = 600, 
+       device = "pdf",  # 关键：将tiff改为pdf
+       # 移除compression参数（PDF无需LZW压缩）
+       useDingbats = FALSE  # 可选：解决PDF中字体/符号显示异常问题
+)
+
 
 for (path_type in pathology_types) {
   df_subset <- df_clean %>% filter(pathology == path_type)
@@ -926,7 +953,15 @@ for (path_type in pathology_types) {
   print(p2)
   cat(sprintf("\n已保存：Effect_of_N_status_pie_%s.tiff\n", path_type))
 }
-
+ggsave(sprintf("Effect_of_N_status_pie_%s.pdf", path_type), 
+       plot = p2, 
+       width = 10, 
+       height = 6, 
+       dpi = 600, 
+       device = "pdf",  # 关键：将tiff改为pdf
+       # 移除compression参数（PDF无需LZW压缩）
+       useDingbats = FALSE  # 可选：解决PDF中字体/符号显示异常问题
+)
 
 library(dplyr)
 library(tidyr)
@@ -1179,16 +1214,15 @@ for (path_type in pathology_types) {
   # 保存修正版
   tryCatch({
     ggsave(
-      sprintf("Line_Chart_N_Effect_by_T_CORRECTED_%s.tiff", path_type),
+      sprintf("Line_Chart_N_Effect_by_T_CORRECTED_%s.pdf", path_type),
       p1_corrected,
       width = 12,
       height = 8,
       dpi = 600,
-      device = "tiff",
-      compression = "lzw",
+      device = "pdf",
       bg = "white"
     )
-    cat(sprintf("\n✓ 已成功保存修正版：Line_Chart_N_Effect_by_T_%s.tiff\n", path_type))
+    cat(sprintf("\n✓ 已成功保存修正版：Line_Chart_N_Effect_by_T_%s.pdf\n", path_type))
   }, error = function(e) {
     cat(sprintf("\n✗ 修正版保存失败：%s\n", e$message))
   })
@@ -1325,16 +1359,15 @@ for (path_type in pathology_types) {
   # 保存修正版
   tryCatch({
     ggsave(
-      sprintf("Line_Chart_T_Effect_by_N_CORRECTED_%s.tiff", path_type),
+      sprintf("Line_Chart_T_Effect_by_N_CORRECTED_%s.pdf", path_type),
       p2_corrected,
       width = 12,
       height = 8,
       dpi = 600,
-      device = "tiff",
-      compression = "lzw",
+      device = "pdf",
       bg = "white"
     )
-    cat(sprintf("\n✓ 已成功保存修正版：Line_Chart_T_Effect_by_N_%s.tiff\n", path_type))
+    cat(sprintf("\n✓ 已成功保存修正版：Line_Chart_T_Effect_by_N_%s.pdf\n", path_type))
   }, error = function(e) {
     cat(sprintf("\n✗ 修正版保存失败：%s\n", e$message))
   })
@@ -1444,12 +1477,11 @@ print(p1)
 
 # 保存
 ggsave(
-  "腺癌缓解情况饼图.tiff",
+  "腺癌缓解情况饼图.pdf",
   p1,
   width = 12,
   height = 6,
   dpi = 600,
-  compression = "lzw",
   bg = "white"
 )
 
@@ -1556,12 +1588,11 @@ print(p1)
 
 # 保存 - 改为鳞癌文件名
 ggsave(
-  "鳞癌缓解情况饼图.tiff",
+  "鳞癌缓解情况饼图.pdf",
   p1,
   width = 12,
   height = 6,
   dpi = 600,
-  compression = "lzw",
   bg = "white"
 )
 

@@ -444,13 +444,11 @@ for (pat in c("LUAD","LUSC")) {
   # 4. 保存（保持不变）
   # ===========================
   ggsave(
-    paste0("response_pie_", pat, ".tiff"),
+    paste0("response_pie_", pat, ".pdf"),
     p,
     width = 8,
     height = 6,
-    dpi = 600,
-    compression = "lzw",
-    type = "cairo"
+    dpi = 600
   )
 }
 
