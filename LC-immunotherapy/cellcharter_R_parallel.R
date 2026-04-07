@@ -177,6 +177,165 @@ analyze_spatial_domains <- function(seurat_obj, out_dir = "./cellcharter_results
 }
 
 # --------------------------
+# 聚类稳定性分析
+# --------------------------
+cluster_autok <- function(seurat_obj, n_clusters_range = 2:10, max_runs = 10, convergence_tol = 0.01, 
+                         use_rep = "cellcharter", n_cores = 6, out_dir = "./cellcharter_autok") {
+  if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
+  
+  if (!use_rep %in% names(seurat_obj@assays)) {
+    stop(paste(use_rep, "not found in seurat_obj@assays"))
+  }
+  
+  features <- t(as.matrix(GetAssayData(seurat_obj, assay = use_rep, layer = "data")))
+  
+  if (ncol(features) > 50) {
+    message("Reducing to 50 dims for stability")
+    pca <- prcomp(features, rank. = 50)
+    features <- pca$x
+  }
+  
+  labels <- list()
+  best_models <- list()
+  stability <- list()
+  
+  previous_stability <- NULL
+  
+  for (i in 1:max_runs) {
+    message(paste("Iteration", i, "/", max_runs))
+    new_labels <- list()
+    
+    for (k in n_clusters_range) {
+      message(paste("Clustering with k =", k))
+      gmm <- Mclust(features, G = k, modelNames = "EEE", ncores = min(n_cores, 6))
+      new_labels[[as.character(k)]] <- gmm$classification
+      
+      if (!as.character(k) %in% names(best_models) || gmm$loglik > best_models[[as.character(k)]]$loglik) {
+        best_models[[as.character(k)]] <- gmm
+      }
+    }
+    
+    if (i > 1) {
+      current_stability <- list()
+      for (k in 1:(length(n_clusters_range)-1)) {
+        k_val <- n_clusters_range[k]
+        k_plus_1_val <- n_clusters_range[k+1]
+        
+        for (j in 1:(i-1)) {
+          # 计算 k 和 k+1 之间的稳定性
+          fm_score <- fowlkes_mallows_score(new_labels[[as.character(k)]], labels[[as.character(k_plus_1)]][[j]])
+          current_stability[[length(current_stability) + 1]] <- fm_score
+        }
+      }
+      
+      stability[[i-1]] <- current_stability
+      
+      if (!is.null(previous_stability)) {
+        # 计算稳定性变化
+        stability_change <- mean(abs(unlist(stability[[i-1]]) - unlist(previous_stability)) / abs(unlist(previous_stability) + 1e-9))
+        if (stability_change < convergence_tol) {
+          message(paste("Convergence with a change in stability of", stability_change, "reached after", i, "iterations"))
+          
+          # 保存新标签
+          for (k in names(new_labels)) {
+            if (!k %in% names(labels)) {
+              labels[[k]] <- list()
+            }
+            labels[[k]][[i]] <- new_labels[[k]]
+          }
+          break
+        }
+      }
+      
+      previous_stability <- current_stability
+    }
+    
+    # 保存新标签
+    for (k in names(new_labels)) {
+      if (!k %in% names(labels)) {
+        labels[[k]] <- list()
+      }
+      labels[[k]][[i]] <- new_labels[[k]]
+    }
+  }
+  
+  # 计算稳定性矩阵
+  if (length(stability) > 0) {
+    stability_matrix <- matrix(0, nrow = length(n_clusters_range) - 1, ncol = max_runs - 1)
+    for (i in 1:length(stability)) {
+      for (j in 1:length(stability[[i]])) {
+        stability_matrix[j, i] <- stability[[i]][[j]]
+      }
+    }
+    
+    # 计算平均稳定性
+    stability_mean <- rowMeans(stability_matrix)
+    
+    # 寻找稳定性曲线的局部最大值
+    peaks <- find_peaks(stability_mean)
+    best_k_candidates <- n_clusters_range[peaks + 1]
+    
+    # 选择最佳 k 值
+    best_k <- n_clusters_range[which.max(stability_mean) + 1]
+    
+    # 保存结果
+    saveRDS(list(
+      labels = labels,
+      best_models = best_models,
+      stability_matrix = stability_matrix,
+      stability_mean = stability_mean,
+      best_k = best_k,
+      best_k_candidates = best_k_candidates
+    ), file.path(out_dir, "autok_results.rds"))
+    
+    # 可视化稳定性曲线
+    pdf(file.path(out_dir, "stability_curve.pdf"))
+    plot(n_clusters_range[-1], stability_mean, type = "b", xlab = "Number of clusters (k)", 
+         ylab = "Stability score", main = "Cluster stability across k values")
+    points(n_clusters_range[peaks + 1], stability_mean[peaks], col = "red", pch = 16, cex = 1.5)
+    abline(v = best_k, col = "blue", lty = 2)
+    legend("topright", c("Stability", "Local maxima", "Best k"), 
+           col = c("black", "red", "blue"), pch = c(1, 16, NA), lty = c(1, NA, 2))
+    dev.off()
+    
+    message(paste("Best k found:", best_k))
+    message(paste("Local maxima k candidates:", paste(best_k_candidates, collapse = ", ")))
+    
+    return(list(
+      best_k = best_k,
+      best_k_candidates = best_k_candidates,
+      stability_mean = stability_mean,
+      best_models = best_models
+    ))
+  } else {
+    stop("Could not compute stability")
+  }
+}
+
+# Fowlkes-Mallows 评分函数
+fowlkes_mallows_score <- function(labels1, labels2) {
+  contingency <- table(labels1, labels2)
+  tp <- sum(contingency^2) - sum(rowSums(contingency)^2) - sum(colSums(contingency)^2) + sum(contingency)^2
+  tp <- tp / 2
+  fp <- (sum(rowSums(contingency)^2) - sum(contingency)) / 2
+  fn <- (sum(colSums(contingency)^2) - sum(contingency)) / 2
+  precision <- tp / (tp + fp)
+  recall <- tp / (tp + fn)
+  return(sqrt(precision * recall))
+}
+
+# 寻找局部最大值
+find_peaks <- function(x) {
+  peaks <- c()
+  for (i in 2:(length(x)-1)) {
+    if (x[i] > x[i-1] && x[i] > x[i+1]) {
+      peaks <- c(peaks, i)
+    }
+  }
+  return(peaks)
+}
+
+# --------------------------
 # 主流程
 # --------------------------
 run_cellcharter <- function(seurat_obj, n_layers = 3, n_clusters = 5, use_rep = "pca", cell_type_col = "detailed",
@@ -194,6 +353,38 @@ run_cellcharter <- function(seurat_obj, n_layers = 3, n_clusters = 5, use_rep = 
   seurat_obj <- cluster_cells(seurat_obj, n_clusters = n_clusters, n_cores = n_cores)
   seurat_obj <- analyze_spatial_domains(seurat_obj, out_dir = out_dir, cell_type_col = cell_type_col, n_cores = n_cores)
   return(seurat_obj)
+}
+
+run_cellcharter_autok <- function(n_layers = 3, n_clusters_range = 2:10, n_cores = 20, save_intermediates = TRUE) {
+  if (!exists("mPT")) stop("mPT not found")
+  mPT <- get("mPT", envir = .GlobalEnv)
+  
+  # 运行 CellCharter 聚合邻居
+  out_dir <- "./cellcharter_results_autok"
+  if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
+  idir <- file.path(out_dir, "intermediates")
+  if (save_intermediates && !dir.exists(idir)) dir.create(idir, recursive = TRUE)
+  
+  mPT <- aggregate_neighbors(mPT, n_layers = n_layers, use_rep = "pca",
+                            x_coord_col = "CenterX_global_px", y_coord_col = "CenterY_global_px",
+                            n_cores = n_cores, save_intermediates = save_intermediates,
+                            intermediates_dir = idir)
+  
+  # 运行自动选择 k 值
+  autok_results <- cluster_autok(mPT, n_clusters_range = n_clusters_range, max_runs = 10, 
+                               n_cores = n_cores, out_dir = file.path(out_dir, "autok"))
+  
+  # 使用最佳 k 值进行聚类
+  best_k <- autok_results$best_k
+  message(paste("Using best k:", best_k))
+  
+  mPT <- cluster_cells(mPT, n_clusters = best_k, n_cores = n_cores)
+  mPT <- analyze_spatial_domains(mPT, out_dir = out_dir, cell_type_col = "detailed", n_cores = n_cores)
+  
+  # 保存结果
+  saveRDS(mPT, file.path(out_dir, "mPT_cellcharter_AUTO_K_FINAL.rds"))
+  assign("mPT", mPT, envir = .GlobalEnv)
+  return(mPT)
 }
 
 run_cellcharter_mPT <- function(n_layers = 3, n_clusters = 5, n_cores = 20, save_intermediates = TRUE) {
