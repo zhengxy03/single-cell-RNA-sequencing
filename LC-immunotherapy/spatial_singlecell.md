@@ -2375,6 +2375,8 @@ fib <- FindVariableFeatures(fib, nfeatures = 2000)
 hvgs <- VariableFeatures(fib)
 fib <- ScaleData(fib, features = hvgs)
 fib <- RunPCA(fib, features = hvgs, npcs = 50)
+p <- ElbowPlot(fib, ndims = 30)
+ggsave("p3.png",plot=p)
 fib <- FindNeighbors(fib, dims = 1:30)
 fib <- FindClusters(fib, resolution = 0.3)
 fib <- RunUMAP(fib, dims = 1:30)
@@ -2382,7 +2384,7 @@ fib <- RunUMAP(fib, dims = 1:30)
 library(ggplot2)
 library(ggsci)
 npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(10)
+npg_extended <- colorRampPalette(npg_pal)(12)
 
 seurat_clusters <- as.character(unique(fib@meta.data$seurat_clusters))  # 转换为字符向量
 num_legend_items <- length(seurat_clusters)  # 图例的个数
@@ -2399,7 +2401,7 @@ DimPlot(fib, reduction = "umap", label = TRUE, pt.size = 1, label.size = 8) +
     xlab("UMAP_1") +
     ylab("UMAP_2") +
     ggtitle(NULL) +
-    scale_color_manual(values = npg_extended) +
+    scale_color_manual(values = npg_pal) +
     coord_fixed(ratio = 1) +
     guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
     theme(
@@ -2439,16 +2441,17 @@ write.csv(fib_significant_markers, "fib_top_marker_50.csv")
 identity_mapping <- c(
   "0" = "myCAF",
   "1" = "apCAF_1",
-  "2" = "eCAF",
+  "2" = "iCAF_1",
   "3" = "apCAF_2",
-  "4" = "iCAF",
+  "4" = "iCAF_2",
   "5" = "matCAF"
 )
 
 sub_cell_type <- identity_mapping[fib@meta.data$seurat_clusters]
 fib@meta.data$sub_cell_type <- sub_cell_type
 
-
+library(ggplot2)
+library(ggsci)
 npg_pal <- pal_npg()(10)
 npg_extended <- colorRampPalette(npg_pal)(5)
 
@@ -3627,13 +3630,13 @@ macro <- RunPCA(macro, features = hvgs, npcs = 50)
 p <- ElbowPlot(macro, ndims = 30)
 ggsave("elbow_macro.png",plot=p)
 macro <- FindNeighbors(macro, dims = 1:20)
-macro <- FindClusters(macro, resolution = 0.3)
+macro <- FindClusters(macro, resolution = 0.4)
 macro <- RunUMAP(macro, dims = 1:20)
 
 library(ggplot2)
 library(ggsci)
 npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(6)
+npg_extended <- colorRampPalette(npg_pal)(11)
 
 seurat_clusters <- as.character(unique(macro@meta.data$seurat_clusters))  # 转换为字符向量
 num_legend_items <- length(seurat_clusters)  # 图例的个数
@@ -3710,7 +3713,15 @@ identity_mapping <- c(
   "4" = "Stress-response_Macro",
   "5" = "Proliferative-Macro"
 )
-
+identity_mapping <- c(
+  "0" = "Lipid-associated_Macro",
+  "1" = "Antigen-presenting_Macro",
+  "2" = "Immunoregulatory_Macro",
+  "3" = "Stress-response_Macro",
+  "4" = "Matrix-remodeling_Macro",
+  "5" = "Homeostatic_Macro",
+  "6" = "Phagocytic_Macro" 
+)
 
 sub_cell_type <- identity_mapping[macro@meta.data$seurat_clusters]
 macro@meta.data$sub_cell_type <- sub_cell_type
@@ -3718,10 +3729,7 @@ macro@meta.data$sub_cell_type <- sub_cell_type
 library(ggplot2)
 library(ggsci)
 npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(6)
-
-npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(5)
+npg_extended <- colorRampPalette(npg_pal)(7)
 
 cell_types <- as.character(unique(macro@meta.data$sub_cell_type))
 num_legend_items <- length(cell_types)  # 图例的个数
@@ -3779,7 +3787,7 @@ prop_data <- macro@meta.data %>%
 library(ggplot2)
 library(ggsci)
 npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(5)
+npg_extended <- colorRampPalette(npg_pal)(7)
 
 
 prop_data <- prop_data %>%
@@ -3829,7 +3837,7 @@ prop_data <- macro@meta.data %>%
 library(ggplot2)
 library(ggsci)
 npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(5)
+npg_extended <- colorRampPalette(npg_pal)(7)
 
 
 prop_data <- prop_data %>%
@@ -6403,54 +6411,70 @@ DimPlot(Malignant, reduction = "umap", label = TRUE, pt.size = 1, group.by = "ce
 dev.off()
 
 #dotplot
-# ==================== 1. 定义每个亚型的标记基因 ====================
-subtype_genes <- list(
-  Tumor_EMT_like = c("FN1", "COL1A1", "TAGLN"),
-  Tumor_Inflamed_1 = c("CD74", "HLA-DRA"),
-  Tumor_Inflamed_2 = c("HLA-E", "CD74"),
-  Tumor_Inflamed_3 = c("APOE", "CD68", "CTSD"),
-  Tumor_Inflamed_4 = c("CD74", "HLA-DRA"),
-  Tumor_Metabolic_1 = c("G6PD", "PGD", "TALDO1"),
-  Tumor_Metabolic_2 = c("G6PD", "SPP1", "NAMPT"),
-  Tumor_Proliferative_1 = c("TOP2A", "MKI67", "TYMS"),
-  Tumor_Proliferative_2 = c("TOP2A", "MKI67", "CCNB1"),
-  Tumor_Secretory = c("SCGB1A1", "SCGB3A1", "TFF3"),
-  Tumor_Squamous_1 = c("KRT17", "KRT14", "S100A9"),
-  Tumor_Squamous_2 = c("KRT16", "KRT6A", "S100A8"),
-  Tumor_Squamous_3 = c("KRT16", "S100A9", "SPRR3"),
-  Tumor_Stem_like = c("SOX2", "EPCAM", "CDH1")
+all_genes <- c(
+  # 1. Tumor_EMT-like
+  "FN1", "COL1A1", "TAGLN",
+  # 2. Tumor_Inflamed_1
+  "CD74", "HLA-DRA", "IGHG1/2",
+  # 3. Tumor_Inflamed_2
+  "HLA-E", "CD74", "MHC I",
+  # 4. Tumor_Inflamed_3
+  "APOE", "CD68", "CTSD",
+  # 5. Tumor_Inflamed_4
+  "CD74", "IGHG1/2", "HLA-DRA",
+  # 6. Tumor_Metabolic_1
+  "G6PD", "PGD", "TALDO1",
+  # 7. Tumor_Metabolic_2
+  "G6PD", "SPP1", "NAMPT",
+  # 8. Tumor_Proliferative_1
+  "TOP2A", "MKI67", "TYMS",
+  # 9. Tumor_Proliferative_2
+  "TOP2A", "MKI67", "CCNB1",
+  # 10. Tumor_Secretory
+  "SCGB1A1", "SCGB3A1", "TFF3",
+  # 11. Tumor_Squamous_1
+  "KRT17", "KRT14", "S100A9",
+  # 12. Tumor_Squamous_2
+  "KRT16", "KRT6A", "S100A8",
+  # 13. Tumor_Squamous_3
+  "KRT16", "S100A9", "SPRR3",
+  # 14. Tumor_Stem-like
+  "SOX2", "EPCAM", "CDH1",
+  # 单细胞特有亚型（最后）
+  "NDUFA4L2", "SLC2A1", "VEGFA",   # Tumor_Hypoxia
+  "MYH11", "SPARCL1", "SFRP1"      # Tumor_Mesenchymal-like
 )
+all_genes <- unique(all_genes)  # 去重（如 CD74, G6PD, TOP2A, KRT16 等重复）
 
-# 按细胞类型首字母排序
-subtype_names <- names(subtype_genes)
-sorted_subtypes <- subtype_names[order(subtype_names)]
+library(Seurat)
+library(ggplot2)
+library(patchwork)
 
-# 按排序后的顺序提取基因
-marker_genes <- unique(unlist(subtype_genes[sorted_subtypes]))
+# 修复因子水平
+Malignant$sub_cell_type <- as.character(Malignant$sub_cell_type)
+Malignant_sc$sub_cell_type <- as.character(Malignant_sc$sub_cell_type)
 
-# ==================== 2. 检查基因是否存在 ====================
-spatial_existing <- intersect(marker_genes, rownames(Malignant))
-sc_existing <- intersect(marker_genes, rownames(Malignant_sc))
-final_genes <- intersect(spatial_existing, sc_existing)
+# 空间组气泡图
+p1 <- DotPlot(Malignant, features = all_genes, group.by = "sub_cell_type", scale = TRUE) +
+  scale_color_gradient(low = "#D6EAF8", high = "#1F618D", name = "Average Expression") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8)) +
+  labs(title = "Spatial - Tumor Subtypes", x = "", y = "") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
 
-# 保持基因顺序（按细胞类型首字母排序）
-final_genes <- final_genes[order(match(final_genes, marker_genes))]
-
-# ==================== 3. 绘制气泡图 ====================
-p1 <- DotPlot(Malignant, features = final_genes, group.by = "sub_cell_type") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  labs(title = "Spatial Data") +
-  xlab("") + ylab("")
-
-p2 <- DotPlot(Malignant_sc, features = final_genes, group.by = "sub_cell_type") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  labs(title = "scRNA-seq Data") +
-  xlab("") + ylab("")
+# 单细胞气泡图
+p2 <- DotPlot(Malignant_sc, features = all_genes, group.by = "sub_cell_type", scale = TRUE) +
+  scale_color_gradient(low = "#D6EAF8", high = "#1F618D", name = "Average Expression") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8)) +
+  labs(title = "scRNA-seq - Tumor Subtypes", x = "", y = "") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
 
 # 拼图
-library(patchwork)
-p_combined <- p1 / p2 + plot_annotation(title = "Marker Gene Expression: Spatial vs scRNA-seq")
-ggsave("bubble_plot_combined.pdf", plot = p_combined, width = 14, height = 12)
+p_combined <- p1 / p2 + 
+  plot_annotation(title = "Tumor Marker Genes: Spatial vs scRNA-seq") &
+  theme(plot.title = element_text(hjust = 0.5, size = 14))
+
+ggsave("bubble_plot_tumor_final.pdf", plot = p_combined, width = 18, height = 14)
+
 ```
 # different expr genes(malignant)
 ```R
@@ -6822,7 +6846,7 @@ library(Seurat)
 library(dplyr)
 
 fib_sc <- readRDS("fib_sc_anno.rds")
-fib <- readRDS("fib_anno.rds")
+fib <- readRDS("fib_anno_new.rds")
 
 # ===================== 【1】内存 + 并行关闭 =====================
 options(future.globals.maxSize = 100 * 1024^3)  # 100G
@@ -6932,7 +6956,53 @@ DimPlot(Malignant, reduction = "umap", label = TRUE, pt.size = 1, group.by = "ce
     )
 dev.off()
 
+library(Seurat)
+library(ggplot2)
+library(patchwork)
 
+# 修复因子水平
+fib$sub_cell_type <- as.character(fib$sub_cell_type)
+fib_sc$sub_cell_type <- as.character(fib_sc$sub_cell_type)
+
+# 定义基因顺序（基于新注释）
+all_genes <- c(
+  # apCAF_1 (cluster 1)
+  "CD74", "IGKC", "IGHG1/2",
+  # apCAF_2 (cluster 3)
+  "CD74", "HLA-DRB", "IGKC",
+  # iCAF_1 (cluster 2)
+  "PTEN", "SIGMAR1", "GADD45B",
+  # iCAF_2 (cluster 4)
+  "CFD", "C1S", "SERPINE1",
+  # matCAF (cluster 5)
+  "COL1A1", "COL3A1", "SPARC",
+  # myCAF (cluster 0)
+  "ACTA2", "TAGLN", "MYL9",
+  # pCAF (单细胞特有)
+  "TOP2A", "BIRC5", "RRM2"
+)
+all_genes <- unique(all_genes)
+
+# 空间组气泡图
+p1 <- DotPlot(fib, features = all_genes, group.by = "sub_cell_type", scale = TRUE) +
+  scale_color_gradient(low = "#D6EAF8", high = "#1F618D", name = "Average Expression") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Spatial - Fibroblast Subtypes", x = "", y = "") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+# 单细胞气泡图
+p2 <- DotPlot(fib_sc, features = all_genes, group.by = "sub_cell_type", scale = TRUE) +
+  scale_color_gradient(low = "#D6EAF8", high = "#1F618D", name = "Average Expression") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "scRNA-seq - Fibroblast Subtypes", x = "", y = "") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+# 拼图
+p_combined <- p1 / p2 + 
+  plot_annotation(title = "Fibroblast Marker Genes: Spatial vs scRNA-seq") &
+  theme(plot.title = element_text(hjust = 0.5, size = 14))
+
+ggsave("bubble_plot_fibroblast_final.pdf", plot = p_combined, width = 14, height = 10)
 ```
 # CN 
 ```R
@@ -7088,8 +7158,8 @@ write.csv(macro_significant_markers, "macro_sc_top_marker_50.csv")
 identity_mapping <- c(
   "0" = "Lipid-associated_Macro_1",
   "1" = "Inflammatory_Macro",
-  "2" = "IFN_Macro",
-  "3" = "Tissue-resident_Macro",
+  "2" = "Immunoregulatory_Macro",
+  "3" = "Matrix-remodeling_Macro",
   "4" = "Stress-response_Macro",
   "5" = "Lipid-associated_Macro_2",
   "6" = "Lipid-associated_Macro_3",
@@ -7097,14 +7167,14 @@ identity_mapping <- c(
 )
 
 
-sub_cell_type <- identity_mapping[macro@meta.data$seurat_clusters]
-macro@meta.data$sub_cell_type <- sub_cell_type
+sub_cell_type <- identity_mapping[macro_sc@meta.data$seurat_clusters]
+macro_sc@meta.data$sub_cell_type <- sub_cell_type
 
 
 npg_pal <- pal_npg()(10)
 npg_extended <- colorRampPalette(npg_pal)(5)
 
-cell_types <- as.character(unique(macro@meta.data$sub_cell_type))
+cell_types <- as.character(unique(macro_sc@meta.data$sub_cell_type))
 num_legend_items <- length(cell_types)  # 图例的个数
 max_label_length <- max(nchar(cell_types))  # 图例名称的最大长度
 
@@ -7114,7 +7184,7 @@ legend_width_factor <- 100  # 每个图例项增加的宽度
 label_length_factor <- 10  # 每个字符增加的宽度
 dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
 pdf("macro_sc_annotation.pdf", width = dynamic_width/300, height = base_height/300)
-DimPlot(macro, reduction = "umap", label = TRUE, pt.size = 1, group.by = "sub_cell_type", label.size = 4) +
+DimPlot(macro_sc, reduction = "umap", label = TRUE, pt.size = 1, group.by = "sub_cell_type", label.size = 4) +
     xlab("UMAP_1") +
     ylab("UMAP_2") +
     ggtitle(NULL) +
