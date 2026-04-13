@@ -180,14 +180,26 @@ analyze_spatial_domains <- function(seurat_obj, out_dir = "./cellcharter_results
 # 聚类稳定性分析
 # --------------------------
 cluster_autok <- function(seurat_obj, n_clusters_range = 2:10, max_runs = 10, convergence_tol = 0.01, 
-                         use_rep = "cellcharter", n_cores = 6, out_dir = "./cellcharter_autok") {
+                         use_rep = "cellcharter", n_cores = 6, out_dir = "./cellcharter_autok",
+                         sample_size = 0.1) {  # 添加抽样比例参数，默认10%
   if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
   
   if (!use_rep %in% names(seurat_obj@assays)) {
     stop(paste(use_rep, "not found in seurat_obj@assays"))
   }
   
-  features <- t(as.matrix(GetAssayData(seurat_obj, assay = use_rep, layer = "data")))
+  # 获取所有细胞的特征
+  all_features <- t(as.matrix(GetAssayData(seurat_obj, assay = use_rep, layer = "data")))
+  
+  # 抽样
+  n_cells <- nrow(all_features)
+  if (sample_size < 1) {
+    sample_size <- max(1, round(n_cells * sample_size))
+  }
+  sample_indices <- sample(1:n_cells, size = sample_size, replace = FALSE)
+  features <- all_features[sample_indices, ]
+  
+  message(paste("Sampling", length(sample_indices), "cells for stability analysis"))
   
   if (ncol(features) > 50) {
     message("Reducing to 50 dims for stability")
@@ -210,40 +222,50 @@ cluster_autok <- function(seurat_obj, n_clusters_range = 2:10, max_runs = 10, co
       gmm <- Mclust(features, G = k, modelNames = "EEE", ncores = min(n_cores, 6))
       new_labels[[as.character(k)]] <- gmm$classification
       
-      if (!as.character(k) %in% names(best_models) || gmm$loglik > best_models[[as.character(k)]]$loglik) {
+      # 检查 gmm$loglik 是否为 NA，以及比较时的安全性
+      if (!as.character(k) %in% names(best_models) || 
+          (is.numeric(gmm$loglik) && !is.na(gmm$loglik) && 
+           (!is.numeric(best_models[[as.character(k)]]$loglik) || is.na(best_models[[as.character(k)]]$loglik) || 
+            gmm$loglik > best_models[[as.character(k)]]$loglik))) {
         best_models[[as.character(k)]] <- gmm
       }
     }
     
     if (i > 1) {
       current_stability <- list()
-      for (k in 1:(length(n_clusters_range)-1)) {
-        k_val <- n_clusters_range[k]
-        k_plus_1_val <- n_clusters_range[k+1]
+      for (k_idx in 1:(length(n_clusters_range)-1)) {
+        k_val <- n_clusters_range[k_idx]
+        k_plus_1_val <- n_clusters_range[k_idx+1]
         
-        for (j in 1:(i-1)) {
-          # 计算 k 和 k+1 之间的稳定性
-          fm_score <- fowlkes_mallows_score(new_labels[[as.character(k)]], labels[[as.character(k_plus_1)]][[j]])
+        # 确保标签存在且长度相同
+        if (as.character(k_val) %in% names(new_labels) && as.character(k_plus_1_val) %in% names(new_labels)) {
+          # 计算当前迭代中 k 和 k+1 之间的稳定性
+          fm_score <- fowlkes_mallows_score(new_labels[[as.character(k_val)]], new_labels[[as.character(k_plus_1_val)]])
           current_stability[[length(current_stability) + 1]] <- fm_score
         }
       }
       
       stability[[i-1]] <- current_stability
       
-      if (!is.null(previous_stability)) {
-        # 计算稳定性变化
-        stability_change <- mean(abs(unlist(stability[[i-1]]) - unlist(previous_stability)) / abs(unlist(previous_stability) + 1e-9))
-        if (stability_change < convergence_tol) {
-          message(paste("Convergence with a change in stability of", stability_change, "reached after", i, "iterations"))
-          
-          # 保存新标签
-          for (k in names(new_labels)) {
-            if (!k %in% names(labels)) {
-              labels[[k]] <- list()
+      if (!is.null(previous_stability) && length(current_stability) > 0 && length(previous_stability) > 0) {
+        # 确保长度相同
+        min_length <- min(length(current_stability), length(previous_stability))
+        if (min_length > 0) {
+          # 计算稳定性变化
+          stability_change <- mean(abs(unlist(current_stability[1:min_length]) - unlist(previous_stability[1:min_length])) / 
+                                 (abs(unlist(previous_stability[1:min_length]) + 1e-9)))
+          if (stability_change < convergence_tol) {
+            message(paste("Convergence with a change in stability of", stability_change, "reached after", i, "iterations"))
+            
+            # 保存新标签
+            for (k in names(new_labels)) {
+              if (!k %in% names(labels)) {
+                labels[[k]] <- list()
+              }
+              labels[[k]][[i]] <- new_labels[[k]]
             }
-            labels[[k]][[i]] <- new_labels[[k]]
+            break
           }
-          break
         }
       }
       
@@ -261,10 +283,22 @@ cluster_autok <- function(seurat_obj, n_clusters_range = 2:10, max_runs = 10, co
   
   # 计算稳定性矩阵
   if (length(stability) > 0) {
-    stability_matrix <- matrix(0, nrow = length(n_clusters_range) - 1, ncol = max_runs - 1)
-    for (i in 1:length(stability)) {
-      for (j in 1:length(stability[[i]])) {
-        stability_matrix[j, i] <- stability[[i]][[j]]
+    # 计算实际的稳定性矩阵维度
+    n_rows <- length(n_clusters_range) - 1
+    n_cols <- length(stability)
+    
+    # 创建稳定性矩阵
+    stability_matrix <- matrix(0, nrow = n_rows, ncol = n_cols)
+    
+    # 填充稳定性矩阵
+    for (i in 1:n_cols) {
+      # 确保不超出范围
+      n_vals <- length(stability[[i]])
+      if (n_vals > 0) {
+        # 只填充有效的值
+        for (j in 1:min(n_rows, n_vals)) {
+          stability_matrix[j, i] <- stability[[i]][[j]]
+        }
       }
     }
     
@@ -285,7 +319,8 @@ cluster_autok <- function(seurat_obj, n_clusters_range = 2:10, max_runs = 10, co
       stability_matrix = stability_matrix,
       stability_mean = stability_mean,
       best_k = best_k,
-      best_k_candidates = best_k_candidates
+      best_k_candidates = best_k_candidates,
+      sample_indices = sample_indices
     ), file.path(out_dir, "autok_results.rds"))
     
     # 可视化稳定性曲线
@@ -314,11 +349,23 @@ cluster_autok <- function(seurat_obj, n_clusters_range = 2:10, max_runs = 10, co
 
 # Fowlkes-Mallows 评分函数
 fowlkes_mallows_score <- function(labels1, labels2) {
+  # 检查长度是否相同
+  if (length(labels1) != length(labels2)) {
+    message("Warning: labels have different lengths, returning 0")
+    return(0)
+  }
+  
   contingency <- table(labels1, labels2)
   tp <- sum(contingency^2) - sum(rowSums(contingency)^2) - sum(colSums(contingency)^2) + sum(contingency)^2
   tp <- tp / 2
   fp <- (sum(rowSums(contingency)^2) - sum(contingency)) / 2
   fn <- (sum(colSums(contingency)^2) - sum(contingency)) / 2
+  
+  # 避免除以零
+  if (tp + fp == 0 || tp + fn == 0) {
+    return(0)
+  }
+  
   precision <- tp / (tp + fp)
   recall <- tp / (tp + fn)
   return(sqrt(precision * recall))
@@ -355,7 +402,7 @@ run_cellcharter <- function(seurat_obj, n_layers = 3, n_clusters = 5, use_rep = 
   return(seurat_obj)
 }
 
-run_cellcharter_autok <- function(n_layers = 3, n_clusters_range = 2:10, n_cores = 20, save_intermediates = TRUE) {
+run_cellcharter_autok <- function(n_layers = 3, n_clusters_range = 2:10, n_cores = 20, save_intermediates = TRUE, sample_size = 0.1) {
   if (!exists("mPT")) stop("mPT not found")
   mPT <- get("mPT", envir = .GlobalEnv)
   
@@ -370,11 +417,12 @@ run_cellcharter_autok <- function(n_layers = 3, n_clusters_range = 2:10, n_cores
                             n_cores = n_cores, save_intermediates = save_intermediates,
                             intermediates_dir = idir)
   
-  # 运行自动选择 k 值
+  # 运行自动选择 k 值（使用抽样）
   autok_results <- cluster_autok(mPT, n_clusters_range = n_clusters_range, max_runs = 10, 
-                               n_cores = n_cores, out_dir = file.path(out_dir, "autok"))
+                               n_cores = n_cores, out_dir = file.path(out_dir, "autok"),
+                               sample_size = sample_size)
   
-  # 使用最佳 k 值进行聚类
+  # 使用最佳 k 值进行聚类（使用全部细胞）
   best_k <- autok_results$best_k
   message(paste("Using best k:", best_k))
   

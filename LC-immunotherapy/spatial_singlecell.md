@@ -1,6 +1,10 @@
 # metadata pretreatment
 ```R
 obj <- readRDS("YA2025263-1_fin.rds")
+# 查看每个 assay 的特征数
+lapply(Assays(obj), function(assay) {
+  length(rownames(obj[[assay]]))
+})
 library(Seurat)
 
 library(ggplot2)
@@ -1570,29 +1574,47 @@ ggsave("p11.png",plot=p_gene,bg="white")
 npg_pal <- pal_npg()(10)
 npg_extended <- colorRampPalette(npg_pal)(17)
 
+# 修改后的颜色（替换了第5个橙色、第8个粉色、第9个灰色）
+cluster_colors <- c(
+  "#76aef3", "#377EB8", "#4DAF4A", "#984EA3", "#1B9E77",  # 第5个：橙色 → 蓝绿色
+  "#f2f286", "#A65628", "#D95F02", "#7570B3",            # 第8个：粉色 → 橙色；第9个：灰色 → 紫色
+  "#66C2A5", "#FC8D62", "#8DA0CB", "#E78AC3", "#A6D854", 
+  "#FFD92F", "#E5C494", "#f18686"
+)
+cluster_colors <- c(
+  "#F28E2B", "#8CD17D", "#D4A6C8", "#499894", "#FFBE7D",
+  "#BAB0AC", "#E15759", "#B07AA1", "#59A14F", "#D37295",
+  "#A0CBE8", "#FABFD2", "#9D7660", "#FF9D9A", "#4E79A7",
+  "#86BCB6", "#B6992D", "#79706E", "#F1CE63", "#D7B5A6"
+)
 cell_types <- as.character(unique(obj@meta.data$CellType))
-num_legend_items <- length(cell_types)  # 图例的个数
-max_label_length <- max(nchar(cell_types))  # 图例名称的最大长度
+num_legend_items <- length(cell_types)
+max_label_length <- max(nchar(cell_types))
 
-base_width <- 3000  # 基础宽度
-base_height <- 3000  # 基础高度
-legend_width_factor <- 100  # 每个图例项增加的宽度
-label_length_factor <- 10  # 每个字符增加的宽度
+base_width <- 3000
+base_height <- 3000
+legend_width_factor <- 100
+label_length_factor <- 10
 dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
+
 pdf("annotation.pdf", width = dynamic_width/300, height = base_height/300)
-DimPlot(obj, reduction = "umap", label = TRUE, pt.size = 1, group.by = "CellType", label.size = 4) +
+DimPlot(obj, reduction = "umap", label = TRUE, pt.size = 1, 
+        group.by = "CellType", label.size = 4, alpha = 0.35) +
     xlab("UMAP_1") +
     ylab("UMAP_2") +
     ggtitle(NULL) +
-    scale_color_manual(values = npg_extended) +
+    scale_color_manual(values = cluster_colors) +
     coord_fixed(ratio = 1) +
-    guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
+    guides(color = guide_legend(
+        title = NULL, 
+        override.aes = list(size = 5, alpha = 1)  # 只改透明度，不改边框
+    )) +
     theme(
         text = element_text(size = 8, face = "bold"),
         axis.text.x = element_text(size = 28, color = "black"),
         axis.text.y = element_text(size = 28, color = "black"),
         axis.title.x = element_text(size = 36, face = "bold", color = "black"),
-        axis.title.y = element_text(size = 36, face = "bold", color = "black", margin = margin(r = 20)),  # 增加右侧间距
+        axis.title.y = element_text(size = 36, face = "bold", color = "black", margin = margin(r = 20)),
         plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
         legend.text = element_text(size = 16, face = "bold", color = "black"),
         legend.title = element_text(size = 16, face = "bold", color = "black"),
@@ -1610,6 +1632,70 @@ DimPlot(obj, reduction = "umap", label = TRUE, pt.size = 1, group.by = "CellType
         plot.margin = margin(10, 50, 10, 10)
     )
 dev.off()
+
+library(RColorBrewer)
+cluster_colors <- c(brewer.pal(12, "Set3"), brewer.pal(5, "Paired"))
+cell_types <- as.character(unique(obj@meta.data$CellType))
+cell_types_sorted <- sort(cell_types)  # 按字母顺序排序
+
+# 确保颜色数量与细胞类型数量匹配
+if (length(cluster_colors) < length(cell_types_sorted)) {
+  cluster_colors <- rep(cluster_colors, length.out = length(cell_types_sorted))
+} else {
+  cluster_colors <- cluster_colors[1:length(cell_types_sorted)]
+}
+
+# 将颜色按排序后的细胞类型命名
+names(cluster_colors) <- cell_types_sorted
+
+# 将 CellType 列转换为因子，顺序按字母排序
+obj@meta.data$CellType <- factor(obj@meta.data$CellType, levels = cell_types_sorted)
+
+num_legend_items <- length(cell_types_sorted)
+max_label_length <- max(nchar(cell_types_sorted))
+
+base_width <- 3000
+base_height <- 3000
+legend_width_factor <- 100
+label_length_factor <- 10
+dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
+
+pdf("annotation.pdf", width = dynamic_width/300, height = base_height/300)
+DimPlot(obj, reduction = "umap", label = TRUE, pt.size = 1, 
+        group.by = "CellType", label.size = 4, alpha = 0.35,
+        cols = cluster_colors) +  # 使用 cols 参数直接传入颜色
+    xlab("UMAP_1") +
+    ylab("UMAP_2") +
+    ggtitle(NULL) +
+    coord_fixed(ratio = 1) +
+    guides(color = guide_legend(
+        title = NULL, 
+        override.aes = list(size = 5, alpha = 1)
+    )) +
+    theme(
+        text = element_text(size = 8, face = "bold"),
+        axis.text.x = element_text(size = 28, color = "black"),
+        axis.text.y = element_text(size = 28, color = "black"),
+        axis.title.x = element_text(size = 36, face = "bold", color = "black"),
+        axis.title.y = element_text(size = 36, face = "bold", color = "black", margin = margin(r = 20)),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        legend.text = element_text(size = 16, face = "bold", color = "black"),
+        legend.title = element_text(size = 16, face = "bold", color = "black"),
+        legend.position = "right",
+        legend.box.margin = margin(0, 0, 0, 0),
+        legend.key = element_blank(),
+        legend.background = element_blank(),
+        panel.background = element_rect(fill = "white", color = NA),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.line.x = element_line(color = "black", linewidth = 0.5),
+        axis.line.y = element_line(color = "black", linewidth = 0.5),
+        aspect.ratio = 1,
+        plot.margin = margin(10, 50, 10, 10)
+    )
+dev.off()
+
 
 library(tidyverse)
 
@@ -1634,7 +1720,7 @@ prop_data <- prop_data %>%
 # 绘制堆叠条形图
 p <- ggplot(prop_data, aes(x = tissue, y = proportion, fill = CellType)) +
   geom_bar(stat = "identity", position = "stack") +
-  scale_fill_manual(values = npg_extended) +
+  scale_fill_manual(values = cluster_colors) +
   labs(title = "Cell Type Distribution: mPT vs nmPT",
        x = "Tissue", y = "Proportion (%)", fill = "Cell Type") +
   theme_minimal() +
@@ -1684,7 +1770,7 @@ prop_data <- prop_data %>%
 # 绘制堆叠条形图
 p <- ggplot(prop_data, aes(x = tissue, y = proportion, fill = CellType)) +
   geom_bar(stat = "identity", position = "stack") +
-  scale_fill_manual(values = npg_extended) +
+  scale_fill_manual(values = cluster_colors) +
   labs(title = "Cell Type Distribution: metLN vs negLN",
        x = "Tissue", y = "Proportion (%)", fill = "Cell Type") +
   theme_minimal() +
@@ -2048,6 +2134,71 @@ p <- FeaturePlot(Malignant,feature="VIM")
 ggsave("feature_vim.png",plot=p)
 p <- VlnPlot(Malignant,feature="VIM")
 ggsave("vln_vim.png",plot=p)
+
+#patient
+sample_patient <- data.frame(
+  sample = c("A1", "A2", "A3", "A4", "A5", 
+             "B1", "B2", "B3", "B4", "B5",
+             "C1", "C2", "C3", "C4", "C5",
+             "D1", "D2", "D3", "D4", "D5"),
+  patient = c("P1_nmPT", "P1_negLN", "P2_nmPT", "P2_negLN", "P3_nmPT",
+             "P3_negLN", "P4_nmPT", "P4_negLN", "P5_mPT", "P5_negLN",
+             "P5_metLN", "P6_mPT", "P6_negLN", "P6_metLN", "P7_mPT",
+             "P7_negLN", "P7_metLN", "P8_mPT", "P8_negLN", "P8_metLN")
+)
+Malignant$patient <- sample_patient$patient[match(Malignant$sample, sample_patient$sample)]
+
+library(Seurat)
+library(pheatmap)
+
+# ==================== 1. 筛选 mPT 和 nmPT 的患者 ====================
+# 只保留组织类型为 mPT 或 nmPT 的细胞
+Malignant_primary <- subset(Malignant, subset = tissue %in% c("mPT", "nmPT"))
+
+# ==================== 2. 计算每个患者各亚型的比例 ====================
+patient_subtype_table <- table(Malignant_primary$patient, Malignant_primary$sub_cell_type)
+patient_subtype_prop <- prop.table(patient_subtype_table, margin = 1) * 100
+
+# ==================== 3. 筛选主要亚型（平均占比 > 1%）====================
+avg_prop <- colMeans(patient_subtype_prop)
+keep_types <- names(avg_prop[avg_prop > 1])
+patient_subtype_prop_filtered <- patient_subtype_prop[, keep_types]
+
+# ==================== 4. 按患者名称排序 ====================
+patient_subtype_prop_filtered <- patient_subtype_prop_filtered[order(rownames(patient_subtype_prop_filtered)), ]
+
+# ==================== 5. 添加组织类型注释 ====================
+patient_tissue <- data.frame(
+  patient = rownames(patient_subtype_prop_filtered),
+  tissue = ifelse(grepl("nmPT", rownames(patient_subtype_prop_filtered)), "nmPT", "mPT")
+)
+annotation_row <- data.frame(Tissue = patient_tissue$tissue)
+rownames(annotation_row) <- patient_tissue$patient
+
+annotation_colors <- list(
+  Tissue = c("nmPT" = "#4DAF4A", "mPT" = "#E41A1C")
+)
+
+# ==================== 6. 绘制热图 ====================
+pdf("patient_subtype_heatmap_mPT_nmPT.pdf", width = 12, height = 8)
+pheatmap(patient_subtype_prop_filtered,
+         scale = "none",
+         cluster_rows = FALSE,
+         cluster_cols = TRUE,
+         annotation_row = annotation_row,
+         annotation_colors = annotation_colors,
+         main = "Tumor subtype composition: mPT vs nmPT",
+         xlab = "Tumor subtype", 
+         ylab = "Patient",
+         fontsize = 8,
+         fontsize_row = 8,
+         fontsize_col = 8,
+         color = colorRampPalette(c("white", "lightblue", "steelblue", "darkred"))(100),
+         breaks = seq(0, 100, length.out = 101))
+dev.off()
+
+cat("热图已保存: patient_subtype_heatmap_mPT_nmPT.pdf\n")
+
 ```
 # trajectory
 ```R
@@ -2439,12 +2590,12 @@ write.csv(fib_significant_markers, "fib_top_marker_50.csv")
 
 
 identity_mapping <- c(
-  "0" = "myCAF",
-  "1" = "apCAF_1",
-  "2" = "iCAF_1",
-  "3" = "apCAF_2",
-  "4" = "iCAF_2",
-  "5" = "matCAF"
+  "0" = "Fib_myCAF",
+  "1" = "Fib_apCAF_1",
+  "2" = "Fib_iCAF_1",
+  "3" = "Fib_apCAF_2",
+  "4" = "Fib_iCAF_2",
+  "5" = "Fib_matCAF"
 )
 
 sub_cell_type <- identity_mapping[fib@meta.data$seurat_clusters]
@@ -3714,13 +3865,13 @@ identity_mapping <- c(
   "5" = "Proliferative-Macro"
 )
 identity_mapping <- c(
-  "0" = "Lipid-associated_Macro",
-  "1" = "Antigen-presenting_Macro",
-  "2" = "Immunoregulatory_Macro",
-  "3" = "Stress-response_Macro",
-  "4" = "Matrix-remodeling_Macro",
-  "5" = "Homeostatic_Macro",
-  "6" = "Phagocytic_Macro" 
+  "0" = "Macro_Lipid-associated",
+  "1" = "Macro_Antigen-presenting",
+  "2" = "Macro_Immunoregulatory",
+  "3" = "Macro_Stress-response",
+  "4" = "Macro_Matrix-remodeling",
+  "5" = "Macro_Homeostatic",
+  "6" = "Macro_Phagocytic" 
 )
 
 sub_cell_type <- identity_mapping[macro@meta.data$seurat_clusters]
@@ -4536,10 +4687,10 @@ library(foreach)
 
 # ===================== 数据加载 =====================
 obj <- readRDS("YA2025263-1_fin.rds")
-Malignant <- readRDS("malignant_anno.rds")
-fib <- readRDS("fib_anno.rds")
-macro <- readRDS("macro_anno_no_rm.rds")
-
+Malignant <- readRDS("malignant_unknown_anno_0.6.rds")
+fib <- readRDS("fib_anno_new.rds")
+macro <- readRDS("macro_anno_new.rds")
+mast <- readRDS("mast_anno.rds")
 # ===================== 定义样本与组织的对应关系 =====================
 sample_tissue <- data.frame(
   sample = c("A1", "A2", "A3", "A4", "A5", 
@@ -4555,7 +4706,7 @@ obj$tissue <- sample_tissue$tissue[match(obj$sample, sample_tissue$sample)]
 
 # ===================== 细胞类型注释 =====================
 obj$CellType <- recode(obj$CellType,
-                       "Malignant cells" = "unknown",
+                       #"Malignant cells" = "unknown",
                        "Basal cells" = "Malignant cells"
 )
 
@@ -4571,6 +4722,9 @@ obj@meta.data[common_cells, "sub_cell_type"] <- fib@meta.data[common_cells, "sub
 
 common_cells <- intersect(rownames(macro@meta.data), rownames(obj@meta.data))
 obj@meta.data[common_cells, "sub_cell_type"] <- macro@meta.data[common_cells, "sub_cell_type"]
+
+common_cells <- intersect(rownames(mast@meta.data), rownames(obj@meta.data))
+obj@meta.data[common_cells, "sub_cell_type"] <- mast@meta.data[common_cells, "sub_cell_type"]
 
 cat("成功注释的细胞数：", sum(!is.na(obj@meta.data$sub_cell_type)), "\n")
 cat("obj中sub_cell_type列的唯一值：", paste(unique(obj@meta.data$sub_cell_type), collapse = ", "), "\n")
@@ -5918,6 +6072,70 @@ counts_sparse <- as(counts_matrix3, "dgCMatrix")
 # 创建Seurat对象
 seurat_obj1 <- CreateSeuratObject(counts = counts_sparse)
 
+#
+library(Seurat)
+library(dplyr)
+library(data.table)
+
+# 设置工作目录
+setwd("~/project/project/LUSC-spatial/GSE148071_RAW")
+
+# 获取所有 .txt.gz 文件列表
+files <- list.files(pattern = "P\\d+_exp.txt.gz")
+
+# 初始化列表，存储每个样本的 Seurat 对象
+seurat_list <- list()
+
+for (file in files) {
+  # 提取样本名（如 P1, P2, ...）
+  sample_name <- gsub("_exp.txt.gz", "", file)
+  
+  cat("正在读取", sample_name, "...\n")
+  
+  # 读取表达矩阵（fread 速度快）
+  expr <- fread(file, header = TRUE, data.table = FALSE)
+  
+  # 第一列通常是基因名，设为行名
+  rownames(expr) <- expr[, 1]
+  expr <- expr[, -1]
+  
+  # 转换为矩阵（Seurat 要求）
+  expr <- as.matrix(expr)
+  
+  # 创建 Seurat 对象
+  seurat_obj <- CreateSeuratObject(counts = expr, project = sample_name, min.cells = 3, min.features = 200)
+  
+  # 添加样本信息到 metadata
+  seurat_obj$sample <- sample_name
+  
+  seurat_list[[sample_name]] <- seurat_obj
+}
+
+# 合并所有样本（注意：不同样本的基因可能不完全一致，merge 会自动取并集，缺失填0）
+combined <- merge(seurat_list[[1]], seurat_list[-1], add.cell.ids = names(seurat_list))
+
+# 从细胞名（行名）中提取 P 数字
+combined$sample_id <- gsub(".*_(P\\d+)_.*", "\\1", rownames(combined@meta.data))
+
+# 您要保留的样本列表
+selected_samples <- c("P1", "P3", "P4", "P6", "P7", "P10", "P14", "P15", "P17", "P18", "P19", 
+                      "P22", "P23", "P25", "P26", "P27", "P30", "P31", "P36", "P37", "P40", "P41")
+
+# 检查哪些样本存在
+present <- intersect(selected_samples, unique(combined$sample_id))
+cat("存在的样本:", paste(present, collapse = ", "), "\n")
+
+# 提取细胞
+cells_keep <- WhichCells(combined, expression = sample_id %in% present)
+combined_subset <- subset(combined, cells = cells_keep)
+
+# 查看子集后各样本的细胞数
+table(combined_subset$sample_id)
+
+# 保存结果
+saveRDS(combined_subset, file = "GSE148071_LUSC.rds")
+
+
 obj <- readRDS("GSE207422.rds")
 obj <- subset(obj, subset = cancer_type == "LUSC")
 
@@ -6784,10 +7002,10 @@ write.csv(fib_significant_markers, "fib_sc_top_marker_50.csv")
 
 
 identity_mapping <- c(
-  "0" = "matCAF",
-  "1" = "iCAF",
-  "2" = "myCAF",
-  "3" = "pCAF"
+  "0" = "Fib_matCAF",
+  "1" = "Fib_iCAF",
+  "2" = "Fib_myCAF",
+  "3" = "Fib_pCAF"
 )
 
 sub_cell_type <- identity_mapping[fib@meta.data$seurat_clusters]
@@ -7156,14 +7374,14 @@ macro_significant_markers <- macro_significant_markers %>% group_by(cluster) %>%
 write.csv(macro_significant_markers, "macro_sc_top_marker_50.csv")
 
 identity_mapping <- c(
-  "0" = "Lipid-associated_Macro_1",
-  "1" = "Inflammatory_Macro",
-  "2" = "Immunoregulatory_Macro",
-  "3" = "Matrix-remodeling_Macro",
-  "4" = "Stress-response_Macro",
-  "5" = "Lipid-associated_Macro_2",
-  "6" = "Lipid-associated_Macro_3",
-  "7" = "Proliferative-Macro"
+  "0" = "Macro_Lipid-associated_1",
+  "1" = "Macro_Inflammatory",
+  "2" = "Macro_Immunoregulatory",
+  "3" = "Macro_Matrix-remodeling",
+  "4" = "Macro_Stress-response",
+  "5" = "Macro_Lipid-associated_2",
+  "6" = "Macro_Lipid-associated_3",
+  "7" = "Macro_Proliferative"
 )
 
 
@@ -7332,3 +7550,777 @@ DimPlot(macro, reduction = "umap", label = TRUE, pt.size = 1, group.by = "cell_t
         plot.margin = margin(10, 50, 10, 10)
     )
 dev.off()
+
+all_genes <- c(
+  # Antigen-presenting_Macro
+  "IGKC", "CD74", "IGHG4",        # 用 IGHG4 替代 IGHG1/2
+  # Homeostatic_Macro
+  "APOE", "CD68", "TXNIP",
+  # Immunoregulatory_Macro
+  "CCL21", "PTGDS", "CCL19",
+  # Lipid-associated_Macro
+  "CHIT1", "ACP5", "CYP27A1",
+  # Matrix-remodeling_Macro
+  "POSTN", "COL1A1", "MMP2",
+  # Phagocytic_Macro
+  "KRT5", "SPP1", "KRT19",
+  # Stress-response_Macro
+  "PTEN", "SIGMAR1", "VPS29",
+  # 单细胞特有亚型
+  "S100A8", "IL1B", "VEGFA",      # Inflammatory_Macro
+  "TOP2A", "MKI67", "BIRC5"       # Proliferative_Macro
+)
+all_genes <- unique(all_genes)
+
+library(Seurat)
+library(ggplot2)
+library(patchwork)
+
+macro$sub_cell_type <- as.character(macro$sub_cell_type)
+macro_sc$sub_cell_type <- as.character(macro_sc$sub_cell_type)
+
+# 空间组
+p1 <- DotPlot(macro, features = all_genes, group.by = "sub_cell_type", scale = TRUE) +
+  scale_color_gradient(low = "#D6EAF8", high = "#1F618D", name = "Average Expression") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8)) +
+  labs(title = "Spatial - Macrophage Subtypes", x = "", y = "") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+# 单细胞
+p2 <- DotPlot(macro_sc, features = all_genes, group.by = "sub_cell_type", scale = TRUE) +
+  scale_color_gradient(low = "#D6EAF8", high = "#1F618D", name = "Average Expression") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8)) +
+  labs(title = "scRNA-seq - Macrophage Subtypes", x = "", y = "") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+# 拼图
+p_combined <- p1 / p2 + 
+  plot_annotation(title = "Macrophage Marker Genes: Spatial vs scRNA-seq") &
+  theme(plot.title = element_text(hjust = 0.5, size = 14))
+
+ggsave("bubble_plot_macrophage_optimized.pdf", plot = p_combined, width = 16, height = 12)
+```
+# mast
+```R
+mast <- subset(obj, subset = CellType == "Mast cells")
+library(Seurat)
+mast <- NormalizeData(mast)
+mast <- FindVariableFeatures(mast, nfeatures = 2000)
+hvgs <- VariableFeatures(mast)
+mast <- ScaleData(mast, features = hvgs)
+mast <- RunPCA(mast, features = hvgs, npcs = 50)
+library(ggplot2)
+p <- ElbowPlot(mast, ndims = 30)
+ggsave("p3.png",plot=p)
+
+mast <- FindNeighbors(mast, dims = 1:15)
+mast <- FindClusters(mast, resolution = 0.6)
+mast <- RunUMAP(mast, dims = 1:15)
+
+library(ggplot2)
+library(ggsci)
+npg_pal <- pal_npg()(10)
+npg_extended <- colorRampPalette(npg_pal)(11)#0.6
+
+seurat_clusters <- as.character(unique(mast@meta.data$seurat_clusters))  # 转换为字符向量
+num_legend_items <- length(seurat_clusters)  # 图例的个数
+max_label_length <- max(nchar(seurat_clusters))  # 图例名称的最大长度
+
+base_width <- 3000  # 基础宽度
+base_height <- 3000  # 基础高度
+legend_width_factor <- 100  # 每个图例项增加的宽度
+label_length_factor <- 10  # 每个字符增加的宽度
+dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
+pdf("mast_clusters.pdf", width = dynamic_width/300, height = base_height/300)  # 转换为英寸
+
+DimPlot(mast, reduction = "umap", label = TRUE, pt.size = 1, label.size = 8) +
+    xlab("UMAP_1") +
+    ylab("UMAP_2") +
+    ggtitle(NULL) +
+    scale_color_manual(values = npg_extended) +
+    coord_fixed(ratio = 1) +
+    guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
+    theme(
+        text = element_text(size = 12, face = "bold"),
+        axis.text.x = element_text(size = 28, color = "black"),
+        axis.text.y = element_text(size = 28, color = "black"),
+        axis.title.x = element_text(size = 36, face = "bold", color = "black"),
+        axis.title.y = element_text(size = 36, face = "bold", color = "black", margin = margin(r = 20)),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        legend.text = element_text(size = 28, face = "bold", color = "black"),
+        legend.title = element_text(size = 28, face = "bold", color = "black"),
+        legend.position = "right",
+        legend.box.margin = margin(0, 0, 0, 0),
+        legend.key = element_blank(),
+        legend.background = element_blank(),
+        panel.background = element_rect(fill = "white", color = NA),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.line.x = element_line(color = "black", linewidth = 0.5),
+        axis.line.y = element_line(color = "black", linewidth = 0.5),
+        aspect.ratio = 1,
+        plot.margin = margin(10, 50, 10, 10)
+    )
+
+dev.off()
+
+library(dplyr)
+mast_markers <- FindAllMarkers(mast, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use = "wilcox")
+mast_significant_markers <- subset(mast_markers, p_val_adj < 0.05)
+#write.csv(mast_significant_markers, "mast_all_marker.csv")
+mast_significant_markers <- mast_significant_markers %>% group_by(cluster) %>% top_n(n = 50, wt = avg_log2FC)
+write.csv(mast_significant_markers, "mast_top_marker_50.csv")
+
+
+#0.6
+identity_mapping <- c(
+  "0" = "Mast_Stress-response",
+  "1" = "Mast_Metabolic_1",
+  "2" = "Mast_Homeostatic",
+  "3" = "Mast_Matrix-remodeling",
+  "4" = "Mast_Antigen-presenting_1",
+  "5" = "Mast_Immunoregulatory",
+  "6" = "Mast_Antigen-presenting_2",
+  "7" = "Mast_Epithelial-associated",
+  "8" = "Mast_Metabolic_2",
+  "9" = "Mast_Inflammatory",
+  "10" = "Mast_MCTC"
+)
+sub_cell_type <- identity_mapping[mast@meta.data$seurat_clusters]
+mast@meta.data$sub_cell_type <- sub_cell_type
+
+library(ggplot2)
+library(ggsci)
+npg_pal <- pal_npg()(10)
+npg_extended <- colorRampPalette(npg_pal)(11)
+
+cell_types <- as.character(unique(mast@meta.data$sub_cell_type))
+num_legend_items <- length(cell_types)  # 图例的个数
+max_label_length <- max(nchar(cell_types))  # 图例名称的最大长度
+
+base_width <- 3000  # 基础宽度
+base_height <- 3000  # 基础高度
+legend_width_factor <- 100  # 每个图例项增加的宽度
+label_length_factor <- 10  # 每个字符增加的宽度
+dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
+pdf("mast_annotation-0.6.pdf", width = dynamic_width/300, height = base_height/300)
+DimPlot(mast, reduction = "umap", label = TRUE, pt.size = 1, group.by = "sub_cell_type", label.size = 4) +
+    xlab("UMAP_1") +
+    ylab("UMAP_2") +
+    ggtitle(NULL) +
+    scale_color_manual(values = npg_extended) +
+    coord_fixed(ratio = 1) +
+    guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
+    theme(
+        text = element_text(size = 8, face = "bold"),
+        axis.text.x = element_text(size = 28, color = "black"),
+        axis.text.y = element_text(size = 28, color = "black"),
+        axis.title.x = element_text(size = 36, face = "bold", color = "black"),
+        axis.title.y = element_text(size = 36, face = "bold", color = "black", margin = margin(r = 20)),  # 增加右侧间距
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        legend.text = element_text(size = 16, face = "bold", color = "black"),
+        legend.title = element_text(size = 16, face = "bold", color = "black"),
+        legend.position = "right",
+        legend.box.margin = margin(0, 0, 0, 0),
+        legend.key = element_blank(),
+        legend.background = element_blank(),
+        panel.background = element_rect(fill = "white", color = NA),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.line.x = element_line(color = "black", linewidth = 0.5),
+        axis.line.y = element_line(color = "black", linewidth = 0.5),
+        aspect.ratio = 1,
+        plot.margin = margin(10, 50, 10, 10)
+    )
+dev.off()
+
+#比例
+library(tidyverse)
+
+# 计算各亚群在不同组织中的占比
+prop_data <-mast@meta.data %>%
+  group_by(tissue, sub_cell_type) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(tissue) %>%
+  mutate(proportion = count / sum(count) * 100) %>%
+  filter(tissue %in% c("mPT", "nmPT")) %>%
+  mutate(tissue = factor(tissue, levels = c("mPT", "nmPT")))
+
+library(ggplot2)
+library(ggsci)
+npg_pal <- pal_npg()(10)
+npg_extended <- colorRampPalette(npg_pal)(11)
+
+
+prop_data <- prop_data %>%
+  mutate(sub_cell_type = as.character(sub_cell_type))
+
+# 绘制堆叠条形图
+p <- ggplot(prop_data, aes(x = tissue, y = proportion, fill = sub_cell_type)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(values = npg_extended) +
+  labs(title = "Cell Type Distribution: mPT vs nmPT",
+       x = "Tissue", y = "Proportion (%)", fill = "Cell Type") +
+  theme_minimal() +
+  theme(
+    # 坐标轴线条和刻度
+    axis.line = element_line(color = "black", linewidth = 0.5),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(0.15, "cm"),
+    # 坐标轴文本
+    axis.text.x = element_text(angle = 45, hjust = 1, color = "black", size = 10),
+    axis.text.y = element_text(color = "black", size = 10),
+    # 坐标轴标题
+    axis.title.x = element_text(color = "black", size = 12, face = "bold"),
+    axis.title.y = element_text(color = "black", size = 12, face = "bold"),
+    # 面板背景
+    panel.grid.major = element_line(color = "gray90"),
+    panel.grid.minor = element_blank(),
+    # 图例
+    legend.position = "right",
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 9)
+  )
+
+
+# 保存为PDF
+pdf("mast_celltype_distribution_tumor0.6.pdf", width = 4, height = 6)
+print(p)
+dev.off()
+
+prop_data <- mast@meta.data %>%
+  group_by(tissue, sub_cell_type) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(tissue) %>%
+  mutate(proportion = count / sum(count) * 100) %>%
+  filter(tissue %in% c("metLN", "negLN")) %>%
+  mutate(tissue = factor(tissue, levels = c("metLN", "negLN")))
+
+library(ggplot2)
+library(ggsci)
+npg_pal <- pal_npg()(10)
+npg_extended <- colorRampPalette(npg_pal)(11)
+
+
+prop_data <- prop_data %>%
+  mutate(sub_cell_type = as.character(sub_cell_type))
+
+# 绘制堆叠条形图
+p <- ggplot(prop_data, aes(x = tissue, y = proportion, fill = sub_cell_type)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(values = npg_extended) +
+  labs(title = "Cell Type Distribution: metLN vs negLN",
+       x = "Tissue", y = "Proportion (%)", fill = "Cell Type") +
+  theme_minimal() +
+  theme(
+    # 坐标轴线条和刻度
+    axis.line = element_line(color = "black", linewidth = 0.5),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(0.15, "cm"),
+    # 坐标轴文本
+    axis.text.x = element_text(angle = 45, hjust = 1, color = "black", size = 10),
+    axis.text.y = element_text(color = "black", size = 10),
+    # 坐标轴标题
+    axis.title.x = element_text(color = "black", size = 12, face = "bold"),
+    axis.title.y = element_text(color = "black", size = 12, face = "bold"),
+    # 面板背景
+    panel.grid.major = element_line(color = "gray90"),
+    panel.grid.minor = element_blank(),
+    # 图例
+    legend.position = "right",
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 9)
+  )
+
+
+# 保存为PDF
+pdf("mast_celltype_distribution_RLN_P_RLN_N_NRLN-0.6.pdf", width = 4, height = 6)
+print(p)
+dev.off()
+
+
+```
+# mast sc
+```R
+library(Seurat)
+obj_sc <- readRDS("sc_obj_anno.rds")
+mast_sc <- subset(obj, subset = cell_type == "Mast cells")
+mast_sc <- NormalizeData(mast_sc)
+mast_sc <- FindVariableFeatures(mast_sc, nfeatures = 2000)
+hvgs <- VariableFeatures(mast_sc)
+mast_sc <- ScaleData(mast_sc, features = hvgs)
+mast_sc <- RunPCA(mast_sc, features = hvgs, npcs = 50)
+p <- ElbowPlot(mast_sc, ndims = 30)
+ggsave("p3.png",plot=p)
+
+mast_sc <- FindNeighbors(mast_sc, dims = 1:20)
+mast_sc <- FindClusters(mast_sc, resolution = 0.6)
+mast_sc <- RunUMAP(mast_sc, dims = 1:20)
+
+library(ggplot2)
+library(ggsci)
+npg_pal <- pal_npg()(10)
+npg_extended <- colorRampPalette(npg_pal)(11)#0.6
+
+seurat_clusters <- as.character(unique(mast_sc@meta.data$seurat_clusters))  # 转换为字符向量
+num_legend_items <- length(seurat_clusters)  # 图例的个数
+max_label_length <- max(nchar(seurat_clusters))  # 图例名称的最大长度
+
+base_width <- 3000  # 基础宽度
+base_height <- 3000  # 基础高度
+legend_width_factor <- 100  # 每个图例项增加的宽度
+label_length_factor <- 10  # 每个字符增加的宽度
+dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
+pdf("mast_sc_clusters.pdf", width = dynamic_width/300, height = base_height/300)  # 转换为英寸
+
+DimPlot(mast_sc, reduction = "umap", label = TRUE, pt.size = 1, label.size = 8) +
+    xlab("UMAP_1") +
+    ylab("UMAP_2") +
+    ggtitle(NULL) +
+    scale_color_manual(values = npg_extended) +
+    coord_fixed(ratio = 1) +
+    guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
+    theme(
+        text = element_text(size = 12, face = "bold"),
+        axis.text.x = element_text(size = 28, color = "black"),
+        axis.text.y = element_text(size = 28, color = "black"),
+        axis.title.x = element_text(size = 36, face = "bold", color = "black"),
+        axis.title.y = element_text(size = 36, face = "bold", color = "black", margin = margin(r = 20)),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        legend.text = element_text(size = 28, face = "bold", color = "black"),
+        legend.title = element_text(size = 28, face = "bold", color = "black"),
+        legend.position = "right",
+        legend.box.margin = margin(0, 0, 0, 0),
+        legend.key = element_blank(),
+        legend.background = element_blank(),
+        panel.background = element_rect(fill = "white", color = NA),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.line.x = element_line(color = "black", linewidth = 0.5),
+        axis.line.y = element_line(color = "black", linewidth = 0.5),
+        aspect.ratio = 1,
+        plot.margin = margin(10, 50, 10, 10)
+    )
+
+dev.off()
+
+library(dplyr)
+mast_markers <- FindAllMarkers(mast_sc, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use = "wilcox")
+mast_significant_markers <- subset(mast_markers, p_val_adj < 0.05)
+#write.csv(mast_significant_markers, "mast_all_marker.csv")
+mast_significant_markers <- mast_significant_markers %>% group_by(cluster) %>% top_n(n = 50, wt = avg_log2FC)
+write.csv(mast_significant_markers, "mast_sc_top_marker_50.csv")
+
+
+#0.6
+identity_mapping <- c(
+  "0" = "Inflammatory_Mast",
+  "1" = "Classical_MCTC",
+  "2" = "Tissue-resident_Mast",
+  "3" = "Proliferative_Mast"
+)
+sub_cell_type <- identity_mapping[mast_sc@meta.data$seurat_clusters]
+mast_sc@meta.data$sub_cell_type <- sub_cell_type
+
+library(ggplot2)
+library(ggsci)
+npg_pal <- pal_npg()(10)
+npg_extended <- colorRampPalette(npg_pal)(11)
+
+cell_types <- as.character(unique(mast_sc@meta.data$sub_cell_type))
+num_legend_items <- length(cell_types)  # 图例的个数
+max_label_length <- max(nchar(cell_types))  # 图例名称的最大长度
+
+base_width <- 3000  # 基础宽度
+base_height <- 3000  # 基础高度
+legend_width_factor <- 100  # 每个图例项增加的宽度
+label_length_factor <- 10  # 每个字符增加的宽度
+dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
+pdf("mast_sc_annotation-0.6.pdf", width = dynamic_width/300, height = base_height/300)
+DimPlot(mast_sc, reduction = "umap", label = TRUE, pt.size = 1, group.by = "sub_cell_type", label.size = 4) +
+    xlab("UMAP_1") +
+    ylab("UMAP_2") +
+    ggtitle(NULL) +
+    scale_color_manual(values = npg_pal) +
+    coord_fixed(ratio = 1) +
+    guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
+    theme(
+        text = element_text(size = 8, face = "bold"),
+        axis.text.x = element_text(size = 28, color = "black"),
+        axis.text.y = element_text(size = 28, color = "black"),
+        axis.title.x = element_text(size = 36, face = "bold", color = "black"),
+        axis.title.y = element_text(size = 36, face = "bold", color = "black", margin = margin(r = 20)),  # 增加右侧间距
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        legend.text = element_text(size = 16, face = "bold", color = "black"),
+        legend.title = element_text(size = 16, face = "bold", color = "black"),
+        legend.position = "right",
+        legend.box.margin = margin(0, 0, 0, 0),
+        legend.key = element_blank(),
+        legend.background = element_blank(),
+        panel.background = element_rect(fill = "white", color = NA),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.line.x = element_line(color = "black", linewidth = 0.5),
+        axis.line.y = element_line(color = "black", linewidth = 0.5),
+        aspect.ratio = 1,
+        plot.margin = margin(10, 50, 10, 10)
+    )
+dev.off()
+
+all_genes <- c(
+  # 1 Antigen-presenting_Mast_1
+  "HLA-DRA", "CD74", "C1QA",
+  # 2 Antigen-presenting_Mast_2
+  "IGKC", "B2M", "HLA-DRA",
+  # 3 Classical_MCTC
+  "CPA3", "KIT", "HDC",
+  # 4 Epithelial-associated_Mast
+  "KRT5", "KRT17", "KRT18",
+  # 5 Homeostatic_Mast
+  "PFN1", "B2M", "HLA-E",
+  # 6 Immunoregulatory_Mast
+  "IGKC", "CD74", "APOE",
+  # 7 Inflammatory_Mast
+  "S100A8", "S100A9", "CXCL8",
+  # 8 Matrix_Remodeling_Mast
+  "COL1A1", "MMP2", "SPARC",
+  # 9 Metabolic_Mast_1
+  "NDUFA3", "SNRPD1", "VPS29",
+  # 10 Metabolic_Mast_2
+  "G6PD", "PGD", "TALDO1",
+  # 11 Stress-response_Mast
+  "PTEN", "SIGMAR1", "KRT18",
+  # 12 Proliferative_Mast (单细胞特有)
+  "TOP2A", "MKI67", "AURKB",
+  # 13 Tissue-resident_Mast (单细胞特有)
+  "SCGB1A1", "APOE", "MBP"
+)
+all_genes <- unique(all_genes)
+
+library(Seurat)
+library(ggplot2)
+library(patchwork)
+
+mast$sub_cell_type <- as.character(mast$sub_cell_type)
+mast_sc$sub_cell_type <- as.character(mast_sc$sub_cell_type)
+
+p1 <- DotPlot(mast, features = all_genes, group.by = "sub_cell_type", scale = TRUE) +
+  scale_color_gradient(low = "#D6EAF8", high = "#1F618D", name = "Average Expression") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8)) +
+  labs(title = "Spatial - Mast Cell Subtypes", x = "", y = "") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+p2 <- DotPlot(mast_sc, features = all_genes, group.by = "sub_cell_type", scale = TRUE) +
+  scale_color_gradient(low = "#D6EAF8", high = "#1F618D", name = "Average Expression") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8)) +
+  labs(title = "scRNA-seq - Mast Cell Subtypes", x = "", y = "") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+p_combined <- p1 / p2 + 
+  plot_annotation(title = "Mast Cell Marker Genes: Spatial vs scRNA-seq") &
+  theme(plot.title = element_text(hjust = 0.5, size = 14))
+
+ggsave("bubble_plot_mast_optimized.pdf", plot = p_combined, width = 16, height = 14)
+```
+# CN 
+```R
+#找到最佳k
+bsub -q mpi -n 24 -J Rscript best_k_sub.r
+#最佳k聚类划分CN
+bsub -q mpi -n 24 -J Rscript run_with_fixed_k.r
+#CN画图
+#visualize_cellcharter_results.r
+
+#CN组成
+# 查看每个CN的细胞组成
+cn_composition <- table(mPT@meta.data$cellcharter_cluster, 
+                        mPT@meta.data$CellType)
+
+# 计算每个CN的比例
+cn_prop <- prop.table(cn_composition, margin = 1) * 100
+
+# 打印每个CN的主要细胞类型（前5种）
+for (cn in rownames(cn_prop)) {
+  cat("\n=== CN", cn, "===\n")
+  top10 <- sort(cn_prop[cn, ], decreasing = TRUE)[1:10]
+  for (i in 1:length(top10)) {
+    cat(names(top10)[i], ": ", round(top10[i], 1), "%\n", sep = "")
+  }
+}
+
+#CN注释
+
+cn_annotation_detailed <- c(
+  "1" = "Stroma_Immune_Zone",
+  "2" = "Metabolic_Tumor_Core_A",
+  "3" = "Perivascular_Stroma",
+  "4" = "Tumor_Stroma_Interface",
+  "5" = "Macrophage_Dominant_Zone",
+  "6" = "B_Cell_Development_Zone",
+  "7" = "Metabolic_Tumor_Core_B",
+  "8" = "GC_B_Tumor_Interface",
+  "9" = "Alveolar_Epithelium_Zone",
+  "10" = "Fibroblast_Dominant_Stroma",
+  "11" = "Secretory_Tumor_Zone",
+  "12" = "Metabolic_Tumor_Core_C",
+  "13" = "Lymphoid_Aggregate_TLS_like",
+  "14" = "B_Plasma_Transition_Zone",
+  "15" = "Metabolic_Tumor_Core_D",
+  "16" = "Metabolic_GC_Interface",
+  "17" = "Metabolic_Squamous_Mix",
+  "18" = "Plasma_Cell_Rich_Zone",
+  "19" = "Plasma_B_Mixed_Zone"
+)
+# 大类注释（用于分组统计/可视化）
+cn_annotation_major <- c(
+  "1" = "Stroma",
+  "2" = "Tumor",
+  "3" = "Stroma",
+  "4" = "Tumor_Stroma",
+  "5" = "Myeloid",
+  "6" = "Lymphoid",
+  "7" = "Tumor",
+  "8" = "Lymphoid",
+  "9" = "Epithelium",
+  "10" = "Stroma",
+  "11" = "Tumor",
+  "12" = "Tumor",
+  "13" = "Lymphoid",
+  "14" = "Lymphoid",
+  "15" = "Tumor",
+  "16" = "Tumor",
+  "17" = "Tumor",
+  "18" = "Lymphoid",
+  "19" = "Lymphoid"
+)
+
+# 应用到 Seurat 对象
+mPT@meta.data$cn_detailed <- cn_annotation_detailed[as.character(mPT@meta.data$cellcharter_cluster)]
+mPT@meta.data$cn_major <- cn_annotation_major[as.character(mPT@meta.data$cellcharter_cluster)]
+
+#shannon
+message("=== 4. 生成Shannon多样性指数小提琴图 ===")
+
+shannon_diversity <- data.frame()
+
+for (sample in samples) {
+  sample_cells <- mPT@meta.data[mPT@meta.data$sample == sample, ]
+  for (cluster in unique(sample_cells$cellcharter_cluster)) {
+    cluster_cells <- sample_cells[sample_cells$cellcharter_cluster == cluster, ]
+    cell_type_counts <- table(cluster_cells$detailed)
+    
+    if (length(cell_type_counts) > 1) {
+      proportions <- cell_type_counts / sum(cell_type_counts)
+      shannon <- -sum(proportions * log(proportions))
+    } else {
+      shannon <- 0
+    }
+    
+    # 获取该cluster对应的cn_detailed注释
+    cn_name <- unique(cluster_cells$cn_detailed)
+    if (length(cn_name) == 0) cn_name <- as.character(cluster)
+    
+    shannon_diversity <- rbind(shannon_diversity, 
+                              data.frame(sample = sample, 
+                                        cluster = as.numeric(as.character(cluster)),
+                                        cn_detailed = cn_name,
+                                        shannon = shannon))
+  }
+}
+
+# 按照cn_detailed的名称排序（可按需调整顺序）
+shannon_diversity$cn_detailed <- factor(shannon_diversity$cn_detailed, 
+                                        levels = sort(unique(shannon_diversity$cn_detailed)))
+
+# 获取每个cn_detailed对应的颜色（取第一个cluster的颜色作为代表）
+cn_detailed_colors <- sapply(levels(shannon_diversity$cn_detailed), function(cn) {
+  # 找到该cn对应的第一个cluster编号
+  cluster_num <- unique(shannon_diversity$cluster[shannon_diversity$cn_detailed == cn])[1]
+  if (!is.na(cluster_num) && cluster_num <= length(cluster_colors)) {
+    return(cluster_colors[cluster_num])
+  } else {
+    return("gray60")
+  }
+})
+
+p_shannon <- ggplot(shannon_diversity, aes(x = cn_detailed, y = shannon, fill = cn_detailed)) +
+  geom_violin(alpha = 0.7, trim = TRUE, linewidth = 0.5, color = "black") +
+  geom_jitter(width = 0.2, height = 0, size = 0.8, alpha = 0.6, color = "black") +
+  scale_fill_manual(values = cn_detailed_colors, name = "Spatial Domain") +
+  labs(title = "Shannon Diversity Index by Spatial Domain",
+       x = "Spatial Domain (CN)",
+       y = "Shannon Diversity Index") +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 9),  # 文字较多，稍微减小字号
+    axis.text.y = element_text(size = 10),
+    axis.title.x = element_text(size = 12, face = "bold"),
+    axis.title.y = element_text(size = 12, face = "bold"),
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    legend.position = "none",
+    panel.grid.major = element_line(color = "gray90"),
+    panel.grid.minor = element_line(color = "gray95")
+  )
+
+# 保存Shannon多样性图
+ggsave("shannon_diversity.pdf", p_shannon, width = 20, height = 6, dpi = 300)  # 宽度适当增加以适应更长的标签
+message("保存Shannon多样性图: shannon_diversity.pdf")
+
+#
+# 指定样本和要高亮的CN注释
+target_sample <- "D3"  # 替换为你的实际样本名称
+target_cn <- "Metabolic_GC_Interface"
+
+# 筛选目标样本的细胞
+sample_data <- mPT@meta.data[mPT@meta.data$sample == target_sample, ]
+sample_cells <- rownames(sample_data)
+temp_seurat <- subset(mPT, cells = sample_cells)
+
+# 创建一个高亮分组变量
+temp_seurat@meta.data$highlight <- ifelse(
+  temp_seurat@meta.data$cn_detailed == target_cn, 
+  target_cn, 
+  "Other"
+)
+
+# 定义颜色：目标CN使用原来的颜色，Other使用灰色
+highlight_colors <- c(
+  setNames(cluster_colors[which(unique(mPT@meta.data$cn_detailed) == target_cn)[1]], target_cn),
+  "Other" = "lightgray"
+)
+
+# 绘图
+p <- DimPlot(temp_seurat, 
+             reduction = reduction_name,
+             group.by = "highlight", 
+             pt.size = 0.3,
+             label = FALSE,
+             cols = highlight_colors,
+             order = c("Other", target_cn)) +  # 确保目标CN绘制在上层
+  ggtitle(paste("Sample:", target_sample, "- Highlight:", target_cn)) +
+  theme(legend.position = "bottom")
+
+# 保存
+sample_filename <- paste0("spatial_domain_highlight_", target_sample, "_", target_cn, ".pdf")
+ggsave(sample_filename, p, width = 10, height = 8, dpi = 300)
+message(paste("保存高亮图:", sample_filename))
+
+
+
+library(ggplot2)
+library(dplyr)
+
+# 计算每个 CN 中每种细胞类型的数量
+library(ggplot2)
+library(dplyr)
+library(scales)
+
+stack_data_count <- mPT@meta.data %>%
+  group_by(cn_detailed, CellType) %>%
+  summarise(count = n(), .groups = "drop")
+
+# 按首字母顺序排序 CN
+cn_order <- sort(unique(stack_data_count$cn_detailed))
+stack_data_count$cn_detailed <- factor(stack_data_count$cn_detailed, levels = cn_order)
+
+# 获取所有细胞类型
+cell_types_unique <- unique(stack_data_count$CellType)
+n_types <- length(cell_types_unique)  # 应该是17
+
+# ============================================
+# 浅色系配色方案（17种颜色，足够区分）
+# ============================================
+
+# 方案1：使用 Brewer 调色板 Set3（12色）+ Paired 补充（5色）
+library(RColorBrewer)
+colors_set3 <- brewer.pal(12, "Set3")      # 浅色系，12种
+colors_paired <- brewer.pal(5, "Paired")   # 补充5种
+cell_colors_light <- c(colors_set3, colors_paired)
+names(cell_colors_light) <- cell_types_unique
+
+
+# 绘制数量堆叠图
+p_count <- ggplot(stack_data_count, aes(x = cn_detailed, y = count, fill = CellType)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.8) +
+  scale_fill_manual(values = cell_colors_light, name = "Cell Type") +
+  labs(title = "Cell Type Count by CN (Ordered by Name)",
+       x = "Cell Neighborhood (CN)",
+       y = "Cell Count") +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+    axis.text.y = element_text(size = 10),
+    axis.title = element_text(size = 12, face = "bold"),
+    legend.position = "right",
+    legend.text = element_text(size = 7),
+    legend.key.size = unit(0.4, "cm")
+  )
+
+# 保存
+ggsave("cn_celltype_count_alphabetical_light.pdf", p_count, width = 16, height = 8, dpi = 300)
+
+
+
+target_sample <- "D3"
+target_cn <- "Metabolic_Tumor_Core_A"  # 改这里
+
+# 指定要高亮的细胞类型
+highlight_cell_types <- c(
+  "Tumor_Metabolic_1",
+  "Tumor_Metabolic_2", 
+  "Mast_Metabolic_2",
+  "Macro_Phagocytic"
+  # 去掉 Fib_myCAF
+)
+
+sample_data <- mPT@meta.data[mPT@meta.data$sample == target_sample, ]
+sample_cells <- rownames(sample_data)
+temp_seurat <- subset(mPT, cells = sample_cells)
+
+# 创建着色变量：
+# - 目标CN内且属于指定细胞类型：显示具体类型名称
+# - 其他所有情况：归为"Other"
+temp_seurat@meta.data$color_by <- ifelse(
+  temp_seurat@meta.data$cn_detailed == target_cn & 
+    as.character(temp_seurat@meta.data$detailed) %in% highlight_cell_types,
+  as.character(temp_seurat@meta.data$detailed),  # 显示具体细胞类型
+  "Other"  # 其他所有细胞
+)
+
+# 为指定的5种细胞类型分配颜色
+# 方案1：使用Seurat默认颜色
+library(scales)
+cell_type_colors <- setNames(
+  hue_pal()(length(highlight_cell_types)),
+  highlight_cell_types
+)
+
+
+# 构建完整颜色向量
+all_colors <- c(cell_type_colors, "Other" = "lightgray")
+
+# 设置绘图顺序：Other在底层，指定细胞类型在上层
+order_categories <- c("Other", highlight_cell_types)
+
+# 绘图
+p <- DimPlot(temp_seurat, 
+             reduction = reduction_name,
+             group.by = "color_by", 
+             pt.size = 0.3,
+             label = FALSE,
+             cols = all_colors,
+             order = order_categories) +
+  ggtitle(paste("Sample:", target_sample, "- CN:", target_cn, 
+                "\n(Highlighting specific cell types within CN, others gray)")) +
+  theme(legend.position = "right") +
+  guides(color = guide_legend(title = "Cell Type", ncol = 1, 
+                              override.aes = list(size = 3)))
+
+# 保存
+sample_filename <- paste0("spatial_domain_highlight_", target_sample, "_", target_cn, "_specific_types.pdf")
+ggsave(sample_filename, p, width = 14, height = 10, dpi = 300)
+message(paste("保存高亮图:", sample_filename))
