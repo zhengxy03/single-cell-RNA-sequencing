@@ -21,9 +21,11 @@ mPT <- readRDS("mPT_cellcharter_FINAL.rds")
 
 # 确保邻域标签是因子
 mPT$cellcharter_cluster <- as.factor(mPT$cellcharter_cluster)
+#nmPT$cellcharter_cluster <- as.factor(nmPT$cellcharter_cluster)
 
 # 获取邻域数量
 n_clusters <- length(unique(mPT$cellcharter_cluster))
+#n_clusters <- length(unique(nmPT$cellcharter_cluster))
 message(paste("邻域数量:", n_clusters))
 
 # 检查是否有sample列
@@ -88,7 +90,7 @@ for (sample in samples) {
     ggtitle(paste("Sample:", sample)) +
     theme(legend.position = "bottom")
   
-  sample_filename <- paste0("spatial_domain_sample_", gsub(" ", "_", sample), ".pdf")
+  sample_filename <- paste0("mPT_spatial_domain_sample_", gsub(" ", "_", sample), ".pdf")
   ggsave(sample_filename, p, width = 10, height = 8, dpi = 300)
   message(paste("保存样本图:", sample_filename))
 }
@@ -108,7 +110,7 @@ if (has_spatial) {
     ggtitle("All Samples - Spatial Domains") +
     theme(legend.position = "bottom")
   
-  ggsave("spatial_domain_all_samples.pdf", p_combined, width = 14, height = 10, dpi = 300)
+  ggsave("mPT_spatial_domain_all_samples.pdf", p_combined, width = 14, height = 10, dpi = 300)
   message("保存合并空间图: spatial_domain_all_samples.pdf")
 }
 

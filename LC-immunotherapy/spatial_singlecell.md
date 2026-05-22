@@ -479,38 +479,54 @@ dev.off()
 ```
 # t cells
 ```R
-t_cells <- subset(obj,subset=CellType %in% c("T cells","NK cells"))
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+obj <- readRDS("YA2025263-1_fin.rds")
+#t_cells <- subset(obj,subset=CellType %in% c("T cells","NK cells"))
+t_cells <- subset(obj,subset=CellType %in% c("T cells"))
 #saveRDS(t_cells,file="t_NK.rds")
-t_cells <- subset(t_cells, subset = tissue %in% c("NRT","RT","NRLN","RLN_N","RLN_P"))
+#t_cells <- subset(t_cells, subset = tissue %in% c("NRT","RT","NRLN","RLN_N","RLN_P"))
 t_cells <- NormalizeData(t_cells)
-t_cells <- FindVariableFeatures(t_cells, nfeatures = 2000)
+t_cells <- FindVariableFeatures(t_cells, nfeatures = 3000)
 hvgs <- VariableFeatures(t_cells)
 t_cells <- ScaleData(t_cells, features = hvgs)
-t_cells <- RunPCA(t_cells, features = hvgs, npcs = 20)
-#p <- ElbowPlot(t_cells, ndims = 30)
-#ggsave("p3.png",plot=p)
-t_cells <- RunUMAP(t_cells, dims = 1:20)
-t_cells <- FindNeighbors(t_cells, dims = 1:20)
-t_cells <- FindClusters(t_cells, resolution = 0.8)
-saveRDS(t_cells,file="t_cells_new.rds")
+t_cells <- RunPCA(t_cells, features = hvgs, npcs = 50)
+p <- ElbowPlot(t_cells, ndims = 30)
+ggsave("p3.png",plot=p)
+
+pca_var <- t_cells[["pca"]]@stdev^2 / sum(t_cells[["pca"]]@stdev^2)
+cumsum_var <- cumsum(pca_var)
+
+# 看达到多少 PC 时累计方差 > 70% / 80% / 90%
+which(cumsum_var > 0.7)[1]   # 70%
+which(cumsum_var > 0.8)[1]   # 80%
+which(cumsum_var > 0.9)[1]   # 90%
+#library(harmony)
+#Malignant <- RunHarmony(Malignant,"tissue")
+
+
+t_cells <- FindNeighbors(t_cells, dims = 1:32)
+t_cells <- FindClusters(t_cells, resolution = 0.5)
+t_cells <- RunUMAP(t_cells, dims = 1:32)
+#saveRDS(t_cells,file="t_cells_new.rds")
+
 
 t_cell_markers <- FindAllMarkers(t_cells, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use = "wilcox")
 t_significant_markers <- subset(t_cell_markers, p_val_adj < 0.05)
 #write.csv(t_significant_markers, "t_all_marker.csv")
-t_significant_markers <- t_significant_markers %>% group_by(cluster) %>% top_n(n = 20, wt = avg_log2FC)
-write.csv(t_significant_markers, "t_top_marker_20.csv")
+t_significant_markers <- t_significant_markers %>% group_by(cluster) %>% top_n(n = 50, wt = avg_log2FC)
+write.csv(t_significant_markers, "t_top_marker_50.csv")
 
 
 t_cell_markers <- FindAllMarkers(t_cells, only.pos = TRUE, min.pct = 0.01, logfc.threshold = 0.1, test.use = "wilcox")
-t_significant_markers <- subset(t_cell_markers, p_val_adj < 1)
-write.csv(t_significant_markers, "t_all_marker.csv")
-t_significant_markers <- t_significant_markers %>% group_by(cluster) %>% top_n(n = 200, wt = avg_log2FC)
-write.csv(t_significant_markers, "t_top_marker_200.csv")
+t_significant_markers <- subset(t_cell_markers, p_val_adj < 0.05)
+#write.csv(t_significant_markers, "t_all_marker.csv")
+t_significant_markers <- t_significant_markers %>% group_by(cluster) %>% top_n(n = 50, wt = avg_log2FC)
+write.csv(t_significant_markers, "t_top_marker_50.csv")
 
 
-t_cells <- subset(t_cells,subset=seurat_clusters %in% c(0,2,7,9,11))
-#运行预处理
-#saveRDS(t_cells,file="t_cells_rm.rds")
+
 CD8 <- subset(t_cells, subset = CD4 < 0.5)
 #CD8 <- subset(t_cells,subset=seurat_clusters %in% c(1,2,8,10))
 
@@ -530,6 +546,190 @@ p <- DotPlot(t_cells,
         group.by = "seurat_clusters") + 
   RotatedAxis() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+# ==================== 扩展版 T 细胞亚型基因集 ====================
+
+# 1. Naive T cell（初始 T 细胞）
+naive_genes <- c(
+  "LEF1", "TCF7", "SELL", "CCR7", "IL7R", 
+  "CD27", "CD28", "MAL", "S1PR1", "FOXP1",
+  "BACH2", "ID3", "CD44", "LTB", "GPR183",
+  "TXNIP", "NOSIP", "P2RY10", "RGS1", "EBF1",
+  "TCF7L2", "MYB", "BCL6", "IL6ST", "TNS1"
+)
+
+# 2. Central memory T cell (Tcm，中心记忆)
+tcm_genes <- c(
+  "SELL", "CCR7", "IL7R", "TCF7", "LEF1",
+  "CD27", "CD28", "LTB", "GPR183", "BACH2",
+  "IL6ST", "MYB", "BCL2", "TBKBP1", "KLF2",
+  "IL2RG", "CD3E", "TRAF3", "PPP2R2C", "GPR33"
+)
+
+# 3. Effector memory T cell (Tem，效应记忆)
+tem_genes <- c(
+  "GZMA", "GZMB", "GZMK", "PRF1", "NKG7",
+  "IFNG", "CCL5", "CCL4", "CCL3", "KLRG1",
+  "CX3CR1", "CXCR4", "CD44", "IL2RB", "EOMES",
+  "TBX21", "ZEB2", "ID2", "FGFBP2", "GZMH",
+  "GZMM", "GNLY", "FASLG", "TNF", "LTB"
+)
+
+# 4. Effector T cell (Teff，效应 T 细胞)
+effector_genes <- c(
+  "GZMA", "GZMB", "PRF1", "NKG7", "IFNG",
+  "TNF", "CCL5", "CCL4", "CCL3", "XCL1", "XCL2",
+  "TBX21", "EOMES", "ID2", "KLRG1", "CX3CR1",
+  "FASLG", "GZMK", "GZMM", "GZMH", "GNLY",
+  "CD44", "IL2RA", "IL2RB", "CD69", "HSPA1A"
+)
+
+# 5. Treg（调节 T 细胞）
+treg_genes <- c(
+  "FOXP3", "CTLA4", "IL2RA", "TIGIT", "IKZF2",
+  "IKZF4", "LRRC32", "TNFRSF18", "TNFRSF4", "ENTPD1",
+  "LAYN", "GITR", "CCR8", "CCR4", "CTLA4",
+  "FOXP1", "BATF", "IL10", "TGFB1", "LAG3",
+  "CD69", "CD25", "RTKN2", "FCRL3", "S100A4"
+)
+
+# 6. Exhausted T cell（耗竭 T 细胞）
+exhausted_genes <- c(
+  "PDCD1", "LAG3", "TIGIT", "TOX", "HAVCR2",
+  "CTLA4", "ENTPD1", "CD160", "BTLA", "CD244",
+  "LAYN", "CXCL13", "GZMB", "PRF1", "IFNG",
+  "TBX21", "EOMES", "ID2", "ITGAE", "LILRB4",
+  "RGS16", "PLAAT4", "ISG15", "IFI6", "BATF"
+)
+
+# 7. Th1（辅助 T 细胞 1 型）
+th1_genes <- c(
+  "TBX21", "IFNG", "STAT1", "STAT4", "IL12RB1",
+  "IL12RB2", "CXCR3", "CXCL10", "CXCL11", "CCL3",
+  "CCL4", "GZMA", "GZMB", "PRF1", "TNF",
+  "IL18R1", "IL18RAP", "HLA-DRA", "HLA-DRB1", "CD38"
+)
+
+# 8. Th2（辅助 T 细胞 2 型）
+th2_genes <- c(
+  "GATA3", "IL4", "IL5", "IL13", "STAT6",
+  "IL9", "IL10", "CCL11", "CCL17", "CCL22",
+  "CCR3", "CCR4", "CCR8", "CRTH2", "IL1RL1",
+  "IL17RB", "IL25", "IL33", "HLA-DR", "CD200R"
+)
+
+# 9. Th17（辅助 T 细胞 17 型）
+th17_genes <- c(
+  "RORC", "RORA", "IL17A", "IL17F", "IL21",
+  "IL22", "IL23R", "CCR6", "CCL20", "CARD9",
+  "STAT3", "IRF4", "BATF", "RBPJ", "AHR",
+  "CSF2", "TGFB1", "IL6ST", "IL1R1", "IL12RB1"
+)
+
+# 10. Tfh（滤泡辅助 T 细胞）
+tfh_genes <- c(
+  "CXCR5", "BCL6", "ICOS", "PDCD1", "IL21",
+  "IL6ST", "STAT3", "MAF", "BATF", "TOX",
+  "CXCL13", "CCL19", "CD200", "CD40LG", "CD28",
+  "SAP", "SH2D1A", "IL4", "IL10", "TNFRSF4"
+)
+
+# 11. Proliferating T cell（增殖 T 细胞）
+proliferating_genes <- c(
+  "MKI67", "TOP2A", "PCNA", "CCNB1", "CCNA2",
+  "CDK1", "CDK2", "CDC20", "BIRC5", "AURKA",
+  "AURKB", "PLK1", "TYMS", "RRM2", "ASPM",
+  "CENPF", "CENPA", "KIF11", "KIF23", "KIF2C"
+)
+
+# 12. Cytotoxic T cell（细胞毒性评分，综合 GZMA/B/PRF1 等）
+cytotoxic_genes <- c(
+  "GZMA", "GZMB", "GZMH", "GZMK", "GZMM",
+  "PRF1", "NKG7", "GNLY", "FASLG", "IFNG",
+  "TNF", "CCL5", "CCL4", "CCL3", "XCL1", "XCL2"
+)
+activated_genes <- c(
+  "CD69", "TNF", "IL23A", "CD5", "FOSL1", "JUNB", "JUND", 
+  "IRF3", "BANK1", "S1PR4", "AKT1S1", "CCL19", "TRBV12-3",
+  "GADD45B", "HSPA1B", "DNAJB1", "NLRP1", "DGKA", "AREL1",
+  "CXCL12", "MADCAM1"
+)
+
+# 过滤存在的基因
+activated_genes <- activated_genes[activated_genes %in% rownames(t_cells)]
+
+
+# 过滤存在的基因（确保基因在数据中）
+naive_genes <- naive_genes[naive_genes %in% rownames(t_cells)]
+tcm_genes <- tcm_genes[tcm_genes %in% rownames(t_cells)]
+tem_genes <- tem_genes[tem_genes %in% rownames(t_cells)]
+treg_genes <- treg_genes[treg_genes %in% rownames(t_cells)]
+exhausted_genes <- exhausted_genes[exhausted_genes %in% rownames(t_cells)]
+effector_genes <- effector_genes[effector_genes %in% rownames(t_cells)]
+proliferating_genes <- proliferating_genes[proliferating_genes %in% rownames(t_cells)]
+th1_genes <- th1_genes[th1_genes %in% rownames(t_cells)]
+th2_genes <- th2_genes[th2_genes %in% rownames(t_cells)]
+th17_genes <- th17_genes[th17_genes %in% rownames(t_cells)]
+tfh_genes <- tfh_genes[tfh_genes %in% rownames(t_cells)]
+cytotoxic_genes <- cytotoxic_genes[cytotoxic_genes %in% rownames(t_cells)]
+
+# 打印实际使用的基因数量
+cat("Activated:", length(activated_genes), "\n")
+cat("Naive:", length(naive_genes), "\n")
+cat("Tcm:", length(tcm_genes), "\n")
+cat("Tem:", length(tem_genes), "\n")
+cat("Treg:", length(treg_genes), "\n")
+cat("Exhausted:", length(exhausted_genes), "\n")
+cat("Effector:", length(effector_genes), "\n")
+cat("Proliferating:", length(proliferating_genes), "\n")
+cat("Th1:", length(th1_genes), "\n")
+cat("Th2:", length(th2_genes), "\n")
+cat("Th17:", length(th17_genes), "\n")
+cat("Tfh:", length(tfh_genes), "\n")
+cat("Cytotoxic:", length(cytotoxic_genes), "\n")
+
+# 打分
+t_cells <- AddModuleScore(t_cells, features = list(naive_genes), name = "Naive_Score")
+t_cells <- AddModuleScore(t_cells, features = list(tcm_genes), name = "Tcm_Score")
+t_cells <- AddModuleScore(t_cells, features = list(tem_genes), name = "Tem_Score")
+t_cells <- AddModuleScore(t_cells, features = list(treg_genes), name = "Treg_Score")
+t_cells <- AddModuleScore(t_cells, features = list(exhausted_genes), name = "Exhausted_Score")
+t_cells <- AddModuleScore(t_cells, features = list(effector_genes), name = "Effector_Score")
+t_cells <- AddModuleScore(t_cells, features = list(proliferating_genes), name = "Proliferating_Score")
+t_cells <- AddModuleScore(t_cells, features = list(th1_genes), name = "Th1_Score")
+t_cells <- AddModuleScore(t_cells, features = list(th2_genes), name = "Th2_Score")
+t_cells <- AddModuleScore(t_cells, features = list(th17_genes), name = "Th17_Score")
+t_cells <- AddModuleScore(t_cells, features = list(tfh_genes), name = "Tfh_Score")
+t_cells <- AddModuleScore(t_cells, features = list(cytotoxic_genes), name = "Cytotoxic_Score")
+t_cells <- AddModuleScore(t_cells, features = list(activated_genes), name = "Activated_Score")
+
+# 计算每个 cluster 的平均评分
+score_cols <- c("Naive_Score1","Tcm_Score1","Tem_Score1", "Treg_Score1", "Exhausted_Score1", 
+                "Effector_Score1", "Proliferating_Score1", "Th1_Score1",
+                "Th2_Score1", "Th17_Score1", "Tfh_Score1", "Activated_Score1")
+
+score_avg <- t_cells@meta.data %>%
+  group_by(seurat_clusters) %>%
+  summarise(across(all_of(score_cols), mean))
+
+# 转换为矩阵用于热图
+score_mat <- as.matrix(score_avg[, -1])
+rownames(score_mat) <- score_avg$seurat_clusters
+
+library(pheatmap)
+# 热图
+p <- pheatmap(score_mat, 
+         scale = "row", 
+         cluster_rows = TRUE, 
+         cluster_cols = FALSE,
+         main = "T cell subset scores by cluster",
+         fontsize = 10,
+         color = colorRampPalette(c("blue", "white", "red"))(100))
+ggsave("t_score.png",plot=p)
+
+t_cells<- subset(t_cells,subset=seurat_clusters %in% c(0,1,2,3,4,5,6,7))
+t_cells <- RunUMAP(t_cells, dims = 1:32)
 
 seurat_clusters <- as.character(unique(t_cells@meta.data$seurat_clusters))  # 转换为字符向量
 num_legend_items <- length(seurat_clusters)  # 图例的个数
@@ -587,11 +787,646 @@ DimPlot(t_cells, reduction = "umap", label = TRUE, pt.size = 1, label.size = 8) 
 
 dev.off()
 
-t_cells <- subset(t_cells,subset=seurat_clusters %in% c(0,1,5,7,9,10,11,13,14,15,16,17,18,20,21,22,23,25,26,27,28,29,30,32))
-t_cells <- subset(t_cells,subset=seurat_clusters %in% c(0,1,5,7,13,22,23,25,26,29,30,32))
-t_cells <- subset(t_cells,subset=seurat_clusters %in% c(0,2,3,11,12))
-t_cells <- FindClusters(t_cells, resolution = 0.9)
-saveRDS(t_cells,file="t_NK_rem.rds")
+
+
+identity_mapping <- c(
+  "0" = "T_Central-memory",
+  "1" = "T_Activated",
+  "2" = "T_Naive",
+  "3" = "T_Effector-memory",
+  "4" = "T_Naive/Memory",
+  "5" = "T_Treg",
+  "6" = "T_Naive",
+  "7" = "T_Th1"
+)
+sub_cell_type <- identity_mapping[t_cells@meta.data$seurat_clusters]
+t_cells@meta.data$sub_cell_type <- sub_cell_type
+
+library(ggplot2)
+library(ggsci)
+npg_pal <- pal_npg()(10)
+npg_extended <- colorRampPalette(npg_pal)(14)
+cluster_colors <- c(
+  # 浅色系在前（浅蓝第一个）
+  "#A0CBE8",   # 1 浅蓝（你要的放第一个）
+  "#FFBE7D",   # 2 浅橙
+  "#8CD17D",   # 3 浅绿
+  "#86BCB6",   # 4 浅青
+  "#FF9D9A",   # 5 浅红
+  "#FABFD2",   # 6 浅粉
+  "#D4A6C8",   # 7 浅紫
+  "#F1CE63",   # 8 淡黄
+  "#D7B5A6",   # 9 浅棕
+  "#B07AA1",   # 10 紫灰
+  "#BAB0AC",   # 11 浅灰
+  
+  # 深色系在后
+  "#4E79A7",   # 12 深蓝
+  "#F28E2B",   # 13 橙
+  "#59A14F",   # 14 深绿
+  "#E15759",   # 15 红
+  "#499894",   # 16 青绿
+  "#D37295",   # 17 玫红
+  "#B6992D",   # 18 土黄
+  "#9D7660",   # 19 棕
+  "#79706E"    # 20 深灰
+)
+
+cell_types <- as.character(unique(t_cells@meta.data$sub_cell_type))
+num_legend_items <- length(cell_types)  # 图例的个数
+max_label_length <- max(nchar(cell_types))  # 图例名称的最大长度
+
+base_width <- 3000  # 基础宽度
+base_height <- 3000  # 基础高度
+legend_width_factor <- 100  # 每个图例项增加的宽度
+label_length_factor <- 10  # 每个字符增加的宽度
+dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
+pdf("t_annotation.pdf", width = dynamic_width/300, height = base_height/300)
+DimPlot(t_cells, reduction = "umap", label = TRUE, pt.size = 2, group.by = "sub_cell_type", label.size = 4) +
+    xlab("UMAP_1") +
+    ylab("UMAP_2") +
+    ggtitle(NULL) +
+    scale_color_manual(values = cluster_colors) +
+    coord_fixed(ratio = 1) +
+    guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
+    theme(
+        text = element_text(size = 8, face = "bold"),
+        axis.text.x = element_text(size = 28, color = "black"),
+        axis.text.y = element_text(size = 28, color = "black"),
+        axis.title.x = element_text(size = 36, face = "bold", color = "black"),
+        axis.title.y = element_text(size = 36, face = "bold", color = "black", margin = margin(r = 20)),  # 增加右侧间距
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        legend.text = element_text(size = 16, face = "bold", color = "black"),
+        legend.title = element_text(size = 16, face = "bold", color = "black"),
+        legend.position = "right",
+        legend.box.margin = margin(0, 0, 0, 0),
+        legend.key = element_blank(),
+        legend.background = element_blank(),
+        panel.background = element_rect(fill = "white", color = NA),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.line.x = element_line(color = "black", linewidth = 0.5),
+        axis.line.y = element_line(color = "black", linewidth = 0.5),
+        aspect.ratio = 1,
+        plot.margin = margin(10, 50, 10, 10)
+    )
+dev.off()
+saveRDS(t_cells,file="t_anno.rds")
+
+#比例
+library(ggplot2)
+library(dplyr)
+
+sample_tissue <- data.frame(
+  sample = c("A1", "A2", "A3", "A4", "A5", 
+             "B1", "B2", "B3", "B4", "B5",
+             "C1", "C2", "C3", "C4", "C5",
+             "D1", "D2", "D3", "D4", "D5"),
+  tissue = c("nmPT", "negLN", "nmPT", "negLN", "nmPT",
+             "negLN", "nmPT", "negLN", "mPT", "negLN",
+             "metLN", "mPT", "negLN", "metLN", "mPT",
+             "negLN", "metLN", "mPT", "negLN", "metLN")
+)
+t_cells$tissue <- sample_tissue$tissue[match(t_cells$sample, sample_tissue$sample)]
+
+
+library(tidyverse)
+
+# 计算各亚群在不同组织中的占比
+prop_data <- t_cells@meta.data %>%
+  group_by(tissue, sub_cell_type) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(tissue) %>%
+  mutate(proportion = count / sum(count) * 100) %>%
+  filter(tissue %in% c("mPT", "nmPT")) %>%
+  mutate(tissue = factor(tissue, levels = c("mPT", "nmPT")))
+
+library(ggplot2)
+library(ggsci)
+npg_pal <- pal_npg()(10)
+npg_extended <- colorRampPalette(npg_pal)(7)
+cluster_colors <- c(
+  # 浅色系在前（浅蓝第一个）
+  "#A0CBE8",   # 1 浅蓝（你要的放第一个）
+  "#FFBE7D",   # 2 浅橙
+  "#8CD17D",   # 3 浅绿
+  "#86BCB6",   # 4 浅青
+  "#FF9D9A",   # 5 浅红
+  "#FABFD2",   # 6 浅粉
+  "#D4A6C8",   # 7 浅紫
+  "#F1CE63",   # 8 淡黄
+  "#D7B5A6",   # 9 浅棕
+  "#B07AA1",   # 10 紫灰
+  "#BAB0AC",   # 11 浅灰
+  
+  # 深色系在后
+  "#4E79A7",   # 12 深蓝
+  "#F28E2B",   # 13 橙
+  "#59A14F",   # 14 深绿
+  "#E15759",   # 15 红
+  "#499894",   # 16 青绿
+  "#D37295",   # 17 玫红
+  "#B6992D",   # 18 土黄
+  "#9D7660",   # 19 棕
+  "#79706E"    # 20 深灰
+)
+
+
+prop_data <- prop_data %>%
+  mutate(sub_cell_type = as.character(sub_cell_type))
+
+# 绘制堆叠条形图
+p <- ggplot(prop_data, aes(x = tissue, y = proportion, fill = sub_cell_type)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(values = cluster_colors) +
+  labs(title = "Cell Type Distribution: mPT vs nmPT",
+       x = "Tissue", y = "Proportion (%)", fill = "Cell Type") +
+  theme_minimal() +
+  theme(
+    # 坐标轴线条和刻度
+    axis.line = element_line(color = "black", linewidth = 0.5),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(0.15, "cm"),
+    # 坐标轴文本
+    axis.text.x = element_text(angle = 45, hjust = 1, color = "black", size = 10),
+    axis.text.y = element_text(color = "black", size = 10),
+    # 坐标轴标题
+    axis.title.x = element_text(color = "black", size = 12, face = "bold"),
+    axis.title.y = element_text(color = "black", size = 12, face = "bold"),
+    # 面板背景
+    panel.grid.major = element_line(color = "gray90"),
+    panel.grid.minor = element_blank(),
+    # 图例
+    legend.position = "right",
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 9)
+  )
+
+
+# 保存为PDF
+pdf("t_celltype_distribution_tumor.pdf", width = 4, height = 6)
+print(p)
+dev.off()
+
+prop_data <- t_cells@meta.data %>%
+  group_by(tissue, sub_cell_type) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(tissue) %>%
+  mutate(proportion = count / sum(count) * 100) %>%
+  filter(tissue %in% c("metLN", "negLN")) %>%
+  mutate(tissue = factor(tissue, levels = c("metLN", "negLN")))
+
+library(ggplot2)
+library(ggsci)
+npg_pal <- pal_npg()(10)
+npg_extended <- colorRampPalette(npg_pal)(7)
+
+
+prop_data <- prop_data %>%
+  mutate(sub_cell_type = as.character(sub_cell_type))
+
+# 绘制堆叠条形图
+p <- ggplot(prop_data, aes(x = tissue, y = proportion, fill = sub_cell_type)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(values = cluster_colors) +
+  labs(title = "Cell Type Distribution: metLN vs negLN",
+       x = "Tissue", y = "Proportion (%)", fill = "Cell Type") +
+  theme_minimal() +
+  theme(
+    # 坐标轴线条和刻度
+    axis.line = element_line(color = "black", linewidth = 0.5),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(0.15, "cm"),
+    # 坐标轴文本
+    axis.text.x = element_text(angle = 45, hjust = 1, color = "black", size = 10),
+    axis.text.y = element_text(color = "black", size = 10),
+    # 坐标轴标题
+    axis.title.x = element_text(color = "black", size = 12, face = "bold"),
+    axis.title.y = element_text(color = "black", size = 12, face = "bold"),
+    # 面板背景
+    panel.grid.major = element_line(color = "gray90"),
+    panel.grid.minor = element_blank(),
+    # 图例
+    legend.position = "right",
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 9)
+  )
+
+
+# 保存为PDF
+pdf("t_celltype_distribution_LN.pdf", width = 4, height = 6)
+print(p)
+dev.off()
+
+#negLN
+sample_tissue <- data.frame(
+  sample = c("A1", "A2", "A3", "A4", "A5", 
+             "B1", "B2", "B3", "B4", "B5",
+             "C1", "C2", "C3", "C4", "C5",
+             "D1", "D2", "D3", "D4", "D5"),
+  tissue2 = c("NRT", "NRLN", "NRT", "NRLN", "NRT",
+             "NRLN", "NRT", "NRLN", "RT", "RLN_N",
+             "RLN_P", "RT", "RLN_N", "RLN_P", "RT",
+             "RLN_N", "RLN_P", "RT", "RLN_N", "RLN_P")
+)
+t_cells$tissue2 <- sample_tissue$tissue2[match(t_cells$sample, sample_tissue$sample)]
+
+```
+# t sc
+```R
+obj <- readRDS("sc_obj_anno.rds")
+t_cells <- subset(obj,subset=cell_type %in% c("T cells"))
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+t_cells <- NormalizeData(t_cells)
+t_cells <- FindVariableFeatures(t_cells, nfeatures = 3000)
+hvgs <- VariableFeatures(t_cells)
+t_cells <- ScaleData(t_cells, features = hvgs)
+t_cells <- RunPCA(t_cells, features = hvgs, npcs = 50)
+p <- ElbowPlot(t_cells, ndims = 30)
+ggsave("p3.png",plot=p)
+
+pca_var <- t_cells[["pca"]]@stdev^2 / sum(t_cells[["pca"]]@stdev^2)
+cumsum_var <- cumsum(pca_var)
+
+# 看达到多少 PC 时累计方差 > 70% / 80% / 90%
+which(cumsum_var > 0.7)[1]   # 70%
+which(cumsum_var > 0.8)[1]   # 80%
+which(cumsum_var > 0.9)[1]   # 90%
+library(harmony)
+t_cells <- RunHarmony(t_cells,"dataset")
+
+
+t_cells <- FindNeighbors(t_cells, reduction = "harmony",dims = 1:22)
+t_cells <- FindClusters(t_cells, resolution = 0.3)
+t_cells <- RunUMAP(t_cells, reduction = "harmony",dims = 1:22)
+
+library(ggplot2)
+library(ggsci)
+npg_pal <- pal_npg()(10)
+npg_extended <- colorRampPalette(npg_pal)(15)
+
+seurat_clusters <- as.character(unique(t_cells@meta.data$seurat_clusters))  # 转换为字符向量
+num_legend_items <- length(seurat_clusters)  # 图例的个数
+max_label_length <- max(nchar(seurat_clusters))  # 图例名称的最大长度
+
+base_width <- 3000  # 基础宽度
+base_height <- 3000  # 基础高度
+legend_width_factor <- 100  # 每个图例项增加的宽度
+label_length_factor <- 10  # 每个字符增加的宽度
+dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
+pdf("t_sc_clusters.pdf", width = dynamic_width/300, height = base_height/300)  # 转换为英寸
+
+DimPlot(t_cells, reduction = "umap", label = TRUE, pt.size = 1, label.size = 8) +
+    xlab("UMAP_1") +
+    ylab("UMAP_2") +
+    ggtitle(NULL) +
+    scale_color_manual(values = npg_extended) +
+    coord_fixed(ratio = 1) +
+    guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
+    theme(
+        text = element_text(size = 12, face = "bold"),
+        axis.text.x = element_text(size = 28, color = "black"),
+        axis.text.y = element_text(size = 28, color = "black"),
+        axis.title.x = element_text(size = 36, face = "bold", color = "black"),
+        axis.title.y = element_text(size = 36, face = "bold", color = "black", margin = margin(r = 20)),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        legend.text = element_text(size = 28, face = "bold", color = "black"),
+        legend.title = element_text(size = 28, face = "bold", color = "black"),
+        legend.position = "right",
+        legend.box.margin = margin(0, 0, 0, 0),
+        legend.key = element_blank(),
+        legend.background = element_blank(),
+        panel.background = element_rect(fill = "white", color = NA),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.line.x = element_line(color = "black", linewidth = 0.5),
+        axis.line.y = element_line(color = "black", linewidth = 0.5),
+        aspect.ratio = 1,
+        plot.margin = margin(10, 50, 10, 10)
+    )
+
+dev.off()
+
+p <- DimPlot(t_cells, reduction = "umap", group.by = "dataset", label = FALSE)
+ggsave("t_orig.png",plot=p)
+
+
+t_cell_markers <- FindAllMarkers(t_cells, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use = "wilcox")
+t_significant_markers <- subset(t_cell_markers, p_val_adj < 0.05)
+#write.csv(t_significant_markers, "t_all_marker.csv")
+t_significant_markers <- t_significant_markers %>% group_by(cluster) %>% top_n(n = 50, wt = avg_log2FC)
+write.csv(t_significant_markers, "t_sc_top_marker_50.csv")
+
+
+t_cells <- subset(t_cells, idents = c(1,2,3,4,7,8,11))
+t_cells <- RunUMAP(t_cells, reduction = "harmony",dims = 1:22)
+
+identity_mapping <- c(
+  "1" = "T_Naive",
+  "2" = "T_Effector-memory",
+  "3" = "T_Treg",
+  "4" = "T_Exhausted",
+  "7" = "T_Tfh",
+  "8" = "T_NKT",
+  "11" = "T_Activated"
+)
+t_cells$seurat_clusters <- factor(t_cells$seurat_clusters)
+sub_cell_type <- identity_mapping[t_cells@meta.data$seurat_clusters]
+t_cells@meta.data$sub_cell_type <- sub_cell_type
+
+library(ggplot2)
+library(ggsci)
+npg_pal <- pal_npg()(10)
+npg_extended <- colorRampPalette(npg_pal)(14)
+cluster_colors <- c(
+  # 浅色系在前（浅蓝第一个）
+  "#A0CBE8",   # 1 浅蓝（你要的放第一个）
+  "#FFBE7D",   # 2 浅橙
+  "#8CD17D",   # 3 浅绿
+  "#86BCB6",   # 4 浅青
+  "#FF9D9A",   # 5 浅红
+  "#FABFD2",   # 6 浅粉
+  "#D4A6C8",   # 7 浅紫
+  "#F1CE63",   # 8 淡黄
+  "#D7B5A6",   # 9 浅棕
+  "#B07AA1",   # 10 紫灰
+  "#BAB0AC",   # 11 浅灰
+  
+  # 深色系在后
+  "#4E79A7",   # 12 深蓝
+  "#F28E2B",   # 13 橙
+  "#59A14F",   # 14 深绿
+  "#E15759",   # 15 红
+  "#499894",   # 16 青绿
+  "#D37295",   # 17 玫红
+  "#B6992D",   # 18 土黄
+  "#9D7660",   # 19 棕
+  "#79706E"    # 20 深灰
+)
+
+cell_types <- as.character(unique(t_cells@meta.data$sub_cell_type))
+num_legend_items <- length(cell_types)  # 图例的个数
+max_label_length <- max(nchar(cell_types))  # 图例名称的最大长度
+
+base_width <- 3000  # 基础宽度
+base_height <- 3000  # 基础高度
+legend_width_factor <- 100  # 每个图例项增加的宽度
+label_length_factor <- 10  # 每个字符增加的宽度
+dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
+pdf("t_sc_annotation.pdf", width = dynamic_width/300, height = base_height/300)
+DimPlot(t_cells, reduction = "umap", label = TRUE, pt.size = 1, group.by = "sub_cell_type", label.size = 4) +
+    xlab("UMAP_1") +
+    ylab("UMAP_2") +
+    ggtitle(NULL) +
+    scale_color_manual(values = cluster_colors) +
+    coord_fixed(ratio = 1) +
+    guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
+    theme(
+        text = element_text(size = 8, face = "bold"),
+        axis.text.x = element_text(size = 28, color = "black"),
+        axis.text.y = element_text(size = 28, color = "black"),
+        axis.title.x = element_text(size = 36, face = "bold", color = "black"),
+        axis.title.y = element_text(size = 36, face = "bold", color = "black", margin = margin(r = 20)),  # 增加右侧间距
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        legend.text = element_text(size = 16, face = "bold", color = "black"),
+        legend.title = element_text(size = 16, face = "bold", color = "black"),
+        legend.position = "right",
+        legend.box.margin = margin(0, 0, 0, 0),
+        legend.key = element_blank(),
+        legend.background = element_blank(),
+        panel.background = element_rect(fill = "white", color = NA),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.line.x = element_line(color = "black", linewidth = 0.5),
+        axis.line.y = element_line(color = "black", linewidth = 0.5),
+        aspect.ratio = 1,
+        plot.margin = margin(10, 50, 10, 10)
+    )
+dev.off()
+saveRDS(t_cells,file="t_sc_anno.rds")
+```
+# t mapping
+```R
+#heatmap
+library(pheatmap)
+library(ggplot2)
+library(dplyr)
+
+# ==================== 1. 获取单细胞 t_cells_sc 的 top 200 基因 ====================
+cat("正在计算 t_cells_sc 的标记基因...\n")
+t_cells_sc_markers <- FindAllMarkers(t_cells_sc, 
+                                        only.pos = TRUE, 
+                                        min.pct = 0.25, 
+                                        logfc.threshold = 0.25, 
+                                        test.use = "wilcox")
+t_cells_sc_significant <- subset(t_cells_sc_markers, p_val_adj < 0.05)
+t_cells_sc_top <- t_cells_sc_significant %>% 
+                    group_by(cluster) %>% 
+                    top_n(n = 500, wt = avg_log2FC)
+sc_genes <- unique(t_cells_sc_top$gene)
+cat("单细胞 top 200 基因数:", length(sc_genes), "\n")
+
+# ==================== 2. 获取空间 t_cells 的 top 200 基因 ====================
+cat("正在计算 t_cells 的标记基因...\n")
+t_cells_markers <- FindAllMarkers(t_cells, 
+                                     only.pos = TRUE, 
+                                     min.pct = 0.25, 
+                                     logfc.threshold = 0.25, 
+                                     test.use = "wilcox")
+t_cells_significant <- subset(t_cells_markers, p_val_adj < 0.05)
+t_cells_top <- t_cells_significant %>% 
+                 group_by(cluster) %>% 
+                 top_n(n = 500, wt = avg_log2FC)
+sp_genes <- unique(t_cells_top$gene)
+cat("空间 top 200 基因数:", length(sp_genes), "\n")
+
+# ==================== 3. 计算重叠基因 ====================
+overlap.genes <- intersect(sc_genes, sp_genes)
+cat("重叠基因数:", length(overlap.genes), "\n")
+
+# 如果重叠基因太少，给出警告
+if (length(overlap.genes) < 50) {
+  cat("警告：重叠基因较少，建议增大 top_n 或使用高变基因\n")
+}
+
+# ==================== 4. 获取细胞类型 ====================
+sc_types <- unique(t_cells_sc$sub_cell_type)
+sp_types <- unique(t_cells$sub_cell_type)
+cat("单细胞类型数:", length(sc_types), "\n")
+cat("空间类型数:", length(sp_types), "\n")
+
+# ==================== 5. 获取表达数据 ====================
+# 使用 counts layer 并做 log1p 转换
+expr_sc <- GetAssayData(t_cells_sc, assay = "RNA", layer = "counts")[overlap.genes, , drop = FALSE]
+expr_sp <- GetAssayData(t_cells, assay = "RNA", layer = "counts")[overlap.genes, , drop = FALSE]
+
+expr_sc <- log1p(expr_sc)
+expr_sp <- log1p(expr_sp)
+
+min_cells <- 5
+
+# ==================== 6. 计算平均表达谱 ====================
+# 单细胞
+sc_avg <- matrix(NA, nrow = length(sc_types), ncol = length(overlap.genes))
+rownames(sc_avg) <- sc_types
+colnames(sc_avg) <- overlap.genes
+for (i in seq_along(sc_types)) {
+  ct <- sc_types[i]
+  cells <- colnames(t_cells_sc)[t_cells_sc$sub_cell_type == ct]
+  if (length(cells) >= min_cells) {
+    sc_avg[i, ] <- rowMeans(expr_sc[, cells, drop = FALSE])
+  } else {
+    cat("单细胞类型", ct, "细胞数不足", min_cells, "，跳过\n")
+  }
+}
+
+# 空间
+sp_avg <- matrix(NA, nrow = length(sp_types), ncol = length(overlap.genes))
+rownames(sp_avg) <- sp_types
+colnames(sp_avg) <- overlap.genes
+for (i in seq_along(sp_types)) {
+  ct <- sp_types[i]
+  cells <- colnames(t_cells)[t_cells$sub_cell_type == ct]
+  if (length(cells) >= min_cells) {
+    sp_avg[i, ] <- rowMeans(expr_sp[, cells, drop = FALSE])
+  } else {
+    cat("空间类型", ct, "细胞数不足", min_cells, "，跳过\n")
+  }
+}
+
+# 移除全NA的行
+sc_avg <- sc_avg[complete.cases(sc_avg), , drop = FALSE]
+sp_avg <- sp_avg[complete.cases(sp_avg), , drop = FALSE]
+cat("有效单细胞类型数:", nrow(sc_avg), "\n")
+cat("有效空间类型数:", nrow(sp_avg), "\n")
+
+# ==================== 7. 计算相关性矩阵 ====================
+cor_matrix <- matrix(NA, nrow = nrow(sc_avg), ncol = nrow(sp_avg),
+                     dimnames = list(rownames(sc_avg), rownames(sp_avg)))
+for (i in 1:nrow(sc_avg)) {
+  for (j in 1:nrow(sp_avg)) {
+    cor_matrix[i, j] <- cor(sc_avg[i, ], sp_avg[j, ], method = "spearman", use = "complete.obs")
+  }
+}
+
+cat("相关性范围:", range(cor_matrix, na.rm = TRUE), "\n")
+plot_width <- 14   # 增加宽度
+plot_height <- 12  # 增加高度
+# ==================== 8. 绘制热图 ====================
+pdf("t_cells_sc_subcelltype_correlation.pdf", width = plot_width, height = plot_height)
+
+# 计算需要的边距：左边距（行名）+ 右边距（图例）+ 底部边距（列名）+ 顶部边距（标题）
+# 使用 cellwidth 和 cellheight 控制每个格子的大小，使热图变小
+pheatmap(cor_matrix,
+         main = paste("Spearman correlation (", length(overlap.genes), " genes)", sep = ""),
+         fontsize = 12,                    # 增大基础字体（原 8 → 12）
+         fontsize_row = 10,                # 行名大小（原 8 → 10）
+         fontsize_col = 10,                # 列名大小（原 8 → 10）
+         fontsize_number = 6,              # 数字大小（如果显示）
+         color = colorRampPalette(c("blue", "white", "red"))(100),
+         cluster_rows = TRUE,
+         cluster_cols = TRUE,
+         display_numbers = FALSE,
+         # 关键：控制格子大小，让热图变小
+         cellwidth = 18,                   # 每个格子宽度（像素）
+         cellheight = 18,                  # 每个格子高度（像素）
+         # 调整边距（增加底部和左边空间给长标签）
+         margins = c(12, 12))              # 底部边距12，左边边距12
+
+dev.off()
+
+
+```
+# exhausted
+```R
+# 耗竭 T 细胞核心基因集（Tex，Exhausted T cells）
+exhausted_genes <- c(
+  # 免疫检查点分子
+  "PDCD1", "LAG3", "TIGIT", "HAVCR2", "CTLA4",
+  # 耗竭相关转录因子
+  "TOX", "TOX2", "EOMES", "PRDM1", "IRF4", "BATF",
+  # 共抑制分子
+  "CD160", "BTLA", "CD244", "ENTPD1", "LAYN",
+  # 效应分子（在耗竭中中高水平）
+  "GZMB", "GZMK", "PRF1", "IFNG", "TNF",
+  # 趋化因子
+  "CXCL13", "CCL3", "CCL4", "CCL5",
+  # 其他耗竭相关
+  "RGS16", "PLAAT4", "ISG15", "IFI6"
+)
+
+# 可选：更精简的核心耗竭基因集
+exhausted_core_genes <- c("PDCD1", "LAG3", "TIGIT", "HAVCR2", "TOX", "CXCL13")
+
+# 过滤存在的基因
+exhausted_genes <- exhausted_genes[exhausted_genes %in% rownames(t_cells)]
+cat("耗竭基因集中实际存在的基因数:", length(exhausted_genes), "\n")
+
+# 计算耗竭评分
+t_cells <- AddModuleScore(t_cells, 
+                          features = list(exhausted_genes), 
+                          name = "Exhausted_Score")
+
+# 查看评分列名（通常为 "Exhausted_Score1"）
+head(t_cells$Exhausted_Score1)
+
+library(ggplot2)
+library(ggpubr)
+library(dplyr)
+
+# 准备数据
+plot_data <- t_cells@meta.data %>%
+  filter(!is.na(tissue), !is.na(Exhausted_Score1)) %>%
+  mutate(tissue = factor(tissue, levels = c("mPT", "nmPT", "metLN", "negLN")))
+
+# 计算 y 轴上限
+y_max <- max(plot_data$Exhausted_Score1, na.rm = TRUE)
+
+# 只显示 4 个关键比较的横线位置（合理分布）
+p1 <- y_max * 1.00   # mPT vs nmPT（较低）
+p2 <- y_max * 1.08   # mPT vs metLN
+p3 <- y_max * 1.16   # mPT vs negLN（最高）
+p4 <- y_max * 1.00  # metLN vs negLN（较低）
+
+# 绘图
+p <- ggplot(plot_data, aes(x = tissue, y = Exhausted_Score1, fill = tissue)) +
+  geom_violin(alpha = 0.7, trim = FALSE, scale = "width") +
+  geom_boxplot(width = 0.15, fill = "white", alpha = 0.8, outlier.shape = NA) +
+  scale_fill_manual(values = c("mPT" = "#d25c5e", "nmPT" = "#377EB8", 
+                                "metLN" = "#57a554", "negLN" = "#984EA3")) +
+  labs(title = "T Cell Exhaustion Score Across Tissues",
+       subtitle = "Kruskal-Wallis test, p < 0.0001; Dunn's post-hoc test with FDR correction",
+       x = NULL, y = "Exhaustion Score") +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 11),
+    axis.title = element_text(size = 12, face = "bold"),
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5, size = 9, color = "gray30"),
+    legend.position = "none"
+  ) +
+  # 只保留 4 个关键比较
+  geom_signif(comparisons = list(c("mPT", "nmPT")),
+              annotations = "***", y_position = p1,
+              tip_length = 0.01, size = 0.4, textsize = 3.5) +
+  geom_signif(comparisons = list(c("mPT", "metLN")),
+              annotations = "****", y_position = p2,
+              tip_length = 0.01, size = 0.4, textsize = 3.5) +
+  geom_signif(comparisons = list(c("mPT", "negLN")),
+              annotations = "****", y_position = p3,
+              tip_length = 0.01, size = 0.4, textsize = 3.5) +
+  geom_signif(comparisons = list(c("metLN", "negLN")),
+              annotations = "****", y_position = p4,
+              tip_length = 0.01, size = 0.4, textsize = 3.5)
+
+# 保存，高度设为 5（比之前的 4 稍高一点，给横线留空间）
+ggsave("exhaustion_score_violin.pdf", p, width = 6.5, height = 4, dpi = 300)
+
 ```
 # CD8
 ```R
@@ -1582,14 +2417,39 @@ cluster_colors <- c(
   "#FFD92F", "#E5C494", "#f18686"
 )
 cluster_colors <- c(
-  "#F28E2B", "#8CD17D", "#D4A6C8", "#499894", "#FFBE7D",
-  "#BAB0AC", "#E15759", "#B07AA1", "#59A14F", "#D37295",
-  "#A0CBE8", "#FABFD2", "#9D7660", "#FF9D9A", "#4E79A7",
-  "#86BCB6", "#B6992D", "#79706E", "#F1CE63", "#D7B5A6"
+  # 浅色系在前（浅蓝第一个）
+  "#A0CBE8",   # 1 浅蓝（你要的放第一个）
+  "#FFBE7D",   # 2 浅橙
+  "#8CD17D",   # 3 浅绿
+  "#86BCB6",   # 4 浅青
+  "#FF9D9A",   # 5 浅红
+  "#FABFD2",   # 6 浅粉
+  "#D4A6C8",   # 7 浅紫
+  "#F1CE63",   # 8 淡黄
+  "#D7B5A6",   # 9 浅棕
+  "#B07AA1",   # 10 紫灰
+  "#BAB0AC",   # 11 浅灰
+  
+  # 深色系在后
+  "#4E79A7",   # 12 深蓝
+  "#F28E2B",   # 13 橙
+  "#59A14F",   # 14 深绿
+  "#E15759",   # 15 红
+  "#499894",   # 16 青绿
+  "#D37295",   # 17 玫红
+  "#B6992D",   # 18 土黄
+  "#9D7660",   # 19 棕
+  "#79706E"    # 20 深灰
 )
+
 cell_types <- as.character(unique(obj@meta.data$CellType))
 num_legend_items <- length(cell_types)
 max_label_length <- max(nchar(cell_types))
+
+cell_types_sorted <- sort(cell_types) 
+names(cluster_colors) <- cell_types_sorted
+# 将 CellType 列转换为因子，顺序按字母排序
+obj@meta.data$CellType <- factor(obj@meta.data$CellType, levels = cell_types_sorted)
 
 base_width <- 3000
 base_height <- 3000
@@ -1750,7 +2610,9 @@ pdf("obj_celltype_distribution_tumor.pdf", width = 4, height = 6)
 print(p)
 dev.off()
 
-prop_data <- obj@meta.data %>%
+filtered_meta <- obj@meta.data %>%
+  filter(!(tissue == "negLN" & CellType %in% c("Malignant cells", "Alveolar type II cells")))
+prop_data <- filtered_meta %>%
   group_by(tissue, CellType) %>%
   summarise(count = n(), .groups = "drop") %>%
   group_by(tissue) %>%
@@ -1799,27 +2661,859 @@ p <- ggplot(prop_data, aes(x = tissue, y = proportion, fill = CellType)) +
 pdf("obj_celltype_distribution_RLN_P_RLN_N_NRLN.pdf", width = 4, height = 6)
 print(p)
 dev.off()
+
+library(dplyr)
+library(ggplot2)
+library(patchwork)
+
+# 过滤 negLN 中的恶性细胞和肺泡Ⅱ型细胞
+filtered_meta <- obj@meta.data %>%
+  filter(!(tissue == "negLN" & CellType %in% c("Malignant cells", "Alveolar type II cells")))
+
+# 计算每个样本中每种细胞类型的比例
+prop_by_sample <- filtered_meta %>%
+  group_by(tissue, sample, CellType) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(tissue, sample) %>%
+  mutate(proportion = count / sum(count) * 100) %>%
+  ungroup()
+
+# 获取所有细胞类型（按总体中位数排序）
+all_cell_types <- prop_by_sample %>%
+  group_by(CellType) %>%
+  summarise(median_prop = median(proportion), .groups = "drop") %>%
+  arrange(desc(median_prop)) %>%
+  pull(CellType)
+
+# 组织顺序和颜色
+tissue_order <- c("mPT", "nmPT", "metLN", "negLN")
+tissue_colors <- c("mPT" = "#E41A1C", "nmPT" = "#377EB8", 
+                   "metLN" = "#4DAF4A", "negLN" = "#984EA3")
+
+# 为每个细胞类型单独绘图
+plot_list <- list()
+
+for (i in seq_along(all_cell_types)) {
+  cell_name <- all_cell_types[i]
+  
+  # 筛选当前细胞类型的数据
+  cell_data <- prop_by_sample %>% filter(CellType == cell_name)
+  
+  # 确保组织顺序
+  cell_data$tissue <- factor(cell_data$tissue, levels = tissue_order)
+  
+  p <- ggplot(cell_data, aes(x = tissue, y = proportion)) +
+    # 箱线图：透明/白色，只有边框
+    geom_boxplot(alpha = 0, fill = "white", color = "gray50", 
+                 outlier.shape = NA, width = 0.6) +
+    # 点：按组织着色，半透明
+    geom_jitter(aes(color = tissue), width = 0.2, size = 1.5, alpha = 0.6) +
+    scale_color_manual(values = tissue_colors) +
+    labs(title = cell_name,
+         x = NULL,
+         y = "Proportion (%)") +
+    theme_bw() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
+      axis.text.y = element_text(size = 8),
+      axis.title.y = element_text(size = 9, face = "bold"),
+      plot.title = element_text(size = 10, face = "bold", hjust = 0.5),
+      legend.position = "none",  # 图例统一加，这里去掉
+      panel.grid.major = element_line(color = "gray90"),
+      panel.grid.minor = element_blank()
+    )
+  
+  plot_list[[i]] <- p
+}
+
+# 拼图：每行4个
+n_plots <- length(plot_list)
+ncol <- 4
+nrow <- ceiling(n_plots / ncol)
+
+combined_plot <- wrap_plots(plot_list, ncol = ncol, nrow = nrow)
+
+# 添加标题
+combined_plot <- combined_plot + 
+  plot_annotation(title = "Cell Type Proportion Across Tissues",
+                  theme = theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 14)))
+
+# 保存
+ggsave("celltype_boxplot_transparent.pdf", combined_plot, 
+       width = 14, height = 3.5 * nrow, dpi = 300, limitsize = FALSE)
+
+library(dplyr)
+library(ggplot2)
+library(patchwork)
+
+# 你指定的6种细胞类型
+target_cell_types <- c("Malignant cells", "Fibroblasts", "Endothelial cells", 
+                       "T cells", "Macrophages", "Dendritic cells")
+
+# 过滤 negLN 中的恶性细胞和肺泡Ⅱ型细胞（如果需要）
+filtered_meta <- obj@meta.data %>%
+  filter(!(tissue == "negLN" & CellType %in% c("Malignant cells", "Alveolar type II cells")))
+
+# 计算每个样本中每种细胞类型的比例
+prop_by_sample <- filtered_meta %>%
+  group_by(tissue, sample, CellType) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(tissue, sample) %>%
+  mutate(proportion = count / sum(count) * 100) %>%
+  ungroup()
+
+# 筛选目标细胞类型
+prop_filtered <- prop_by_sample %>%
+  filter(CellType %in% target_cell_types)
+
+# 确保 CellType 顺序（按你指定的顺序）
+prop_filtered$CellType <- factor(prop_filtered$CellType, levels = target_cell_types)
+
+# 组织顺序
+tissue_order <- c("mPT", "nmPT", "metLN", "negLN")
+tissue_colors <- c("mPT" = "#E41A1C", "nmPT" = "#377EB8", 
+                   "metLN" = "#4DAF4A", "negLN" = "#984EA3")
+
+# 为每个细胞类型单独绘图
+plot_list <- list()
+
+for (i in seq_along(target_cell_types)) {
+  cell_name <- target_cell_types[i]
+  
+  # 筛选当前细胞类型的数据
+  cell_data <- prop_filtered %>% filter(CellType == cell_name)
+  
+  # 确保组织顺序
+  cell_data$tissue <- factor(cell_data$tissue, levels = tissue_order)
+  
+  # 简化细胞类型名称用于标题
+  title_name <- case_when(
+    cell_name == "Malignant cells" ~ "Malignant",
+    cell_name == "Fibroblasts" ~ "Fibroblast",
+    cell_name == "Endothelial cells" ~ "Endothelial",
+    cell_name == "T cells" ~ "T cell",
+    cell_name == "Macrophages" ~ "Macrophage",
+    cell_name == "Dendritic cells" ~ "Dendritic cell",
+    TRUE ~ cell_name
+  )
+  
+  p <- ggplot(cell_data, aes(x = tissue, y = proportion)) +
+    # 箱线图：透明，灰色边框（与密度图一致）
+    geom_boxplot(alpha = 0, fill = "white", color = "gray50", 
+                 outlier.shape = NA, width = 0.6) +
+    # 点：按组织着色，半透明
+    geom_jitter(aes(color = tissue), width = 0.2, size = 1.5, alpha = 0.6) +
+    scale_color_manual(values = tissue_colors) +
+    labs(title = title_name,
+         x = NULL,
+         y = NULL) +  # 去掉 y 轴标签，拼图时统一加
+    theme_bw() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+      axis.text.y = element_text(size = 7),
+      plot.title = element_text(size = 9, face = "bold", hjust = 0.5),
+      legend.position = "none",
+      panel.grid.major = element_line(color = "gray90"),
+      panel.grid.minor = element_blank()
+    )
+  
+  plot_list[[i]] <- p
+}
+
+# 拼图：一行3个，共2行
+combined_plot <- wrap_plots(plot_list, ncol = 3, nrow = 2)
+
+# 添加统一的 y 轴标签
+combined_plot <- combined_plot + 
+  plot_annotation(
+    title = "Cell Type Proportion Across Tissues",
+    theme = theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 14))
+  ) &
+  ylab("Proportion (%)")
+
+# 提取一个图例
+legend_data <- data.frame(tissue = names(tissue_colors))
+legend_p <- ggplot(legend_data, aes(x = 1, y = 1, color = tissue)) +
+  geom_point(size = 3) +
+  scale_color_manual(values = tissue_colors, name = "Tissue") +
+  theme_void() +
+  theme(legend.position = "bottom", legend.title = element_text(size = 10))
+
+legend <- cowplot::get_legend(legend_p)
+
+# 将图例添加到拼图底部
+final_plot <- combined_plot + 
+  patchwork::inset_element(legend, 
+                           left = 0.3, bottom = 0, right = 0.7, top = 0.05,
+                           align_to = "full")
+
+# 调整底部边距
+final_plot <- final_plot & theme(plot.margin = margin(5, 5, 30, 5))
+
+# 保存
+ggsave("celltype_proportion_boxplot_6types.pdf", final_plot, 
+       width = 10, height = 6, dpi = 300)
+
+#显著性
+library(dplyr)
+library(ggplot2)
+library(patchwork)
+library(rstatix)
+library(ggpubr)
+library(cowplot)
+
+target_cell_types <- c("Malignant cells", "Fibroblasts", "Endothelial cells", 
+                       "T cells", "Macrophages", "Dendritic cells")
+
+filtered_meta <- obj@meta.data %>%
+  filter(!(tissue == "negLN" & CellType %in% c("Malignant cells", "Alveolar type II cells")))
+
+prop_by_sample <- filtered_meta %>%
+  group_by(tissue, sample, CellType) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(tissue, sample) %>%
+  mutate(proportion = count / sum(count) * 100) %>%
+  ungroup()
+
+prop_filtered <- prop_by_sample %>%
+  filter(CellType %in% target_cell_types)
+
+prop_filtered$CellType <- factor(prop_filtered$CellType, levels = target_cell_types)
+
+tissue_order <- c("mPT", "nmPT", "metLN", "negLN")
+tissue_colors <- c("mPT" = "#E41A1C", "nmPT" = "#377EB8", 
+                   "metLN" = "#4DAF4A", "negLN" = "#984EA3")
+
+# ==========================================
+# 🔥 小样本专用统计（最推荐）
+# ==========================================
+# 整体 KW 检验：BH 校正（应付审稿人）
+kw_results <- prop_filtered %>%
+  group_by(CellType) %>%
+  kruskal_test(proportion ~ tissue) %>%
+  adjust_pvalue(method = "BH") %>%
+  add_significance("p.adj")
+
+# 两两 Dunn：原始 p，不校正（小样本必须这样）
+dunn_results <- prop_filtered %>%
+  group_by(CellType) %>%
+  dunn_test(proportion ~ tissue, p.adjust.method = "none") %>%  # 不校正
+  add_significance("p")                                         # 用原始 p
+
+sig_dunn <- dunn_results %>%
+  filter(p < 0.05) %>%
+  mutate(group1 = as.character(group1),
+         group2 = as.character(group2))
+
+# ==========================================
+# 绘图：和你密度图完全一样的参数
+# ==========================================
+plot_list <- list()
+
+for (i in seq_along(target_cell_types)) {
+  cell_name <- target_cell_types[i]
+  
+  cell_data <- prop_filtered %>% filter(CellType == cell_name)
+  cell_data$tissue <- factor(cell_data$tissue, levels = tissue_order)
+  ct_sig <- sig_dunn %>% filter(CellType == cell_name)
+  
+  title_name <- case_when(
+    cell_name == "Malignant cells" ~ "Malignant",
+    cell_name == "Fibroblasts" ~ "Fibroblast",
+    cell_name == "Endothelial cells" ~ "Endothelial",
+    cell_name == "T cells" ~ "T cell",
+    cell_name == "Macrophages" ~ "Macrophage",
+    cell_name == "Dendritic cells" ~ "Dendritic cell",
+    TRUE ~ cell_name
+  )
+  
+  p <- ggplot(cell_data, aes(x = tissue, y = proportion, color = tissue)) +
+    geom_boxplot(alpha = 0, fill = "white", color = "gray50", 
+                 outlier.shape = NA, width = 0.6) +
+    geom_jitter(aes(color = tissue), width = 0.2, size = 1.5, alpha = 0.6) +
+    scale_color_manual(values = tissue_colors) +
+    scale_y_continuous(labels = scales::comma_format(accuracy = 1)) +
+    labs(title = title_name, x = NULL, y = "Proportion (%)") +
+    theme_bw() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+      axis.text.y = element_text(size = 7),
+      plot.title = element_text(size = 9, face = "bold", hjust = 0.5),
+      legend.position = "none",
+      panel.grid.major = element_line(color = "gray90"),
+      panel.grid.minor = element_blank()
+    )
+  
+  if (nrow(ct_sig) > 0) {
+    comps <- lapply(1:nrow(ct_sig), function(j) {
+      c(ct_sig$group1[j], ct_sig$group2[j])
+    })
+    annots <- ct_sig$p.signif
+    
+    p <- p + geom_signif(
+      comparisons = comps,
+      annotations = annots,
+      map_signif_level = FALSE,
+      tip_length = 0.008,
+      size = 0.3,
+      textsize = 2.5,
+      vjust = 0.4,
+      step_increase = 0.10,    # 和密度图一样
+      margin_text = 0.08
+    )
+  }
+  
+  plot_list[[i]] <- p
+}
+
+combined_plot <- wrap_plots(plot_list, ncol = 3, nrow = 2, axes = "keep")
+
+combined_plot <- combined_plot + 
+  plot_annotation(
+    title = "Cell Type Proportion Across Tissues",
+    theme = theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 12))
+  )
+
+legend_data <- data.frame(tissue = names(tissue_colors))
+legend_p <- ggplot(legend_data, aes(x = 1, y = 1, color = tissue)) +
+  geom_point(size = 3) +
+  scale_color_manual(values = tissue_colors, name = "Tissue") +
+  theme_void() +
+  theme(legend.position = "bottom", legend.title = element_text(size = 10))
+
+legend <- get_legend(legend_p)
+
+final_plot <- combined_plot + 
+  inset_element(legend, left = 0.3, bottom = 0, right = 0.7, top = 0.05, align_to = "full")
+
+final_plot <- final_plot & theme(plot.margin = margin(5, 5, 30, 5))
+
+ggsave("celltype_proportion_boxplot_small_sample.pdf", final_plot, width = 12, height = 7, dpi = 300)
+
+```
+# 密度
+```R
+# 方法1：统计每个样本的 FOV 数量
+fov_count_by_sample <- obj@meta.data %>%
+  group_by(sample, tissue) %>%
+  summarise(n_fov = n_distinct(fov), .groups = "drop")
+
+# 查看结果
+print(fov_count_by_sample)
+
+# 方法2：按组织类型汇总
+fov_summary <- obj@meta.data %>%
+  group_by(tissue, sample) %>%
+  summarise(n_fov = n_distinct(fov), .groups = "drop") %>%
+  group_by(tissue) %>%
+  summarise(
+    total_fov = sum(n_fov),
+    mean_fov_per_sample = mean(n_fov),
+    min_fov = min(n_fov),
+    max_fov = max(n_fov),
+    .groups = "drop"
+  )
+
+print(fov_summary)
+
+library(dplyr)
+library(ggplot2)
+library(patchwork)
+
+# 过滤 negLN 中的恶性细胞和肺泡Ⅱ型细胞
+filtered_meta <- obj@meta.data %>%
+  filter(!(tissue == "negLN" & CellType %in% c("Malignant cells", "Alveolar type II cells")))
+
+# 计算每个样本的总组织面积（所有细胞面积之和）
+tissue_area <- filtered_meta %>%
+  group_by(sample, tissue) %>%
+  summarise(total_area_mm2 = sum(Area.um2, na.rm = TRUE) / 1e6, .groups = "drop")
+
+# 计算每个样本中每种细胞类型的数量和密度
+density_data <- filtered_meta %>%
+  group_by(sample, tissue, CellType) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  left_join(tissue_area, by = c("sample", "tissue")) %>%
+  mutate(density = count / total_area_mm2)  # cells/mm²
+
+# 获取所有细胞类型（按中位数密度排序）
+celltype_order <- density_data %>%
+  group_by(CellType) %>%
+  summarise(median_density = median(density, na.rm = TRUE), .groups = "drop") %>%
+  arrange(desc(median_density)) %>%
+  pull(CellType)
+
+# 组织顺序
+tissue_order <- c("mPT", "nmPT", "metLN", "negLN")
+
+# 颜色方案（按组织）
+tissue_colors <- c("mPT" = "#E41A1C", "nmPT" = "#377EB8", 
+                   "metLN" = "#4DAF4A", "negLN" = "#984EA3")
+
+# 为每个细胞类型单独绘图
+plot_list <- list()
+
+for (i in seq_along(celltype_order)) {
+  ct <- celltype_order[i]
+  
+  # 筛选当前细胞类型的数据
+  ct_data <- density_data %>% filter(CellType == ct)
+  
+  # 确保组织顺序
+  ct_data$tissue <- factor(ct_data$tissue, levels = tissue_order)
+  
+  # 简化细胞类型名称用于标题（可选）
+  title_name <- ct
+  
+  p <- ggplot(ct_data, aes(x = tissue, y = density)) +
+    # 箱线图：透明，灰色边框
+    geom_boxplot(alpha = 0, fill = "white", color = "gray50", 
+                 outlier.shape = NA, width = 0.6) +
+    # 点：按组织着色，半透明
+    geom_jitter(aes(color = tissue), width = 0.2, size = 1.5, alpha = 0.6) +
+    scale_color_manual(values = tissue_colors) +
+    scale_y_log10() +
+    labs(title = title_name,
+         x = NULL,
+         y = NULL) +
+    theme_bw() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+      axis.text.y = element_text(size = 7),
+      plot.title = element_text(size = 9, face = "bold", hjust = 0.5),
+      legend.position = "none",
+      panel.grid.major = element_line(color = "gray90"),
+      panel.grid.minor = element_blank()
+    )
+  
+  plot_list[[i]] <- p
+}
+
+# 拼图：每行4个细胞类型
+ncol <- 4
+nrow <- ceiling(length(plot_list) / ncol)
+
+# 使用 wrap_plots 拼图
+combined_plot <- wrap_plots(plot_list, ncol = ncol, nrow = nrow)
+
+# 添加统一的 y 轴标签
+combined_plot <- combined_plot + 
+  plot_annotation(
+    title = "Cell Type Density Across Tissues",
+    theme = theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 14))
+  ) &
+  ylab(expression("Density (cells/mm"^2~")"))
+
+# 提取一个图例（用于统一图例）
+legend_data <- data.frame(tissue = names(tissue_colors))
+legend_p <- ggplot(legend_data, aes(x = 1, y = 1, color = tissue)) +
+  geom_point(size = 3) +
+  scale_color_manual(values = tissue_colors, name = "Tissue") +
+  theme_void() +
+  theme(legend.position = "bottom", legend.title = element_text(size = 10))
+
+legend <- cowplot::get_legend(legend_p)
+
+# 将图例添加到拼图底部
+final_plot <- combined_plot + 
+  patchwork::inset_element(legend, 
+                           left = 0.3, bottom = 0, right = 0.7, top = 0.05,
+                           align_to = "full")
+
+# 调整底部边距，为图例留空间
+final_plot <- final_plot & theme(plot.margin = margin(5, 5, 30, 5))
+
+# 保存
+ggsave("celltype_density_boxplot_transparent.pdf", final_plot, 
+       width = 14, height = 3 * nrow, dpi = 300, limitsize = FALSE)
+
+#每个fov的密度
+library(dplyr)
+library(ggplot2)
+library(patchwork)
+
+# 查看 metadata 中是否有 fov 信息
+# 从你的 head(obj@meta.data) 输出中看到有 "fov" 列
+# 如果没有，可能需要从其他列提取
+
+# 过滤 negLN 中的恶性细胞和肺泡Ⅱ型细胞
+filtered_meta <- obj@meta.data %>%
+  filter(!(tissue == "negLN" & CellType %in% c("Malignant cells", "Alveolar type II cells")))
+
+# 计算每个 FOV 的总组织面积（所有细胞面积之和）
+# 注意：这里按 fov 分组，而不是 sample
+fov_area <- filtered_meta %>%
+  group_by(fov, tissue) %>%  # 按 fov 和 tissue 分组
+  summarise(total_area_mm2 = sum(Area.um2, na.rm = TRUE) / 1e6, .groups = "drop")
+
+# 计算每个 FOV 中每种细胞类型的数量和密度
+density_data <- filtered_meta %>%
+  group_by(fov, tissue, CellType) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  left_join(fov_area, by = c("fov", "tissue")) %>%
+  mutate(density = count / total_area_mm2)  # cells/mm²
+
+# 获取所有细胞类型（按中位数密度排序）
+celltype_order <- density_data %>%
+  group_by(CellType) %>%
+  summarise(median_density = median(density, na.rm = TRUE), .groups = "drop") %>%
+  arrange(desc(median_density)) %>%
+  pull(CellType)
+
+# 组织顺序
+tissue_order <- c("mPT", "nmPT", "metLN", "negLN")
+
+# 颜色方案（按组织）
+tissue_colors <- c("mPT" = "#E41A1C", "nmPT" = "#377EB8", 
+                   "metLN" = "#4DAF4A", "negLN" = "#984EA3")
+
+# 为每个细胞类型单独绘图
+plot_list <- list()
+
+for (i in seq_along(celltype_order)) {
+  ct <- celltype_order[i]
+  
+  # 筛选当前细胞类型的数据
+  ct_data <- density_data %>% filter(CellType == ct)
+  
+  # 确保组织顺序
+  ct_data$tissue <- factor(ct_data$tissue, levels = tissue_order)
+  
+  # 简化细胞类型名称用于标题
+  title_name <- ct
+  
+  p <- ggplot(ct_data, aes(x = tissue, y = density)) +
+    # 箱线图：透明，灰色边框
+    geom_boxplot(alpha = 0, fill = "white", color = "gray50", 
+                 outlier.shape = NA, width = 0.6) +
+    # 点：按组织着色，每个点代表一个 FOV
+    geom_jitter(aes(color = tissue), width = 0.2, size = 1.5, alpha = 0.6) +
+    scale_color_manual(values = tissue_colors) +
+    scale_y_log10() +
+    labs(title = title_name,
+         x = NULL,
+         y = NULL) +
+    theme_bw() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+      axis.text.y = element_text(size = 7),
+      plot.title = element_text(size = 9, face = "bold", hjust = 0.5),
+      legend.position = "none",
+      panel.grid.major = element_line(color = "gray90"),
+      panel.grid.minor = element_blank()
+    )
+  
+  plot_list[[i]] <- p
+}
+
+# 拼图：每行4个细胞类型
+ncol <- 4
+nrow <- ceiling(length(plot_list) / ncol)
+
+# 使用 wrap_plots 拼图
+combined_plot <- wrap_plots(plot_list, ncol = ncol, nrow = nrow)
+
+# 添加统一的 y 轴标签
+combined_plot <- combined_plot + 
+  plot_annotation(
+    title = "Cell Type Density Across Tissues (per FOV)",
+    theme = theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 14))
+  ) &
+  ylab(expression("Density (cells/mm"^2~")"))
+
+# 提取一个图例
+legend_data <- data.frame(tissue = names(tissue_colors))
+legend_p <- ggplot(legend_data, aes(x = 1, y = 1, color = tissue)) +
+  geom_point(size = 3) +
+  scale_color_manual(values = tissue_colors, name = "Tissue") +
+  theme_void() +
+  theme(legend.position = "bottom", legend.title = element_text(size = 10))
+
+legend <- cowplot::get_legend(legend_p)
+
+# 将图例添加到拼图底部
+final_plot <- combined_plot + 
+  patchwork::inset_element(legend, 
+                           left = 0.3, bottom = 0, right = 0.7, top = 0.05,
+                           align_to = "full")
+
+# 调整底部边距
+final_plot <- final_plot & theme(plot.margin = margin(5, 5, 30, 5))
+
+# 保存
+ggsave("celltype_density_boxplot_per_fov.pdf", final_plot, 
+       width = 14, height = 3 * nrow, dpi = 300, limitsize = FALSE)
+
+for (i in seq_along(target_cell_types)) {
+  ct <- target_cell_types[i]
+  
+  # 筛选当前细胞类型的数据
+  ct_data <- density_data %>% filter(CellType == ct)
+  
+  # 确保组织顺序
+  ct_data$tissue <- factor(ct_data$tissue, levels = tissue_order)
+  
+  # 简化细胞类型名称用于标题
+  title_name <- case_when(
+    ct == "Malignant cells" ~ "Malignant",
+    ct == "Fibroblasts" ~ "Fibroblast",
+    ct == "Endothelial cells" ~ "Endothelial",
+    ct == "T cells" ~ "T cell",
+    ct == "Macrophages" ~ "Macrophage",
+    ct == "Dendritic cells" ~ "Dendritic cell",
+    TRUE ~ ct
+  )
+  
+  p <- ggplot(ct_data, aes(x = tissue, y = density)) +
+    # 箱线图：透明，灰色边框
+    geom_boxplot(alpha = 0, fill = "white", color = "gray50", 
+                 outlier.shape = NA, width = 0.6) +
+    # 点：按组织着色，每个点代表一个 FOV
+    geom_jitter(aes(color = tissue), width = 0.2, size = 1.5, alpha = 0.6) +
+    scale_color_manual(values = tissue_colors) +
+    scale_y_log10() +
+    labs(title = title_name,
+         x = NULL,
+         y = NULL) +
+    theme_bw() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+      axis.text.y = element_text(size = 7),
+      plot.title = element_text(size = 9, face = "bold", hjust = 0.5),
+      legend.position = "none",
+      panel.grid.major = element_line(color = "gray90"),
+      panel.grid.minor = element_blank()
+    )
+  
+  plot_list[[i]] <- p
+}
+
+# 拼图：一行3个，共2行（因为只有6个）
+ncol <- 3
+nrow <- 2
+
+# 使用 wrap_plots 拼图
+combined_plot <- wrap_plots(plot_list, ncol = ncol, nrow = nrow)
+
+# 添加统一的 y 轴标签
+combined_plot <- combined_plot + 
+  plot_annotation(
+    title = "Cell Type Density Across Tissues (per FOV)",
+    theme = theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 14))
+  ) &
+  ylab(expression("Density (cells/mm"^2~")"))
+
+# 提取一个图例
+legend_data <- data.frame(tissue = names(tissue_colors))
+legend_p <- ggplot(legend_data, aes(x = 1, y = 1, color = tissue)) +
+  geom_point(size = 3) +
+  scale_color_manual(values = tissue_colors, name = "Tissue") +
+  theme_void() +
+  theme(legend.position = "bottom", legend.title = element_text(size = 10))
+
+legend <- cowplot::get_legend(legend_p)
+
+# 将图例添加到拼图底部
+final_plot <- combined_plot + 
+  patchwork::inset_element(legend, 
+                           left = 0.3, bottom = 0, right = 0.7, top = 0.05,
+                           align_to = "full")
+
+# 调整底部边距
+final_plot <- final_plot & theme(plot.margin = margin(5, 5, 30, 5))
+
+# 保存
+ggsave("celltype_density_boxplot_6types_per_fov.pdf", final_plot, 
+       width = 10, height = 6, dpi = 300)
+
+#显著性
+library(dplyr)
+library(ggplot2)
+library(patchwork)
+library(rstatix)
+library(ggpubr)
+
+# 指定的6种细胞类型
+target_cell_types <- c("Malignant cells", "Fibroblasts", "Endothelial cells", 
+                       "T cells", "Macrophages", "Dendritic cells")
+
+# 过滤 negLN 中的恶性细胞和肺泡Ⅱ型细胞
+filtered_meta <- obj@meta.data %>%
+  filter(!(tissue == "negLN" & CellType %in% c("Malignant cells", "Alveolar type II cells")))
+
+# 计算每个 FOV 的总组织面积
+fov_area <- filtered_meta %>%
+  group_by(fov, tissue) %>%
+  summarise(total_area_mm2 = sum(Area.um2, na.rm = TRUE) / 1e6, .groups = "drop")
+
+# 计算每个 FOV 中每种细胞类型的密度
+density_data <- filtered_meta %>%
+  group_by(fov, tissue, CellType) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  left_join(fov_area, by = c("fov", "tissue")) %>%
+  mutate(density = count / total_area_mm2) %>%
+  filter(CellType %in% target_cell_types)
+
+# 组织顺序
+tissue_order <- c("mPT", "nmPT", "metLN", "negLN")
+density_data$tissue <- factor(density_data$tissue, levels = tissue_order)
+
+# 颜色方案
+tissue_colors <- c("mPT" = "#E41A1C", "nmPT" = "#377EB8", 
+                   "metLN" = "#4DAF4A", "negLN" = "#984EA3")
+
+# ============================================
+# 1. 统计检验
+# ============================================
+
+density_data$log_density <- log10(density_data$density + 0.01)
+
+kw_results <- density_data %>%
+  group_by(CellType) %>%
+  kruskal_test(log_density ~ tissue) %>%
+  adjust_pvalue(method = "BH") %>%
+  add_significance("p.adj")
+
+dunn_results <- density_data %>%
+  group_by(CellType) %>%
+  dunn_test(log_density ~ tissue, p.adjust.method = "BH") %>%
+  add_significance("p.adj")
+
+sig_dunn <- dunn_results %>%
+  filter(p.adj < 0.05) %>%
+  mutate(
+    group1 = as.character(group1),
+    group2 = as.character(group2)
+  )
+
+# ============================================
+# 2. 可视化
+# ============================================
+
+plot_list <- list()
+
+for (i in seq_along(target_cell_types)) {
+  ct <- target_cell_types[i]
+  
+  ct_data <- density_data %>% filter(CellType == ct)
+  ct_sig <- sig_dunn %>% filter(CellType == ct)
+  
+  title_name <- case_when(
+    ct == "Malignant cells" ~ "Malignant",
+    ct == "Fibroblasts" ~ "Fibroblast",
+    ct == "Endothelial cells" ~ "Endothelial",
+    ct == "T cells" ~ "T cell",
+    ct == "Macrophages" ~ "Macrophage",
+    ct == "Dendritic cells" ~ "Dendritic cell",
+    TRUE ~ ct
+  )
+  
+  p <- ggplot(ct_data, aes(x = tissue, y = density, color = tissue)) +
+    geom_boxplot(alpha = 0, fill = "white", color = "gray50", 
+                 outlier.shape = NA, width = 0.6) +
+    geom_jitter(width = 0.2, size = 1.5, alpha = 0.6) +
+    scale_color_manual(values = tissue_colors) +
+    scale_y_log10(labels = scales::comma_format(accuracy = 1)) + 
+    labs(title = title_name, x = NULL, y = "Density (cells/mm²)") +
+    theme_bw() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+      axis.text.y = element_text(size = 7),
+      plot.title = element_text(size = 9, face = "bold", hjust = 0.5),
+      legend.position = "none",
+      panel.grid.major = element_line(color = "gray90"),
+      panel.grid.minor = element_blank()
+    )
+  
+  if (nrow(ct_sig) > 0) {
+    comps <- lapply(1:nrow(ct_sig), function(j) {
+      as.character(c(ct_sig$group1[j], ct_sig$group2[j]))
+    })
+    annots <- ct_sig$p.adj.signif
+    
+    p <- p + geom_signif(
+      comparisons = comps,
+      annotations = annots,
+      map_signif_level = FALSE,
+      tip_length = 0.008,
+      size = 0.3,
+      textsize = 2.5,
+      vjust = 0.4,
+      step_increase = 0.05,  # 👈 行间距已调小！
+      margin_text = 0.08
+    )
+  }
+  plot_list[[i]] <- p
+}
+
+# 拼图：保留所有 y 轴
+combined_plot <- wrap_plots(plot_list, ncol = 3, nrow = 2, axes = "keep")
+
+# 添加标题
+combined_plot <- combined_plot + 
+  plot_annotation(
+    title = "Cell Type Density Across Tissues (Kruskal-Wallis + Dunn's test, FDR < 0.05)",
+    theme = theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 12))
+  )
+
+# 图例
+legend_data <- data.frame(tissue = names(tissue_colors))
+legend_p <- ggplot(legend_data, aes(x = 1, y = 1, color = tissue)) +
+  geom_point(size = 3) +
+  scale_color_manual(values = tissue_colors, name = "Tissue") +
+  theme_void() +
+  theme(legend.position = "bottom", legend.title = element_text(size = 10))
+
+legend <- cowplot::get_legend(legend_p)
+
+final_plot <- combined_plot + 
+  patchwork::inset_element(legend, 
+                           left = 0.3, bottom = 0, right = 0.7, top = 0.05,
+                           align_to = "full")
+
+final_plot <- final_plot & theme(plot.margin = margin(5, 5, 30, 5))
+
+# 保存
+ggsave("celltype_density_boxplot_KW_Dunn.pdf", final_plot, 
+       width = 12, height = 7, dpi = 300)
+
+cat("\n========== Done! ==========\n")
+
+
 ```
 # malignant
 ```R
 Malignant <- subset(obj,subset=CellType=="Malignant cells")
 Malignant <- subset(Malignant,subset=seurat_clusters %in% c(0,1,2,3,5,7,9,10))
+Malignant <- subset(Malignant,subset=tissue %in% c("metLN","mPT","nmPT"))
 Malignant <- NormalizeData(Malignant)
-Malignant <- FindVariableFeatures(Malignant, nfeatures = 2000)
+Malignant <- FindVariableFeatures(Malignant, nfeatures = 3000)
 hvgs <- VariableFeatures(Malignant)
 Malignant <- ScaleData(Malignant, features = hvgs)
 Malignant <- RunPCA(Malignant, features = hvgs, npcs = 50)
 #p <- ElbowPlot(Malignant, ndims = 30)
 #ggsave("p3.png",plot=p)
+pca_var <- Malignant[["pca"]]@stdev^2 / sum(Malignant[["pca"]]@stdev^2)
+cumsum_var <- cumsum(pca_var)
 
-Malignant <- FindNeighbors(Malignant, dims = 1:30)
-Malignant <- FindClusters(Malignant, resolution = 0.6)
-Malignant <- RunUMAP(Malignant, dims = 1:30)
+# 看达到多少 PC 时累计方差 > 70% / 80% / 90%
+which(cumsum_var > 0.7)[1]   # 70%
+which(cumsum_var > 0.8)[1]   # 80%
+which(cumsum_var > 0.9)[1]   # 90%
+#library(harmony)
+#Malignant <- RunHarmony(Malignant,"tissue")
+
+Malignant <- FindNeighbors(Malignant, dims = 1:20)
+Malignant <- FindClusters(Malignant, resolution = 0.4)
+Malignant <- RunUMAP(Malignant, dims = 1:20)
+
+p <- DimPlot(Malignant, reduction = "umap", group.by = "sample", label = FALSE)
+ggsave("malignant_orig.png",plot=p)
 
 library(ggplot2)
 library(ggsci)
 npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(14)#0.6
+npg_extended <- colorRampPalette(npg_pal)(15)#0.6
 
 seurat_clusters <- as.character(unique(Malignant@meta.data$seurat_clusters))  # 转换为字符向量
 num_legend_items <- length(seurat_clusters)  # 图例的个数
@@ -1830,7 +3524,7 @@ base_height <- 3000  # 基础高度
 legend_width_factor <- 100  # 每个图例项增加的宽度
 label_length_factor <- 10  # 每个字符增加的宽度
 dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
-pdf("Malignant_unknown_clusters.pdf", width = dynamic_width/300, height = base_height/300)  # 转换为英寸
+pdf("Malignant_clusters.pdf", width = dynamic_width/300, height = base_height/300)  # 转换为英寸
 
 DimPlot(Malignant, reduction = "umap", label = TRUE, pt.size = 1, label.size = 8) +
     xlab("UMAP_1") +
@@ -1869,7 +3563,7 @@ Malignant_markers <- FindAllMarkers(Malignant, only.pos = TRUE, min.pct = 0.25, 
 Malignant_significant_markers <- subset(Malignant_markers, p_val_adj < 0.05)
 #write.csv(Malignant_significant_markers, "Malignant_all_marker.csv")
 Malignant_significant_markers <- Malignant_significant_markers %>% group_by(cluster) %>% top_n(n = 50, wt = avg_log2FC)
-write.csv(Malignant_significant_markers, "Malignant_unknown_top_marker_50_0.6.csv")
+write.csv(Malignant_significant_markers, "Malignant_top_marker_sct.csv")
 #无 unknown
 identity_mapping <- c(
   "0" = "Inflamed_1",
@@ -1926,6 +3620,20 @@ identity_mapping <- c(
   "12" = "Tumor_Squamous_3",
   "13" = "Tumor_EMT-like"
 )
+
+#0.35
+identity_mapping <- c(
+  "0" = "Tumor_Metabolic_1",
+  "1" = "Tumor_Immune-inflamed_1",
+  "2" = "Tumor_Immunogenic",
+  "3" = "Tumor_Immune-inflamed_2",
+  "4" = "Tumor_Stem-like",
+  "5" = "Tumor_Immunogenic",
+  "6" = "Tumor_Secretory",
+  "7" = "Tumor_Proliferative",
+  "8" = "Tumor_EMT-like",
+  "9" = "Tumor_Metabolic_2"
+)
 sub_cell_type <- identity_mapping[Malignant@meta.data$seurat_clusters]
 Malignant@meta.data$sub_cell_type <- sub_cell_type
 
@@ -1933,6 +3641,31 @@ library(ggplot2)
 library(ggsci)
 npg_pal <- pal_npg()(10)
 npg_extended <- colorRampPalette(npg_pal)(14)
+cluster_colors <- c(
+  # 浅色系在前（浅蓝第一个）
+  "#A0CBE8",   # 1 浅蓝（你要的放第一个）
+  "#FFBE7D",   # 2 浅橙
+  "#8CD17D",   # 3 浅绿
+  "#86BCB6",   # 4 浅青
+  "#FF9D9A",   # 5 浅红
+  "#FABFD2",   # 6 浅粉
+  "#D4A6C8",   # 7 浅紫
+  "#F1CE63",   # 8 淡黄
+  "#D7B5A6",   # 9 浅棕
+  "#B07AA1",   # 10 紫灰
+  "#BAB0AC",   # 11 浅灰
+  
+  # 深色系在后
+  "#4E79A7",   # 12 深蓝
+  "#F28E2B",   # 13 橙
+  "#59A14F",   # 14 深绿
+  "#E15759",   # 15 红
+  "#499894",   # 16 青绿
+  "#D37295",   # 17 玫红
+  "#B6992D",   # 18 土黄
+  "#9D7660",   # 19 棕
+  "#79706E"    # 20 深灰
+)
 
 cell_types <- as.character(unique(Malignant@meta.data$sub_cell_type))
 num_legend_items <- length(cell_types)  # 图例的个数
@@ -1943,12 +3676,12 @@ base_height <- 3000  # 基础高度
 legend_width_factor <- 100  # 每个图例项增加的宽度
 label_length_factor <- 10  # 每个字符增加的宽度
 dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
-pdf("mPT_malignant_unknown_annotation-0.6.pdf", width = dynamic_width/300, height = base_height/300)
-DimPlot(mPT, reduction = "umap", label = TRUE, pt.size = 1, group.by = "sub_cell_type", label.size = 4) +
+pdf("malignant_annotation.pdf", width = dynamic_width/300, height = base_height/300)
+DimPlot(Malignant, reduction = "umap", label = TRUE, pt.size = 1, group.by = "sub_cell_type", label.size = 4) +
     xlab("UMAP_1") +
     ylab("UMAP_2") +
     ggtitle(NULL) +
-    scale_color_manual(values = npg_extended) +
+    scale_color_manual(values = cluster_colors) +
     coord_fixed(ratio = 1) +
     guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
     theme(
@@ -1985,8 +3718,7 @@ prop_data <- Malignant@meta.data %>%
   summarise(count = n(), .groups = "drop") %>%
   group_by(tissue) %>%
   mutate(proportion = count / sum(count) * 100) %>%
-  filter(tissue %in% c("mPT", "nmPT")) %>%
-  mutate(tissue = factor(tissue, levels = c("mPT", "nmPT")))
+  mutate(tissue = factor(tissue, levels = c("mPT", "nmPT","metLN")))
 
 library(ggplot2)
 library(ggsci)
@@ -2000,7 +3732,7 @@ prop_data <- prop_data %>%
 # 绘制堆叠条形图
 p <- ggplot(prop_data, aes(x = tissue, y = proportion, fill = sub_cell_type)) +
   geom_bar(stat = "identity", position = "stack") +
-  scale_fill_manual(values = npg_extended) +
+  scale_fill_manual(values = cluster_colors) +
   labs(title = "Cell Type Distribution: mPT vs nmPT",
        x = "Tissue", y = "Proportion (%)", fill = "Cell Type") +
   theme_minimal() +
@@ -2026,109 +3758,10 @@ p <- ggplot(prop_data, aes(x = tissue, y = proportion, fill = sub_cell_type)) +
 
 
 # 保存为PDF
-pdf("Malignant_unknown_celltype_distribution_tumor0.6.pdf", width = 4, height = 6)
+pdf("Malignant_celltype_distribution_tissue.pdf", width = 4, height = 6)
 print(p)
 dev.off()
 
-prop_data <- Malignant@meta.data %>%
-  group_by(tissue, sub_cell_type) %>%
-  summarise(count = n(), .groups = "drop") %>%
-  group_by(tissue) %>%
-  mutate(proportion = count / sum(count) * 100) %>%
-  filter(tissue %in% c("metLN", "negLN")) %>%
-  mutate(tissue = factor(tissue, levels = c("metLN", "negLN")))
-
-library(ggplot2)
-library(ggsci)
-npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(14)
-
-
-prop_data <- prop_data %>%
-  mutate(sub_cell_type = as.character(sub_cell_type))
-
-# 绘制堆叠条形图
-p <- ggplot(prop_data, aes(x = tissue, y = proportion, fill = sub_cell_type)) +
-  geom_bar(stat = "identity", position = "stack") +
-  scale_fill_manual(values = npg_extended) +
-  labs(title = "Cell Type Distribution: metLN vs negLN",
-       x = "Tissue", y = "Proportion (%)", fill = "Cell Type") +
-  theme_minimal() +
-  theme(
-    # 坐标轴线条和刻度
-    axis.line = element_line(color = "black", linewidth = 0.5),
-    axis.ticks = element_line(color = "black", linewidth = 0.5),
-    axis.ticks.length = unit(0.15, "cm"),
-    # 坐标轴文本
-    axis.text.x = element_text(angle = 45, hjust = 1, color = "black", size = 10),
-    axis.text.y = element_text(color = "black", size = 10),
-    # 坐标轴标题
-    axis.title.x = element_text(color = "black", size = 12, face = "bold"),
-    axis.title.y = element_text(color = "black", size = 12, face = "bold"),
-    # 面板背景
-    panel.grid.major = element_line(color = "gray90"),
-    panel.grid.minor = element_blank(),
-    # 图例
-    legend.position = "right",
-    legend.title = element_text(size = 10),
-    legend.text = element_text(size = 9)
-  )
-
-
-# 保存为PDF
-pdf("Malignant_unknown_celltype_distribution_RLN_P_RLN_N_NRLN-0.6.pdf", width = 4, height = 6)
-print(p)
-dev.off()
-
-prop_data <- Malignant@meta.data %>%
-  group_by(tissue, sub_cell_type) %>%
-  summarise(count = n(), .groups = "drop") %>%
-  group_by(tissue) %>%
-  mutate(proportion = count / sum(count) * 100) %>%
-  filter(tissue %in% c("mPT", "metLN")) %>%
-  mutate(tissue = factor(tissue, levels = c("mPT", "metLN")))
-
-library(ggplot2)
-library(ggsci)
-npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(14)
-
-
-prop_data <- prop_data %>%
-  mutate(sub_cell_type = as.character(sub_cell_type))
-
-# 绘制堆叠条形图
-p <- ggplot(prop_data, aes(x = tissue, y = proportion, fill = sub_cell_type)) +
-  geom_bar(stat = "identity", position = "stack") +
-  scale_fill_manual(values = npg_extended) +
-  labs(title = "Cell Type Distribution: mPT vs metLN",
-       x = "Tissue", y = "Proportion (%)", fill = "Cell Type") +
-  theme_minimal() +
-  theme(
-    # 坐标轴线条和刻度
-    axis.line = element_line(color = "black", linewidth = 0.5),
-    axis.ticks = element_line(color = "black", linewidth = 0.5),
-    axis.ticks.length = unit(0.15, "cm"),
-    # 坐标轴文本
-    axis.text.x = element_text(angle = 45, hjust = 1, color = "black", size = 10),
-    axis.text.y = element_text(color = "black", size = 10),
-    # 坐标轴标题
-    axis.title.x = element_text(color = "black", size = 12, face = "bold"),
-    axis.title.y = element_text(color = "black", size = 12, face = "bold"),
-    # 面板背景
-    panel.grid.major = element_line(color = "gray90"),
-    panel.grid.minor = element_blank(),
-    # 图例
-    legend.position = "right",
-    legend.title = element_text(size = 10),
-    legend.text = element_text(size = 9)
-  )
-
-
-# 保存为PDF
-pdf("Malignant_unknown_celltype_distribution_mPT_metLN-0.6.pdf", width = 4, height = 6)
-print(p)
-dev.off()
 
 p <- FeaturePlot(Malignant,feature="VIM")
 ggsave("feature_vim.png",plot=p)
@@ -2151,12 +3784,11 @@ Malignant$patient <- sample_patient$patient[match(Malignant$sample, sample_patie
 library(Seurat)
 library(pheatmap)
 
-# ==================== 1. 筛选 mPT 和 nmPT 的患者 ====================
-# 只保留组织类型为 mPT 或 nmPT 的细胞
-Malignant_primary <- subset(Malignant, subset = tissue %in% c("mPT", "nmPT"))
+# ==================== 1. 保留所有组织（mPT, nmPT, metLN）====================
+Malignant_all <- Malignant  # 直接使用原对象
 
 # ==================== 2. 计算每个患者各亚型的比例 ====================
-patient_subtype_table <- table(Malignant_primary$patient, Malignant_primary$sub_cell_type)
+patient_subtype_table <- table(Malignant_all$patient, Malignant_all$sub_cell_type)
 patient_subtype_prop <- prop.table(patient_subtype_table, margin = 1) * 100
 
 # ==================== 3. 筛选主要亚型（平均占比 > 1%）====================
@@ -2168,26 +3800,32 @@ patient_subtype_prop_filtered <- patient_subtype_prop[, keep_types]
 patient_subtype_prop_filtered <- patient_subtype_prop_filtered[order(rownames(patient_subtype_prop_filtered)), ]
 
 # ==================== 5. 添加组织类型注释 ====================
-patient_tissue <- data.frame(
-  patient = rownames(patient_subtype_prop_filtered),
-  tissue = ifelse(grepl("nmPT", rownames(patient_subtype_prop_filtered)), "nmPT", "mPT")
-)
+# 从 metadata 中提取每个患者对应的组织类型
+patient_tissue <- Malignant_all@meta.data %>%
+  group_by(patient) %>%
+  summarise(tissue = first(tissue), .groups = "drop") %>%
+  arrange(patient)
+
+# 确保顺序与热图行名一致
+patient_tissue <- patient_tissue[match(rownames(patient_subtype_prop_filtered), patient_tissue$patient), ]
+
 annotation_row <- data.frame(Tissue = patient_tissue$tissue)
 rownames(annotation_row) <- patient_tissue$patient
 
+# 组织颜色
 annotation_colors <- list(
-  Tissue = c("nmPT" = "#4DAF4A", "mPT" = "#E41A1C")
+  Tissue = c("mPT" = "#E41A1C", "nmPT" = "#4DAF4A", "metLN" = "#377EB8")
 )
 
 # ==================== 6. 绘制热图 ====================
-pdf("patient_subtype_heatmap_mPT_nmPT.pdf", width = 12, height = 8)
+pdf("patient_subtype_heatmap_all_tissues.pdf", width = 12, height = 8)
 pheatmap(patient_subtype_prop_filtered,
          scale = "none",
          cluster_rows = FALSE,
          cluster_cols = TRUE,
          annotation_row = annotation_row,
          annotation_colors = annotation_colors,
-         main = "Tumor subtype composition: mPT vs nmPT",
+         main = "Tumor subtype composition: mPT vs nmPT vs metLN",
          xlab = "Tumor subtype", 
          ylab = "Patient",
          fontsize = 8,
@@ -2197,8 +3835,6 @@ pheatmap(patient_subtype_prop_filtered,
          breaks = seq(0, 100, length.out = 101))
 dev.off()
 
-cat("热图已保存: patient_subtype_heatmap_mPT_nmPT.pdf\n")
-
 ```
 # trajectory
 ```R
@@ -2206,9 +3842,14 @@ library(Seurat)
 library(monocle)
 library(ggplot2)
 library(ggsci)
+library(igraph)  # 添加这一行
 #trace('project2MST', edit = T, where = asNamespace("monocle"))
 
-Malignant <- readRDS("malignant_unknown_anno_0.6.rds")
+
+# 加载完整修复脚本
+source("monocle_fix_complete.R")
+
+Malignant <- readRDS("malignant_anno.rds")
 
 # 随机抽样20000个细胞
 random_seed <- sample(1:10000, 1)
@@ -2259,19 +3900,45 @@ cds <- setOrderingFilter(cds, hvgs_valid)
 
 # 降维
 cds <- reduceDimension(cds, max_components = 2, method = 'DDRTree')
-
-# 保存
-saveRDS(cds, "malignant_unknown_cds_0.6_20000cells_hvg.rds")
-# 轨迹推断
+gc()
 cds <- orderCells(cds)
-cds <- orderCells(cds, root_state  = 4)
+# 保存
+saveRDS(cds, "malignant_cds.rds")
+
 
 library(ggplot2)
 library(ggsci)
 npg_pal <- pal_npg()(10)
 npg_extended <- colorRampPalette(npg_pal)(14)
 
-p3 <- plot_cell_trajectory(cds, color_by = "sub_cell_type") + scale_color_manual(values = npg_extended) +
+cluster_colors <- c(
+  # 浅色系在前（浅蓝第一个）
+  "#A0CBE8",   # 1 浅蓝（你要的放第一个）
+  "#FFBE7D",   # 2 浅橙
+  "#8CD17D",   # 3 浅绿
+  "#86BCB6",   # 4 浅青
+  "#FF9D9A",   # 5 浅红
+  "#FABFD2",   # 6 浅粉
+  "#D4A6C8",   # 7 浅紫
+  "#F1CE63",   # 8 淡黄
+  "#D7B5A6",   # 9 浅棕
+  "#B07AA1",   # 10 紫灰
+  "#BAB0AC",   # 11 浅灰
+  
+  # 深色系在后
+  "#4E79A7",   # 12 深蓝
+  "#F28E2B",   # 13 橙
+  "#59A14F",   # 14 深绿
+  "#E15759",   # 15 红
+  "#499894",   # 16 青绿
+  "#D37295",   # 17 玫红
+  "#B6992D",   # 18 土黄
+  "#9D7660",   # 19 棕
+  "#79706E"    # 20 深灰
+)
+
+
+p3 <- plot_cell_trajectory(cds, color_by = "sub_cell_type") + scale_color_manual(values = cluster_colors) +
   theme(legend.text = element_text(size = 18),
         legend.title = element_blank())
 
@@ -2279,7 +3946,7 @@ png("traj_malignant_celltype.png", width = 6000, height = 3000, res = 300)
 print(p3)
 dev.off()
 
-p4 <- plot_cell_trajectory(cds, color_by = "sub_cell_type") + facet_wrap("~sub_cell_type", nrow = 2) + scale_color_manual(values = npg_extended) +
+p4 <- plot_cell_trajectory(cds, color_by = "sub_cell_type") + facet_wrap("~sub_cell_type", nrow = 2) + scale_color_manual(values = cluster_colors) +
   theme(legend.text = element_text(size = 18),
         legend.title = element_blank())
 png("traj_malignant_celltype_split.png", width = 6000, height = 3000, res = 300)
@@ -2292,7 +3959,7 @@ p5 <- plot_cell_trajectory(cds, color_by = "Pseudotime") +
   scale_color_gradient(low = start_color, high = end_color)
 
 # 保存图片
-ggsave("malignant_pseudo.png", plot = p5, width = 16, height = 6, dpi = 300)
+ggsave("traj_malignant_pseudo.png", plot = p5, width = 16, height = 6, dpi = 300)
 ```
 # cellchat
 ```R
@@ -2528,6 +4195,15 @@ fib <- ScaleData(fib, features = hvgs)
 fib <- RunPCA(fib, features = hvgs, npcs = 50)
 p <- ElbowPlot(fib, ndims = 30)
 ggsave("p3.png",plot=p)
+
+pca_var <- fib[["pca"]]@stdev^2 / sum(fib[["pca"]]@stdev^2)
+cumsum_var <- cumsum(pca_var)
+
+# 看达到多少 PC 时累计方差 > 70% / 80% / 90%
+which(cumsum_var > 0.7)[1]   # 70%
+which(cumsum_var > 0.8)[1]   # 80%
+which(cumsum_var > 0.9)[1]   # 90%
+
 fib <- FindNeighbors(fib, dims = 1:30)
 fib <- FindClusters(fib, resolution = 0.3)
 fib <- RunUMAP(fib, dims = 1:30)
@@ -2605,7 +4281,31 @@ library(ggplot2)
 library(ggsci)
 npg_pal <- pal_npg()(10)
 npg_extended <- colorRampPalette(npg_pal)(5)
-
+cluster_colors <- c(
+  # 浅色系在前（浅蓝第一个）
+  "#A0CBE8",   # 1 浅蓝（你要的放第一个）
+  "#FFBE7D",   # 2 浅橙
+  "#8CD17D",   # 3 浅绿
+  "#86BCB6",   # 4 浅青
+  "#FF9D9A",   # 5 浅红
+  "#FABFD2",   # 6 浅粉
+  "#D4A6C8",   # 7 浅紫
+  "#F1CE63",   # 8 淡黄
+  "#D7B5A6",   # 9 浅棕
+  "#B07AA1",   # 10 紫灰
+  "#BAB0AC",   # 11 浅灰
+  
+  # 深色系在后
+  "#4E79A7",   # 12 深蓝
+  "#F28E2B",   # 13 橙
+  "#59A14F",   # 14 深绿
+  "#E15759",   # 15 红
+  "#499894",   # 16 青绿
+  "#D37295",   # 17 玫红
+  "#B6992D",   # 18 土黄
+  "#9D7660",   # 19 棕
+  "#79706E"    # 20 深灰
+)
 cell_types <- as.character(unique(fib@meta.data$sub_cell_type))
 num_legend_items <- length(cell_types)  # 图例的个数
 max_label_length <- max(nchar(cell_types))  # 图例名称的最大长度
@@ -2620,7 +4320,7 @@ DimPlot(fib, reduction = "umap", label = TRUE, pt.size = 1, group.by = "sub_cell
     xlab("UMAP_1") +
     ylab("UMAP_2") +
     ggtitle(NULL) +
-    scale_color_manual(values = npg_pal) +
+    scale_color_manual(values = ) +
     coord_fixed(ratio = 1) +
     guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
     theme(
@@ -2648,6 +4348,7 @@ DimPlot(fib, reduction = "umap", label = TRUE, pt.size = 1, group.by = "sub_cell
 dev.off()
 
 #比例
+fib <- subset(fib,subset=tissue %in% c("mPT", "nmPT","metLN"))
 library(tidyverse)
 
 # 计算各亚群在不同组织中的占比
@@ -2656,14 +4357,12 @@ prop_data <- fib@meta.data %>%
   summarise(count = n(), .groups = "drop") %>%
   group_by(tissue) %>%
   mutate(proportion = count / sum(count) * 100) %>%
-  filter(tissue %in% c("mPT", "nmPT")) %>%
-  mutate(tissue = factor(tissue, levels = c("mPT", "nmPT")))
+  mutate(tissue = factor(tissue, levels = c("mPT", "nmPT", "metLN")))
 
 library(ggplot2)
 library(ggsci)
 npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(5)
-
+npg_extended <- colorRampPalette(npg_pal)(14)
 
 prop_data <- prop_data %>%
   mutate(sub_cell_type = as.character(sub_cell_type))
@@ -2671,8 +4370,8 @@ prop_data <- prop_data %>%
 # 绘制堆叠条形图
 p <- ggplot(prop_data, aes(x = tissue, y = proportion, fill = sub_cell_type)) +
   geom_bar(stat = "identity", position = "stack") +
-  scale_fill_manual(values = npg_pal) +
-  labs(title = "Cell Type Distribution: mPT vs nmPT",
+  scale_fill_manual(values = cluster_colors) +
+  labs(title = "Fibroblast Subtype Distribution: mPT vs nmPT vs metLN",
        x = "Tissue", y = "Proportion (%)", fill = "Cell Type") +
   theme_minimal() +
   theme(
@@ -2695,111 +4394,59 @@ p <- ggplot(prop_data, aes(x = tissue, y = proportion, fill = sub_cell_type)) +
     legend.text = element_text(size = 9)
   )
 
-
 # 保存为PDF
-pdf("fib_celltype_distribution_tumor.pdf", width = 4, height = 6)
+pdf("Fibroblast_subtype_distribution_tissue.pdf", width = 4, height = 6)
 print(p)
 dev.off()
 
-prop_data <- fib@meta.data %>%
-  group_by(tissue, sub_cell_type) %>%
+#sample
+library(tidyverse)
+library(ggplot2)
+
+# 计算各样本中各成纤维亚型的比例
+prop_data_sample <- fib@meta.data %>%
+  filter(tissue %in% c("mPT", "nmPT", "metLN")) %>%
+  group_by(tissue, sample, sub_cell_type) %>%
   summarise(count = n(), .groups = "drop") %>%
-  group_by(tissue) %>%
+  group_by(tissue, sample) %>%
   mutate(proportion = count / sum(count) * 100) %>%
-  filter(tissue %in% c("metLN", "negLN")) %>%
-  mutate(tissue = factor(tissue, levels = c("metLN", "negLN")))
+  ungroup()
 
-library(ggplot2)
-library(ggsci)
-npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(5)
+# 按组织类型排序样本（可根据需要调整）
+# 先获取各组织中的样本列表
+samples_mPT <- prop_data_sample %>% filter(tissue == "mPT") %>% pull(sample) %>% unique() %>% sort()
+samples_nmPT <- prop_data_sample %>% filter(tissue == "nmPT") %>% pull(sample) %>% unique() %>% sort()
+samples_metLN <- prop_data_sample %>% filter(tissue == "metLN") %>% pull(sample) %>% unique() %>% sort()
 
+# 合并为统一的样本顺序：mPT → nmPT → metLN
+sample_order <- c(samples_mPT, samples_nmPT, samples_metLN)
 
-prop_data <- prop_data %>%
-  mutate(sub_cell_type = as.character(sub_cell_type))
+# 将样本转换为因子，按指定顺序排列
+prop_data_sample$sample <- factor(prop_data_sample$sample, levels = sample_order)
 
-# 绘制堆叠条形图
-p <- ggplot(prop_data, aes(x = tissue, y = proportion, fill = sub_cell_type)) +
-  geom_bar(stat = "identity", position = "stack") +
-  scale_fill_manual(values = npg_pal) +
-  labs(title = "Cell Type Distribution: metLN vs negLN",
-       x = "Tissue", y = "Proportion (%)", fill = "Cell Type") +
-  theme_minimal() +
+# 将 sub_cell_type 转换为因子（可选，控制图例顺序）
+prop_data_sample$sub_cell_type <- as.character(prop_data_sample$sub_cell_type)
+
+# 绘图：按样本展示成纤维亚型组成
+p_sample <- ggplot(prop_data_sample, aes(x = sample, y = proportion, fill = sub_cell_type)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.8) +
+  scale_fill_manual(values = cluster_colors, name = "Subtype") +
+  labs(title = "Fibroblast subtype composition by sample",
+       x = "Sample", y = "Proportion (%)") +
+  theme_bw() +
   theme(
-    # 坐标轴线条和刻度
-    axis.line = element_line(color = "black", linewidth = 0.5),
-    axis.ticks = element_line(color = "black", linewidth = 0.5),
-    axis.ticks.length = unit(0.15, "cm"),
-    # 坐标轴文本
-    axis.text.x = element_text(angle = 45, hjust = 1, color = "black", size = 10),
-    axis.text.y = element_text(color = "black", size = 10),
-    # 坐标轴标题
-    axis.title.x = element_text(color = "black", size = 12, face = "bold"),
-    axis.title.y = element_text(color = "black", size = 12, face = "bold"),
-    # 面板背景
-    panel.grid.major = element_line(color = "gray90"),
-    panel.grid.minor = element_blank(),
-    # 图例
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+    axis.text.y = element_text(size = 10),
+    axis.title = element_text(size = 12, face = "bold"),
     legend.position = "right",
     legend.title = element_text(size = 10),
-    legend.text = element_text(size = 9)
-  )
-
-
-# 保存为PDF
-pdf("fib_celltype_distribution_RLN_P_RLN_N_NRLN.pdf", width = 4, height = 6)
-print(p)
-dev.off()
-
-prop_data <- fib@meta.data %>%
-  group_by(tissue, sub_cell_type) %>%
-  summarise(count = n(), .groups = "drop") %>%
-  group_by(tissue) %>%
-  mutate(proportion = count / sum(count) * 100) %>%
-  filter(tissue %in% c("mPT", "metLN")) %>%
-  mutate(tissue = factor(tissue, levels = c("mPT", "metLN")))
-
-library(ggplot2)
-library(ggsci)
-npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(5)
-
-
-prop_data <- prop_data %>%
-  mutate(sub_cell_type = as.character(sub_cell_type))
-
-# 绘制堆叠条形图
-p <- ggplot(prop_data, aes(x = tissue, y = proportion, fill = sub_cell_type)) +
-  geom_bar(stat = "identity", position = "stack") +
-  scale_fill_manual(values = npg_pal) +
-  labs(title = "Cell Type Distribution: mPT vs metLN",
-       x = "Tissue", y = "Proportion (%)", fill = "Cell Type") +
-  theme_minimal() +
-  theme(
-    # 坐标轴线条和刻度
-    axis.line = element_line(color = "black", linewidth = 0.5),
-    axis.ticks = element_line(color = "black", linewidth = 0.5),
-    axis.ticks.length = unit(0.15, "cm"),
-    # 坐标轴文本
-    axis.text.x = element_text(angle = 45, hjust = 1, color = "black", size = 10),
-    axis.text.y = element_text(color = "black", size = 10),
-    # 坐标轴标题
-    axis.title.x = element_text(color = "black", size = 12, face = "bold"),
-    axis.title.y = element_text(color = "black", size = 12, face = "bold"),
-    # 面板背景
+    legend.text = element_text(size = 8),
     panel.grid.major = element_line(color = "gray90"),
-    panel.grid.minor = element_blank(),
-    # 图例
-    legend.position = "right",
-    legend.title = element_text(size = 10),
-    legend.text = element_text(size = 9)
+    panel.grid.minor = element_blank()
   )
 
-
-# 保存为PDF
-pdf("fib_celltype_distribution_mPT_metLN.pdf", width = 4, height = 6)
-print(p)
-dev.off()
+# 保存图片
+ggsave("Fibroblast_subtype_composition_by_sample.pdf", plot = p_sample, width = 12, height = 6, dpi = 300)
 ```
 # CAF亚型和malignant空间分布
 ```R
@@ -3774,12 +5421,20 @@ print("Saved: mPT_D3_FOV155_159_combined_rotated.pdf")
 macro <- subset(obj,subset=CellType=="Macrophages")
 macro <- subset(macro,subset=seurat_clusters %in% c(0,1,2,3,4))
 macro <- NormalizeData(macro)
-macro <- FindVariableFeatures(macro, nfeatures = 2000)
+macro <- FindVariableFeatures(macro, nfeatures = 3000)
 hvgs <- VariableFeatures(macro)
 macro <- ScaleData(macro, features = hvgs)
 macro <- RunPCA(macro, features = hvgs, npcs = 50)
 p <- ElbowPlot(macro, ndims = 30)
 ggsave("elbow_macro.png",plot=p)
+pca_var <- macro[["pca"]]@stdev^2 / sum(macro[["pca"]]@stdev^2)
+cumsum_var <- cumsum(pca_var)
+
+# 看达到多少 PC 时累计方差 > 70% / 80% / 90%
+which(cumsum_var > 0.7)[1]   # 70%
+which(cumsum_var > 0.8)[1]   # 80%
+which(cumsum_var > 0.9)[1]   # 90%
+
 macro <- FindNeighbors(macro, dims = 1:20)
 macro <- FindClusters(macro, resolution = 0.4)
 macro <- RunUMAP(macro, dims = 1:20)
@@ -3882,6 +5537,33 @@ library(ggsci)
 npg_pal <- pal_npg()(10)
 npg_extended <- colorRampPalette(npg_pal)(7)
 
+cluster_colors <- c(
+  # 浅色系在前（浅蓝第一个）
+  "#A0CBE8",   # 1 浅蓝（你要的放第一个）
+  "#FFBE7D",   # 2 浅橙
+  "#8CD17D",   # 3 浅绿
+  "#86BCB6",   # 4 浅青
+  "#FF9D9A",   # 5 浅红
+  "#FABFD2",   # 6 浅粉
+  "#D4A6C8",   # 7 浅紫
+  "#F1CE63",   # 8 淡黄
+  "#D7B5A6",   # 9 浅棕
+  "#B07AA1",   # 10 紫灰
+  "#BAB0AC",   # 11 浅灰
+  
+  # 深色系在后
+  "#4E79A7",   # 12 深蓝
+  "#F28E2B",   # 13 橙
+  "#59A14F",   # 14 深绿
+  "#E15759",   # 15 红
+  "#499894",   # 16 青绿
+  "#D37295",   # 17 玫红
+  "#B6992D",   # 18 土黄
+  "#9D7660",   # 19 棕
+  "#79706E"    # 20 深灰
+)
+
+
 cell_types <- as.character(unique(macro@meta.data$sub_cell_type))
 num_legend_items <- length(cell_types)  # 图例的个数
 max_label_length <- max(nchar(cell_types))  # 图例名称的最大长度
@@ -3892,11 +5574,11 @@ legend_width_factor <- 100  # 每个图例项增加的宽度
 label_length_factor <- 10  # 每个字符增加的宽度
 dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
 pdf("macro_annotation.pdf", width = dynamic_width/300, height = base_height/300)
-DimPlot(macro, reduction = "umap", label = TRUE, pt.size = 1, group.by = "sub_cell_type", label.size = 4) +
+DimPlot(macro, reduction = "umap", label = TRUE, pt.size = 1.5, group.by = "sub_cell_type", label.size = 4) +
     xlab("UMAP_1") +
     ylab("UMAP_2") +
     ggtitle(NULL) +
-    scale_color_manual(values = npg_pal) +
+    scale_color_manual(values = cluster_colors) +
     coord_fixed(ratio = 1) +
     guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
     theme(
@@ -3947,7 +5629,7 @@ prop_data <- prop_data %>%
 # 绘制堆叠条形图
 p <- ggplot(prop_data, aes(x = tissue, y = proportion, fill = sub_cell_type)) +
   geom_bar(stat = "identity", position = "stack") +
-  scale_fill_manual(values = npg_pal) +
+  scale_fill_manual(values = cluster_colors) +
   labs(title = "Cell Type Distribution: mPT vs nmPT",
        x = "Tissue", y = "Proportion (%)", fill = "Cell Type") +
   theme_minimal() +
@@ -3997,7 +5679,7 @@ prop_data <- prop_data %>%
 # 绘制堆叠条形图
 p <- ggplot(prop_data, aes(x = tissue, y = proportion, fill = sub_cell_type)) +
   geom_bar(stat = "identity", position = "stack") +
-  scale_fill_manual(values = npg_pal) +
+  scale_fill_manual(values = cluster_colors) +
   labs(title = "Cell Type Distribution: metLN vs negLN",
        x = "Tissue", y = "Proportion (%)", fill = "Cell Type") +
   theme_minimal() +
@@ -4023,59 +5705,11 @@ p <- ggplot(prop_data, aes(x = tissue, y = proportion, fill = sub_cell_type)) +
 
 
 # 保存为PDF
-pdf("macro_celltype_distribution_RLN_P_RLN_N_NRLN.pdf", width = 4, height = 6)
+pdf("macro_celltype_distribution_LN.pdf", width = 4, height = 6)
 print(p)
 dev.off()
 
-prop_data <- macro@meta.data %>%
-  group_by(tissue, sub_cell_type) %>%
-  summarise(count = n(), .groups = "drop") %>%
-  group_by(tissue) %>%
-  mutate(proportion = count / sum(count) * 100) %>%
-  filter(tissue %in% c("mPT", "metLN")) %>%
-  mutate(tissue = factor(tissue, levels = c("mPT", "metLN")))
 
-library(ggplot2)
-library(ggsci)
-npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(5)
-
-
-prop_data <- prop_data %>%
-  mutate(sub_cell_type = as.character(sub_cell_type))
-
-# 绘制堆叠条形图
-p <- ggplot(prop_data, aes(x = tissue, y = proportion, fill = sub_cell_type)) +
-  geom_bar(stat = "identity", position = "stack") +
-  scale_fill_manual(values = npg_pal) +
-  labs(title = "Cell Type Distribution: mPT vs metLN",
-       x = "Tissue", y = "Proportion (%)", fill = "Cell Type") +
-  theme_minimal() +
-  theme(
-    # 坐标轴线条和刻度
-    axis.line = element_line(color = "black", linewidth = 0.5),
-    axis.ticks = element_line(color = "black", linewidth = 0.5),
-    axis.ticks.length = unit(0.15, "cm"),
-    # 坐标轴文本
-    axis.text.x = element_text(angle = 45, hjust = 1, color = "black", size = 10),
-    axis.text.y = element_text(color = "black", size = 10),
-    # 坐标轴标题
-    axis.title.x = element_text(color = "black", size = 12, face = "bold"),
-    axis.title.y = element_text(color = "black", size = 12, face = "bold"),
-    # 面板背景
-    panel.grid.major = element_line(color = "gray90"),
-    panel.grid.minor = element_blank(),
-    # 图例
-    legend.position = "right",
-    legend.title = element_text(size = 10),
-    legend.text = element_text(size = 9)
-  )
-
-
-# 保存为PDF
-pdf("macro_celltype_distribution_mPT_metLN.pdf", width = 4, height = 6)
-print(p)
-dev.off()
 ```
 # mPT的主要细胞类型互作（肿瘤亚型与其他主要类型）
 ```R
@@ -4090,7 +5724,7 @@ library(foreach)
 
 # ===================== 数据加载 =====================
 obj <- readRDS("YA2025263-1_fin.rds")
-Malignant <- readRDS("malignant_unknown_anno_0.6.rds")
+Malignant <- readRDS("malignant_anno.rds")
 
 # ===================== 定义样本与组织的对应关系 =====================
 sample_tissue <- data.frame(
@@ -4156,6 +5790,7 @@ cat("\n=== 修复后detailed列前15个类型 ===")
 print(head(sort(table(obj@meta.data$detailed), decreasing = TRUE), 15))
 
 mPT <- subset(obj,subset=tissue=="mPT")
+#不分样本看这里，分样本去看chat_mPT.r
 coords <- mPT@meta.data[, c("CenterX_global_px", "CenterY_global_px")]
 head(coords)
 
@@ -4331,7 +5966,7 @@ p <- pheatmap(mat_log2fc_clean,
          main = "Log2(Fold Change) of cell-cell contacts",
          fontsize = 10,
          na_col = "grey90")
-ggsave("mPT_spatial_contact_log2fc_maligvsothers.pdf", plot = p, width = 12, height = 10)
+#ggsave("mPT_spatial_contact_log2fc_maligvsothers.pdf", plot = p, width = 12, height = 10)
 
 # 保存结果
 save(mat_obs, mat_z, mat_p, mat_mu, file = "mPT_spatial_contact_analysis_results_maligvsothers.RData")
@@ -4417,58 +6052,176 @@ p <- ggplot(df_plot, aes(x = reorder(cell_type, diff), y = diff, fill = stronger
 ggsave("metabolic1_vs_metabolic2_bar.pdf", plot = p, width = 10, height = 8)
 
 
-# ... 运行完整的互作分析，得到 mat_log2fc_nmPT, mat_p_nmPT ...
+#炎症型在mPT和nmPT
+library(ggplot2)
+
+# 读取结果
+mPT_res <- readRDS("mPT_integrated_results_detailed.rds")
+nmPT_res <- readRDS("nmPT_integrated_results_detailed.rds")
+
+# 免疫炎症亚型名称（根据实际行名）
+I1 <- "Tumor_Immune-inflamed_1"
+I2 <- "Tumor_Immune-inflamed_2"
+
+# 获取两个矩阵中共同的细胞类型（用于比较）
+common_cells <- intersect(rownames(mPT_res$avg_log2fc), rownames(nmPT_res$avg_log2fc))
+# 排除 I1 和 I2 自身
+other_common <- setdiff(common_cells, c(I1, I2))
+
+cat("共有的其他细胞类型数量：", length(other_common), "\n")
+
+# 提取互作强度（只针对共有细胞类型）
+I1_mPT <- mPT_res$avg_log2fc[I1, other_common]
+I2_mPT <- mPT_res$avg_log2fc[I2, other_common]
+delta_mPT <- I2_mPT - I1_mPT
+
+I1_nmPT <- nmPT_res$avg_log2fc[I1, other_common]
+I2_nmPT <- nmPT_res$avg_log2fc[I2, other_common]
+delta_nmPT <- I2_nmPT - I1_nmPT
+
+# 构建数据框
+df_mPT <- data.frame(cell_type = other_common, delta = delta_mPT)
+df_nmPT <- data.frame(cell_type = other_common, delta = delta_nmPT)
+
+# 去除 NA
+df_mPT <- df_mPT[!is.na(df_mPT$delta), ]
+df_nmPT <- df_nmPT[!is.na(df_nmPT$delta), ]
+
+# 选择正负两端显著差异的细胞类型（可自行调整数量）
+N_pos <- 10   # I2 更强的数量
+N_neg <- 5    # I1 更强的数量
+
+# mPT 图数据
+pos_mPT <- head(df_mPT[order(df_mPT$delta, decreasing = TRUE), ], N_pos)
+neg_mPT <- head(df_mPT[order(df_mPT$delta, decreasing = FALSE), ], N_neg)
+plot_mPT <- rbind(pos_mPT, neg_mPT)
+plot_mPT$direction <- ifelse(plot_mPT$delta > 0, I2, I1)
+
+# nmPT 图数据
+pos_nmPT <- head(df_nmPT[order(df_nmPT$delta, decreasing = TRUE), ], N_pos)
+neg_nmPT <- head(df_nmPT[order(df_nmPT$delta, decreasing = FALSE), ], N_neg)
+plot_nmPT <- rbind(pos_nmPT, neg_nmPT)
+plot_nmPT$direction <- ifelse(plot_nmPT$delta > 0, I2, I1)
+
+# 绘图函数
+plot_delta <- function(df, title) {
+  df$direction <- factor(df$direction, levels = c(I1, I2))
+  ggplot(df, aes(x = reorder(cell_type, delta), y = delta, fill = direction)) +
+    geom_bar(stat = "identity") +
+    coord_flip() +
+    scale_fill_manual(values = setNames(c("#E69F00", "#D55E00"), c(I1, I2)),
+                      name = "Stronger in this context") +
+    labs(title = title, x = "Cell type", y = paste0(I2, " - ", I1, " (log2FC)")) +
+    theme_minimal() +
+    theme(legend.position = "bottom",
+          panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8),
+          plot.title = element_text(hjust = 0.5, face = "bold"))
+}
+# 保存图片
+p_mPT <- plot_delta(plot_mPT, "Interaction strength comparison in mPT")
+ggsave("mPT_I2_vs_I1_delta.pdf", p_mPT, width = 10, height = 8)
+
+p_nmPT <- plot_delta(plot_nmPT, "Interaction strength comparison in nmPT")
+ggsave("nmPT_I2_vs_I1_delta.pdf", p_nmPT, width = 10, height = 8)
+
 
 # ===================== 比较 mPT vs nmPT =====================
-mat_log2fc_mPT <- mat_log2fc_clean
-mat_p_mPT <- mat_p
-mat_log2fc_nmPT <- mat_log2fc_clean
-mat_p_nmPT <- mat_p
-# 1. 找出两种组织共有的细胞类型
+
+# 1. 加载两个整合结果文件
+mPT_results <- readRDS("mPT_integrated_results_detailed.rds")
+nmPT_results <- readRDS("nmPT_integrated_results_detailed.rds")
+
+# 2. 提取平均 log2FC 矩阵和 p 值矩阵
+mat_log2fc_mPT <- mPT_results$avg_log2fc
+mat_p_mPT <- mPT_results$combined_p
+
+mat_log2fc_nmPT <- nmPT_results$avg_log2fc
+mat_p_nmPT <- nmPT_results$combined_p
+
+# 3. 找出两种组织共有的细胞类型
 common_types <- intersect(rownames(mat_log2fc_mPT), rownames(mat_log2fc_nmPT))
+cat("共有细胞类型数量：", length(common_types), "\n")
 
-# 2. 计算差异矩阵（mPT - nmPT）
-mat_diff <- mat_log2fc_mPT[common_types, common_types] - 
-            mat_log2fc_nmPT[common_types, common_types]
-
-# 3. 裁剪到合理范围
-#mat_diff[mat_diff > 3] <- 3
-#mat_diff[mat_diff < -3] <- -3
-
-# 4. 计算差异的显著性（Fisher's method 合并 p 值）
-combined_chi2 <- matrix(0, nrow = length(common_types), ncol = length(common_types),
-                        dimnames = list(common_types, common_types))
-
-for (i in 1:length(common_types)) {
-  for (j in 1:length(common_types)) {
-    p1 <- mat_p_mPT[common_types[i], common_types[j]]
-    p2 <- mat_p_nmPT[common_types[i], common_types[j]]
-    combined_chi2[i, j] <- -2 * (log(p1 + 1e-10) + log(p2 + 1e-10))
+if (length(common_types) >= 2) {
+  
+  # 4. 计算差异矩阵（mPT - nmPT）
+  mat_diff <- mat_log2fc_mPT[common_types, common_types] - 
+              mat_log2fc_nmPT[common_types, common_types]
+  
+  # 5. 处理缺失值
+  mat_diff[is.na(mat_diff)] <- 0
+  
+  # 6. 处理 -Inf 和 +Inf，然后裁剪
+  # 替换 -Inf 为 -10
+  mat_diff[is.infinite(mat_diff) & mat_diff < 0] <- -10
+  # 替换 +Inf 为 10
+  mat_diff[is.infinite(mat_diff) & mat_diff > 0] <- 10
+  
+  # 裁剪超出 [-10, 10] 的范围
+  mat_diff[mat_diff > 10] <- 10
+  mat_diff[mat_diff < -10] <- -10
+  
+  # 7. 计算差异的显著性（Fisher's method 合并 p 值）
+  combined_chi2 <- matrix(0, nrow = length(common_types), ncol = length(common_types),
+                          dimnames = list(common_types, common_types))
+  
+  for (i in seq_along(common_types)) {
+    for (j in seq_along(common_types)) {
+      p1 <- mat_p_mPT[common_types[i], common_types[j]]
+      p2 <- mat_p_nmPT[common_types[i], common_types[j]]
+      # 处理 NA 或无效 p 值
+      if (is.na(p1) || is.na(p2) || p1 <= 0 || p2 <= 0) {
+        combined_chi2[i, j] <- 0
+      } else {
+        combined_chi2[i, j] <- -2 * (log(p1 + 1e-10) + log(p2 + 1e-10))
+      }
+    }
   }
+  
+  # 8. 计算合并 p 值（自由度 = 4）
+  combined_p <- pchisq(combined_chi2, df = 4, lower.tail = FALSE)
+  combined_p[is.na(combined_p)] <- 1
+  
+  # 9. 显著性标注
+  signif_detail <- matrix("", nrow = length(common_types), ncol = length(common_types),
+                          dimnames = list(common_types, common_types))
+  
+  # mPT 中更强的交互（正差异）
+  signif_detail[combined_p < 0.001 & mat_diff > 0] <- "***"
+  signif_detail[combined_p < 0.01 & combined_p >= 0.001 & mat_diff > 0] <- "**"
+  signif_detail[combined_p < 0.05 & combined_p >= 0.01 & mat_diff > 0] <- "*"
+  
+  # nmPT 中更强的交互（负差异）
+  signif_detail[combined_p < 0.001 & mat_diff < 0] <- "***"
+  signif_detail[combined_p < 0.01 & combined_p >= 0.001 & mat_diff < 0] <- "**"
+  signif_detail[combined_p < 0.05 & combined_p >= 0.01 & mat_diff < 0] <- "*"
+  
+  # 10. 绘制热图
+  library(pheatmap)
+  
+  p <- pheatmap(mat_diff,
+                cluster_rows = TRUE,
+                cluster_cols = TRUE,
+                display_numbers = signif_detail,
+                number_color = "black",
+                fontsize_number = 8,
+                main = "Difference in cell-cell interactions (mPT - nmPT)\nRed: stronger in mPT, Blue: stronger in nmPT\n* p < 0.05, ** p < 0.01, *** p < 0.001",
+                fontsize = 10,
+                breaks = seq(-10, 10, length.out = 100),
+                color = colorRampPalette(c("blue", "white", "red"))(100),
+                filename = "mPT_vs_nmPT_interaction_diff.pdf",
+                width = 14, height = 12)
+  
+  cat("保存差异热图：mPT_vs_nmPT_interaction_diff.pdf\n")
+  
+  # 保存差异矩阵和 p 值
+  write.csv(mat_diff, file = "mPT_vs_nmPT_interaction_diff_matrix.csv")
+  write.csv(combined_p, file = "mPT_vs_nmPT_interaction_diff_pvalues.csv")
+  
+} else {
+  cat("共有细胞类型不足 2 个，无法绘制热图\n")
 }
-combined_p <- pchisq(combined_chi2, df = 4, lower.tail = FALSE)
 
-# 5. 显著性标注
-signif_detail <- matrix("", nrow = length(common_types), ncol = length(common_types),
-                        dimnames = list(common_types, common_types))
-signif_detail[combined_p < 0.001 & mat_diff > 0] <- "***"
-signif_detail[combined_p < 0.01 & combined_p >= 0.001 & mat_diff > 0] <- "**"
-signif_detail[combined_p < 0.05 & combined_p >= 0.01 & mat_diff > 0] <- "*"
-signif_detail[combined_p < 0.05 & mat_diff < 0] <- "*"  # 负值也标注
-
-# 绘制热图（带显著性标注）
-p <- pheatmap(mat_diff,
-         cluster_rows = TRUE,
-         cluster_cols = TRUE,
-         display_numbers = signif_detail,  # 关键：显示显著性标注
-         number_color = "black",
-         fontsize_number = 8,
-         main = "Difference in cell-cell interactions (mPT - nmPT)\nRed: stronger in mPT, Blue: stronger in nmPT\n* p < 0.05, ** p < 0.01, *** p < 0.001",
-         fontsize = 10,
-         breaks = seq(-3, 3, length.out = 100),
-         color = colorRampPalette(c("blue", "white", "red"))(100))
-
-ggsave("mPT_vs_nmPT_interaction_diff.pdf", plot = p, width = 14, height = 12)
 # 7. 找出差异最大的细胞对
 diff_vec <- as.vector(mat_diff)
 names(diff_vec) <- paste(rep(common_types, each = length(common_types)), 
@@ -4483,30 +6236,30 @@ print(top_up)
 cat("\n========== nmPT 中互作更强的细胞对 ==========\n")
 print(top_down)
 
-# ===================== 找出代谢型 =====================
+# ===================== 找出炎症型 =====================
 cell_types_mPT <- rownames(mat_log2fc_mPT)
 cell_types_nmPT <- rownames(mat_log2fc_nmPT)
 
-metabolic1 <- cell_types_mPT[grepl("Metabolic_1", cell_types_mPT)]
-metabolic2 <- cell_types_mPT[grepl("Metabolic_2", cell_types_mPT)]
+immuneinflamed1 <- cell_types_mPT[grepl("Immune-inflamed_1", cell_types_mPT)]
+immuneinflamed2 <- cell_types_mPT[grepl("Immune-inflamed_2", cell_types_mPT)]
 
-cat("代谢1:", metabolic1, "\n")
-cat("代谢2:", metabolic2, "\n")
+cat("代谢1:", immuneinflamed1, "\n")
+cat("代谢2:", immuneinflamed2, "\n")
 
 # ===================== 提取互作 =====================
 # mPT
-inter_mPT_met1 <- mat_log2fc_mPT[metabolic1, ]
-inter_mPT_met2 <- mat_log2fc_mPT[metabolic2, ]
+inter_mPT_met1 <- mat_log2fc_mPT[immuneinflamed1, ]
+inter_mPT_met2 <- mat_log2fc_mPT[immuneinflamed2, ]
 
 # nmPT
-inter_nmPT_met1 <- mat_log2fc_nmPT[metabolic1, ]
-inter_nmPT_met2 <- mat_log2fc_nmPT[metabolic2, ]
+inter_nmPT_met1 <- mat_log2fc_nmPT[immuneinflamed1, ]
+inter_nmPT_met2 <- mat_log2fc_nmPT[immuneinflamed2, ]
 
 # 排除自身
-inter_mPT_met1 <- inter_mPT_met1[!names(inter_mPT_met1) %in% c(metabolic1, metabolic2)]
-inter_mPT_met2 <- inter_mPT_met2[!names(inter_mPT_met2) %in% c(metabolic1, metabolic2)]
-inter_nmPT_met1 <- inter_nmPT_met1[!names(inter_nmPT_met1) %in% c(metabolic1, metabolic2)]
-inter_nmPT_met2 <- inter_nmPT_met2[!names(inter_nmPT_met2) %in% c(metabolic1, metabolic2)]
+inter_mPT_met1 <- inter_mPT_met1[!names(inter_mPT_met1) %in% c(immuneinflamed1, immuneinflamed2)]
+inter_mPT_met2 <- inter_mPT_met2[!names(inter_mPT_met2) %in% c(immuneinflamed1, immuneinflamed2)]
+inter_nmPT_met1 <- inter_nmPT_met1[!names(inter_nmPT_met1) %in% c(immuneinflamed1, immuneinflamed2)]
+inter_nmPT_met2 <- inter_nmPT_met2[!names(inter_nmPT_met2) %in% c(immuneinflamed1, immuneinflamed2)]
 
 # ===================== 找共同细胞类型 =====================
 common_cells <- intersect(names(inter_mPT_met1), names(inter_nmPT_met1))
@@ -4519,22 +6272,24 @@ diff_met2 <- inter_mPT_met2[common_cells] - inter_nmPT_met2[common_cells]
 top_met1_mPT <- sort(diff_met1, decreasing = TRUE)[1:15]
 top_met2_mPT <- sort(diff_met2, decreasing = TRUE)[1:15]
 
-cat("\n========== 代谢1在 mPT 中更强的互作 ==========\n")
+cat("\n========== 免疫炎症1在 mPT 中更强的互作 ==========\n")
 print(top_met1_mPT)
 
-cat("\n========== 代谢2在 mPT 中更强的互作 ==========\n")
+cat("\n========== 免疫炎症2在 mPT 中更强的互作 ==========\n")
 print(top_met2_mPT)
 
 final_diff <- diff_met2[common_cells] - diff_met1[common_cells]
 
+#mPT样本中
 # 排序
-top_met2_stronger <- sort(final_diff, decreasing = TRUE)[1:15]
-top_met1_stronger <- sort(final_diff, decreasing = FALSE)[1:15]
+top_met2_stronger <- sort(final_diff, decreasing = TRUE)[1:12]
+top_met1_stronger <- sort(final_diff, decreasing = FALSE)[1:3]
 
-cat("\n========== 代谢2更强的互作（基于转移特异性差异）==========\n")
+
+cat("\n========== 免疫炎症2更强的互作（基于转移特异性差异）==========\n")
 print(top_met2_stronger)
 
-cat("\n========== 代谢1更强的互作（基于转移特异性差异）==========\n")
+cat("\n========== 免疫炎症1更强的互作（基于转移特异性差异）==========\n")
 print(top_met1_stronger)
 
 # ===================== 条形图 =====================
@@ -4544,135 +6299,107 @@ library(ggplot2)
 df_met2 <- data.frame(
   cell_type = names(top_met2_stronger),
   diff = as.numeric(top_met2_stronger),
-  stronger = "Metabolic2"
+  stronger = "Immuneinflamed2"
 )
 
 df_met1 <- data.frame(
   cell_type = names(top_met1_stronger),
   diff = as.numeric(top_met1_stronger),
-  stronger = "Metabolic1"
+  stronger = "Immuneinflamed1"
 )
 
 df_plot <- rbind(df_met2, df_met1)
 
-# 条形图
+# 条形
 p <- ggplot(df_plot, aes(x = reorder(cell_type, diff), y = diff, fill = stronger)) +
   geom_bar(stat = "identity") +
   coord_flip() +
-  scale_fill_manual(values = c("Metabolic1" = "#E69F00", "Metabolic2" = "#D55E00")) +
-  labs(title = "Functional divergence of metabolic subtypes (based on mPT vs nmPT difference)",
+  scale_fill_manual(values = c("Immuneinflamed1" = "#E69F00", "Immuneinflamed2" = "#D55E00")) +
+  labs(title = "Immune-inflamed subtypes show divergent interaction strength in mPT",
        x = "Cell type", 
-       y = "(Metabolic2_mPT - Metabolic2_nmPT) - (Metabolic1_mPT - Metabolic1_nmPT)",
+       y = "(Immune-inflamed2_mPT - Immune-inflamed2_nmPT) - (Immune-inflamed1_mPT - Immune-inflamed1_nmPT)",
        fill = "Stronger with") +
   theme_minimal() +
   theme(legend.position = "bottom",
         panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8),
         plot.title = element_text(hjust = 0.5))
 
-ggsave("metabolic_divergence_based_on_transfer_specificity.pdf", plot = p, width = 10, height = 8)
+ggsave("Immuneinflamed_divergence_in_mPT.pdf", plot = p, width = 10, height = 8)
 
-cat("\n===== 完成！=====\n")
-完整代码（你的 + 添加的）
-r
-# ===================== 加载数据 =====================
-load("mPT_spatial_contact_analysis_results_maligvsothers.RData")
-mat_log2fc_mPT <- mat_log2fc_clean
-mat_p_mPT <- mat_p
+#nmPT
+# ===================== nmPT 样本中 =====================
+# 核心修改：取负号（镜像指标）
+# ===================== nmPT 样本中 =====================
+# 当前 final_diff_nmPT = -final_diff（即 I1 - I2 方向）
+# 要改成 I2 - I1 方向，再取一次负号
+final_diff_nmPT_I2_minus_I1 <- -final_diff_nmPT
 
-load("nmPT_spatial_contact_analysis_results_maligvsothers.RData")
-mat_log2fc_nmPT <- mat_log2fc_clean
-mat_p_nmPT <- mat_p
+# 排序：正值 = I2 更强（放上面），负值 = I1 更强（放下面的负方向）
+top_I2_in_nmPT <- sort(final_diff_nmPT_I2_minus_I1, decreasing = TRUE)[1:10]
+top_I1_in_nmPT <- sort(final_diff_nmPT_I2_minus_I1, decreasing = FALSE)[1:5]
 
-# ===================== 找出代谢型 =====================
-cell_types_mPT <- rownames(mat_log2fc_mPT)
-cell_types_nmPT <- rownames(mat_log2fc_nmPT)
+cat("\n========== 在 nmPT 中免疫炎症2更强的互作（正条）==========\n")
+print(top_I2_in_nmPT)
 
-metabolic1 <- cell_types_mPT[grepl("Metabolic_1", cell_types_mPT)]
-metabolic2 <- cell_types_mPT[grepl("Metabolic_2", cell_types_mPT)]
-
-cat("代谢1:", metabolic1, "\n")
-cat("代谢2:", metabolic2, "\n")
-
-# ===================== 提取互作 =====================
-# mPT
-inter_mPT_met1 <- mat_log2fc_mPT[metabolic1, ]
-inter_mPT_met2 <- mat_log2fc_mPT[metabolic2, ]
-
-# nmPT
-inter_nmPT_met1 <- mat_log2fc_nmPT[metabolic1, ]
-inter_nmPT_met2 <- mat_log2fc_nmPT[metabolic2, ]
-
-# 排除自身
-inter_mPT_met1 <- inter_mPT_met1[!names(inter_mPT_met1) %in% c(metabolic1, metabolic2)]
-inter_mPT_met2 <- inter_mPT_met2[!names(inter_mPT_met2) %in% c(metabolic1, metabolic2)]
-inter_nmPT_met1 <- inter_nmPT_met1[!names(inter_nmPT_met1) %in% c(metabolic1, metabolic2)]
-inter_nmPT_met2 <- inter_nmPT_met2[!names(inter_nmPT_met2) %in% c(metabolic1, metabolic2)]
-
-# ===================== 找共同细胞类型 =====================
-common_cells <- intersect(names(inter_mPT_met1), names(inter_nmPT_met1))
-
-# ===================== 计算差异 =====================
-diff_met1 <- inter_mPT_met1[common_cells] - inter_nmPT_met1[common_cells]
-diff_met2 <- inter_mPT_met2[common_cells] - inter_nmPT_met2[common_cells]
-
-# 排序
-top_met1_mPT <- sort(diff_met1, decreasing = TRUE)[1:15]
-top_met2_mPT <- sort(diff_met2, decreasing = TRUE)[1:15]
-
-cat("\n========== 代谢1在 mPT 中更强的互作 ==========\n")
-print(top_met1_mPT)
-
-cat("\n========== 代谢2在 mPT 中更强的互作 ==========\n")
-print(top_met2_mPT)
-
-# ===================== 代谢2 vs 代谢1 差异分析（基于 mPT vs nmPT 差异）=====================
-final_diff <- diff_met2[common_cells] - diff_met1[common_cells]
-
-top_met2_stronger <- sort(final_diff, decreasing = TRUE)[1:10]
-top_met1_stronger <- sort(final_diff, decreasing = FALSE)[1:18]
-
-cat("\n========== 代谢2更强的互作（基于转移特异性差异）==========\n")
-print(top_met2_stronger)
-
-cat("\n========== 代谢1更强的互作（基于转移特异性差异）==========\n")
-print(top_met1_stronger)
+cat("\n========== 在 nmPT 中免疫炎症1更强的互作（负条）==========\n")
+print(top_I1_in_nmPT)
 
 # ===================== 条形图 =====================
 library(ggplot2)
 
-df_met2 <- data.frame(
-  cell_type = names(top_met2_stronger),
-  diff = as.numeric(top_met2_stronger),
-  stronger = "Metabolic2"
+df_I2 <- data.frame(
+  cell_type = names(top_I2_in_nmPT),
+  diff = as.numeric(top_I2_in_nmPT),
+  stronger = "Immuneinflamed2"
 )
 
-df_met1 <- data.frame(
-  cell_type = names(top_met1_stronger),
-  diff = as.numeric(top_met1_stronger),
-  stronger = "Metabolic1"
+df_I1 <- data.frame(
+  cell_type = names(top_I1_in_nmPT),
+  diff = as.numeric(top_I1_in_nmPT),
+  stronger = "Immuneinflamed1"
 )
 
-df_plot <- rbind(df_met2, df_met1)
+df_plot_nmPT <- rbind(df_I2, df_I1)
 
-p <- ggplot(df_plot, aes(x = reorder(cell_type, diff), y = diff, fill = stronger)) +
+p_nmPT <- ggplot(df_plot_nmPT, aes(x = reorder(cell_type, diff), y = diff, fill = stronger)) +
   geom_bar(stat = "identity") +
   coord_flip() +
-  scale_fill_manual(values = c("Metabolic1" = "#E69F00", "Metabolic2" = "#D55E00")) +
-  labs(title = "Functional divergence of metabolic subtypes (based on mPT vs nmPT difference)",
+  scale_fill_manual(values = c("Immuneinflamed1" = "#E69F00", "Immuneinflamed2" = "#D55E00"),
+                    name = "Stronger in nmPT") +
+  labs(title = "Immune-inflamed subtypes show divergent interaction strength in nmPT",
        x = "Cell type", 
-       y = "(Metabolic2_mPT - Metabolic2_nmPT) - (Metabolic1_mPT - Metabolic1_nmPT)",
-       fill = "Stronger with") +
+       y = "(Immune-inflamed2_nmPT - Immune-inflamed2_mPT) - (Immune-inflamed1_nmPT - Immune-inflamed1_mPT)",
+       fill = "Stronger in nmPT") +
   theme_minimal() +
   theme(legend.position = "bottom",
         panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8),
         plot.title = element_text(hjust = 0.5))
 
-ggsave("metabolic_divergence_based_on_transfer_specificity.pdf", plot = p, width = 10, height = 8)
+ggsave("Immuneinflamed_divergence_in_nmPT.pdf", plot = p_nmPT, width = 10, height = 8)
 
-cat("\n===== 完成！=====\n")
+#代谢
+mPT_res <- readRDS("mPT_integrated_results_detailed.rds")
 
+# 确认代谢型名称（根据实际行名修改）
+metabolic1 <- "Tumor_Metabolic_1"
+metabolic2 <- "Tumor_Metabolic_2"
 
+# 其他细胞类型（排除自身）
+others <- setdiff(rownames(mPT_res$avg_log2fc), c(metabolic1, metabolic2))
 
+# 提取互作强度向量并降序排序
+met1_vec <- mPT_res$avg_log2fc[metabolic1, others]
+met2_vec <- mPT_res$avg_log2fc[metabolic2, others]
+
+met1_sorted <- sort(met1_vec, decreasing = TRUE)
+met2_sorted <- sort(met2_vec, decreasing = TRUE)
+
+# 打印结果
+cat("===== Metabolic_1 与其他细胞互作强度排序 (log2FC) =====\n")
+print(met1_sorted)
+
+cat("\n===== Metabolic_2 与其他细胞互作强度排序 (log2FC) =====\n")
+print(met2_sorted)
 ```
 # mPT的subcelltype分布
 ```R
@@ -6072,13 +7799,13 @@ counts_sparse <- as(counts_matrix3, "dgCMatrix")
 # 创建Seurat对象
 seurat_obj1 <- CreateSeuratObject(counts = counts_sparse)
 
-#
+#GSE148071
 library(Seurat)
 library(dplyr)
 library(data.table)
 
 # 设置工作目录
-setwd("~/project/project/LUSC-spatial/GSE148071_RAW")
+setwd("E:/project/LUSC-spatial/GSE148071_RAW")
 
 # 获取所有 .txt.gz 文件列表
 files <- list.files(pattern = "P\\d+_exp.txt.gz")
@@ -6131,29 +7858,130 @@ combined_subset <- subset(combined, cells = cells_keep)
 
 # 查看子集后各样本的细胞数
 table(combined_subset$sample_id)
-
+combined_subset <- JoinLayers(combined_subset)
 # 保存结果
 saveRDS(combined_subset, file = "GSE148071_LUSC.rds")
+
+#sciencedb02028
+library(Seurat)
+
+samples <- c("2018jz4", "2018jz11", "2018jz12",
+             "2018jz38", "2018jz46", "AK658", "AK2834", "AK3274", "AK4295")
+
+target_base <- "/share/home/wangq/zxy/NSCLC/spatial/sc/outs"
+
+# 读取第一个样本（使用目录）
+seurat_obj <- CreateSeuratObject(
+  counts = Read10X(file.path(target_base, samples[1])),
+  project = samples[1]
+)
+
+# 依次合并其余样本
+for (i in 2:length(samples)) {
+  cat("Processing:", samples[i], "\n")
+  seurat_obj <- merge(
+    seurat_obj,
+    CreateSeuratObject(
+      counts = Read10X(file.path(target_base, samples[i])),
+      project = samples[i]
+    )
+  )
+}
+seurat_obj <- JoinLayers(seurat_obj)
+# 保存
+saveRDS(seurat_obj, file = file.path(target_base, "sciencedb.rds"))
+
+#emtab
+library(Seurat)
+library(dplyr)
+
+# 设置路径
+path <- "./EMTAB"
+
+# 获取所有样本的ID（Pxx_Tx）
+files <- list.files(path, pattern = "*.tsv.gz")
+sample_ids <- unique(gsub("-(barcodes|features|matrix).tsv.gz", "", files))
+
+sample_files <- list()
+for (sid in sample_ids) {
+  sample_files[[sid]] <- list(
+    barcodes = file.path(path, paste0(sid, "-barcodes.tsv.gz")),
+    features = file.path(path, paste0(sid, "-features.tsv.gz")),
+    matrix = file.path(path, paste0(sid, "-matrix.mtx.gz"))
+  )
+}
+
+# 读取所有样本
+seurat_list <- list()
+for (sid in names(sample_files)) {
+  cat("Loading:", sid, "\n")
+  
+  # 读取矩阵
+  counts <- ReadMtx(
+    mtx = sample_files[[sid]]$matrix,
+    features = sample_files[[sid]]$features,
+    cells = sample_files[[sid]]$barcodes
+  )
+  
+  # 创建 Seurat 对象
+  obj <- CreateSeuratObject(counts = counts, project = sid)
+  obj$sample <- sid
+  obj$patient <- gsub("_T.*", "", sid)  # 提取患者ID
+  obj$region <- gsub("P[0-9]+_", "", sid)  # 提取区域 T1/T2/T3
+  
+  seurat_list[[sid]] <- obj
+}
+
+seurat_merged <- merge(seurat_list[[1]], y = seurat_list[-1], 
+                       add.cell.ids = names(seurat_list))
+
+saveRDS(seurat_merged,file="emtab.rds")
 
 
 obj <- readRDS("GSE207422.rds")
 obj <- subset(obj, subset = cancer_type == "LUSC")
 
-#obj2 <- readRDS("GSE127465.rds")
-#obj3 <- readRDS("GSE153935.rds")
-#obj4 <- readRDS("GSE117570_LUSC.rds")
-#merged_seurat_obj <- merge(obj1, y = list(obj2, obj3, obj4), 
-#                    add.cell.ids = c("GSE207422", "GSE127465", "GSE153935", "GSE117570"))
-#merged_seurat_obj <- JoinLayers(merged_seurat_obj)
-#library(harmony)
+#obj2 <- readRDS("GSE148071_LUSC.rds")
+obj3 <- readRDS("sciencedb_LN.rds")
+#obj3 <- subset(obj3,subset=orig.ident %in% c("AK3274","AK4295","AK2834","2018jz4","2018jz37"))
+#obj3$LN_status <- ifelse(obj3$orig.ident == "2018jz37", "LN+", "LN-")
+#saveRDS(obj3,file="sciencedb_LN.rds")
+obj4 <- readRDS("emtab_LN.rds")
+#obj4 <- subset(obj4,subset=patient %in% c("P2","P19","P4","P8","P11","P18"))
+#obj4$LN_status <- ifelse(obj4$patient %in% c("P2","P8","P18"), "LN+", "LN-")
+#saveRDS(obj4,file="emtab_LN.rds")
+merged_seurat_obj <- merge(obj, y = list(obj3, obj4), 
+                    add.cell.ids = c("GSE207422", "sciencedb", "emtab"))
+merged_seurat_obj <- JoinLayers(merged_seurat_obj)
+
+merged_seurat_obj <- merged_seurat_obj[!grepl("\\.", rownames(merged_seurat_obj)), ]
+merged_seurat_obj <- merged_seurat_obj[!grepl("^MT-", rownames(merged_seurat_obj)), ]
+merged_seurat_obj <- merged_seurat_obj[!grepl("^RP[SL]", rownames(merged_seurat_obj)), ]
+merged_seurat_obj <- merged_seurat_obj[!grepl("AP[0-9]+$", rownames(merged_seurat_obj)), ]
+nrow(merged_seurat_obj)
+
+obj <- merged_seurat_obj
+obj <- obj[!grepl("^ENSG", rownames(obj)), ]
+
+library(dplyr)
+obj$dataset <- case_when(
+  obj$orig.ident == "BD" ~ "BD",
+  grepl("^P", obj$orig.ident) ~ "emtab",
+  TRUE ~ "sciencedb"
+)
+saveRDS(obj,file="sc_raw.rds")
+
+library(harmony)
 library(Seurat)
 obj <- NormalizeData(obj)
 obj <- FindVariableFeatures(obj, nfeatures = 2000)
 
 hvgs <- VariableFeatures(obj)
 obj <- ScaleData(obj, features = hvgs)
-obj <- RunPCA(obj, features = hvgs, npcs = 20)
-#obj <- RunHarmony(obj, "orig.ident")
+obj <- RunPCA(obj, features = hvgs, npcs = 50)
+
+
+obj <- RunHarmony(obj, "dataset")
 
 png("elbowplot_sc.png", width = 800, height = 600)
 elbowplot <- ElbowPlot(obj,ndims = 30)
@@ -6162,9 +7990,9 @@ dev.off()
 
 library(ggplot2)
 library(ggsci)
-obj <- FindNeighbors(obj,  dims = 1:20)
-obj <- FindClusters(obj, resolution = 0.3)
-obj <- RunUMAP(obj, dims = 1:20)
+obj <- FindNeighbors(obj, reduction = "harmony", dims = 1:15)
+obj <- FindClusters(obj, resolution = 0.2)
+obj <- RunUMAP(obj, reduction = "harmony", dims = 1:15)
 
 npg_pal <- pal_npg()(10)
 npg_extended <- colorRampPalette(npg_pal)(20)
@@ -6224,24 +8052,24 @@ write.csv(significant_markers,"sc_obj_marker_top_50.csv")
 identity_mapping <- c(
     "0" = "T cells",
     "1" = "T cells",
-    "2" = "Macrophages",
-    "3" = "Malignant cells",
+    "2" = "B cells",
+    "3" = "Macrophages",
     "4" = "Macrophages",
-    "5" = "B cells",
-    "6" = "Neutrophil",
-    "7" = "Plasma",
-    "8" = "Proliferative",
-    "9" = "DC",
-    "10" = "Malignant cells",
-    "11" = "Malignant cells",
-    "12" = "T cells",
-    "13" = "Alveolar type II cells", 
-    "14" = "Malignant cells",
-    "15" = "Fibroblasts",
-    "16" = "Mast cells",
-    "17" = "Malignant cells",
-    "18" = "Endothelial cells",
-    "19" = "Ciliated cells"
+    "5" = "Macrophages",
+    "6" = "Malignant cells",
+    "7" = "DC",
+    "8" = "Plasma",
+    "9" = "Neutrophil",
+    "10" = "Proliferative",
+    "11" = "Fibroblasts",
+    "12" = "Malignant cells",  
+    "13" = "Mast cells",
+    "14" = "T cells",
+    "15" = "Ciliated cell",
+    "16" = "Malignant cells", 
+    "17" = "Alveolar type II cells",
+    "18" = "T cells",
+    "19" = "Macrophages"
 )
 
 cell_type <- identity_mapping[obj@meta.data$seurat_clusters]
@@ -6250,7 +8078,32 @@ obj@meta.data$cell_type <- cell_type
 library(ggplot2)
 library(ggsci)
 npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(13)
+npg_extended <- colorRampPalette(npg_pal)(17)
+cluster_colors <- c(
+  # 浅色系在前（浅蓝第一个）
+  "#A0CBE8",   # 1 浅蓝（你要的放第一个）
+  "#FFBE7D",   # 2 浅橙
+  "#8CD17D",   # 3 浅绿
+  "#86BCB6",   # 4 浅青
+  "#FF9D9A",   # 5 浅红
+  "#FABFD2",   # 6 浅粉
+  "#D4A6C8",   # 7 浅紫
+  "#F1CE63",   # 8 淡黄
+  "#D7B5A6",   # 9 浅棕
+  "#B07AA1",   # 10 紫灰
+  "#BAB0AC",   # 11 浅灰
+  
+  # 深色系在后
+  "#4E79A7",   # 12 深蓝
+  "#F28E2B",   # 13 橙
+  "#59A14F",   # 14 深绿
+  "#E15759",   # 15 红
+  "#499894",   # 16 青绿
+  "#D37295",   # 17 玫红
+  "#B6992D",   # 18 土黄
+  "#9D7660",   # 19 棕
+  "#79706E"    # 20 深灰
+)
 
 cell_types <- as.character(unique(obj@meta.data$cell_type))
 num_legend_items <- length(cell_types)  # 图例的个数
@@ -6266,7 +8119,7 @@ DimPlot(obj, reduction = "umap", label = TRUE, pt.size = 1, group.by = "cell_typ
     xlab("UMAP_1") +
     ylab("UMAP_2") +
     ggtitle(NULL) +
-    scale_color_manual(values = npg_extended) +
+    scale_color_manual(values = cluster_colors) +
     coord_fixed(ratio = 1) +
     guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
     theme(
@@ -6366,28 +8219,44 @@ pheatmap(cor_matrix,
          cluster_rows = TRUE,
          cluster_cols = TRUE)
 
+
+
+
 ```
 # Malignant sc
 ```R
 library(Seurat)
 obj_sc <- readRDS("sc_obj_anno.rds")
 Malignant_sc <- subset(obj_sc,subset=cell_type=="Malignant cells")
+Malignant_sc <- subset(Malignant_sc,subset=orig.ident %in% c("2018jz4","AK2834","AK3274","BD","P18_T2","P19_T2","P4_T2","P4_T3","P8_T2"))
+
 Malignant_sc <- NormalizeData(Malignant_sc)
-Malignant_sc <- FindVariableFeatures(Malignant_sc, nfeatures = 2000)
+Malignant_sc <- FindVariableFeatures(Malignant_sc, nfeatures = 3000)
 hvgs <- VariableFeatures(Malignant_sc)
 Malignant_sc <- ScaleData(Malignant_sc, features = hvgs)
 Malignant_sc <- RunPCA(Malignant_sc, features = hvgs, npcs = 50)
-#p <- ElbowPlot(Malignant_sc, ndims = 30)
-#ggsave("p3.png",plot=p)
+p <- ElbowPlot(Malignant_sc, ndims = 30)
+ggsave("p3.png",plot=p)
+# 计算累计方差比例
+pca_var <- Malignant_sc[["pca"]]@stdev^2 / sum(Malignant_sc[["pca"]]@stdev^2)
+cumsum_var <- cumsum(pca_var)
 
-Malignant_sc <- FindNeighbors(Malignant_sc, dims = 1:20)
-Malignant_sc <- FindClusters(Malignant_sc, resolution = 0.6)
-Malignant_sc <- RunUMAP(Malignant_sc, dims = 1:20)
+# 看达到多少 PC 时累计方差 > 70% / 80% / 90%
+which(cumsum_var > 0.7)[1]   # 70%
+which(cumsum_var > 0.8)[1]   # 80%
+which(cumsum_var > 0.9)[1]   # 90%
+
+library(harmony)
+Malignant_sc <- RunHarmony(Malignant_sc, "dataset")
+Malignant_sc <- FindNeighbors(Malignant_sc, reduction = "harmony", dims = 1:17)
+Malignant_sc <- FindClusters(Malignant_sc, resolution = 0.3)
+Malignant_sc <- RunUMAP(Malignant_sc, reduction = "harmony", dims = 1:17)
+
 
 library(ggplot2)
 library(ggsci)
 npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(9)#0.6
+npg_extended <- colorRampPalette(npg_pal)(23)#0.6
 
 seurat_clusters <- as.character(unique(Malignant_sc@meta.data$seurat_clusters))  # 转换为字符向量
 num_legend_items <- length(seurat_clusters)  # 图例的个数
@@ -6432,12 +8301,16 @@ DimPlot(Malignant_sc, reduction = "umap", label = TRUE, pt.size = 1, label.size 
 
 dev.off()
 
+p <- DimPlot(Malignant_sc, reduction = "umap", group.by = "orig.ident", label = FALSE)
+ggsave("malignant_orig.png",plot=p)
+
 library(dplyr)
 Malignant_markers <- FindAllMarkers(Malignant_sc, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use = "wilcox")
 Malignant_significant_markers <- subset(Malignant_markers, p_val_adj < 0.05)
 #write.csv(Malignant_significant_markers, "Malignant_all_marker.csv")
 Malignant_significant_markers <- Malignant_significant_markers %>% group_by(cluster) %>% top_n(n = 50, wt = avg_log2FC)
-write.csv(Malignant_significant_markers, "Malignant_sc_top_marker_50_0.6_new.csv")
+write.csv(Malignant_significant_markers, "Malignant_sc_top_marker_50.csv")
+#Malignant_sc <- subset(Malignant_sc,subset=seurat_clusters %in% c(0,1,2,3,4,5,6,7,8,9,10,11))
 
 #0.6
 identity_mapping <- c(
@@ -6462,6 +8335,19 @@ identity_mapping <- c(
   "8" = "Tumor_EMT-like"
 )
 
+identity_mapping <- c(
+  "0" = "Tumor_Homeostatic-metabolic",
+  "1" = "Tumor_Differentiated",
+  "2" = "Tumor_Inflamed_1",
+  "3" = "Tumor_Proliferative",
+  "4" = "Tumor_Immune-inflamed_1",
+  "5" = "Tumor_Immune-inflamed_2",
+  "6" = "Tumor_Immune-inflamed_3",
+  "7" = "Tumor_Inflamed_2",
+  "8" = "Tumor_Secretory",
+  "9" = "Tumor_Matrix-remodeling",
+  "10" = "Tumor_EMT-like"
+)
 sub_cell_type <- identity_mapping[Malignant_sc@meta.data$seurat_clusters]
 Malignant_sc@meta.data$sub_cell_type <- sub_cell_type
 
@@ -6469,7 +8355,31 @@ library(ggplot2)
 library(ggsci)
 npg_pal <- pal_npg()(10)
 npg_extended <- colorRampPalette(npg_pal)(9)
-
+cluster_colors <- c(
+  # 浅色系在前（浅蓝第一个）
+  "#A0CBE8",   # 1 浅蓝（你要的放第一个）
+  "#FFBE7D",   # 2 浅橙
+  "#8CD17D",   # 3 浅绿
+  "#86BCB6",   # 4 浅青
+  "#FF9D9A",   # 5 浅红
+  "#FABFD2",   # 6 浅粉
+  "#D4A6C8",   # 7 浅紫
+  "#F1CE63",   # 8 淡黄
+  "#D7B5A6",   # 9 浅棕
+  "#B07AA1",   # 10 紫灰
+  "#BAB0AC",   # 11 浅灰
+  
+  # 深色系在后
+  "#4E79A7",   # 12 深蓝
+  "#F28E2B",   # 13 橙
+  "#59A14F",   # 14 深绿
+  "#E15759",   # 15 红
+  "#499894",   # 16 青绿
+  "#D37295",   # 17 玫红
+  "#B6992D",   # 18 土黄
+  "#9D7660",   # 19 棕
+  "#79706E"    # 20 深灰
+)
 cell_types <- as.character(unique(Malignant_sc@meta.data$sub_cell_type))
 num_legend_items <- length(cell_types)  # 图例的个数
 max_label_length <- max(nchar(cell_types))  # 图例名称的最大长度
@@ -6479,12 +8389,12 @@ base_height <- 3000  # 基础高度
 legend_width_factor <- 100  # 每个图例项增加的宽度
 label_length_factor <- 10  # 每个字符增加的宽度
 dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
-pdf("malignant_sc_annotation-0.6.pdf", width = dynamic_width/300, height = base_height/300)
+pdf("malignant_sc_annotation.pdf", width = dynamic_width/300, height = base_height/300)
 DimPlot(Malignant_sc, reduction = "umap", label = TRUE, pt.size = 1, group.by = "sub_cell_type", label.size = 4) +
     xlab("UMAP_1") +
     ylab("UMAP_2") +
     ggtitle(NULL) +
-    scale_color_manual(values = npg_pal) +
+    scale_color_manual(values =cluster_colors) +
     coord_fixed(ratio = 1) +
     guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
     theme(
@@ -6511,6 +8421,126 @@ DimPlot(Malignant_sc, reduction = "umap", label = TRUE, pt.size = 1, group.by = 
     )
 dev.off()
 saveRDS(Malignant_sc,file="malignant_sc_anno.rds")
+
+#比例
+library(tidyverse)
+
+# 计算各亚群在不同 LN_status 中的占比（过滤掉 NA）
+prop_data <- Malignant_sc@meta.data %>%
+  filter(!is.na(LN_status)) %>%
+  group_by(LN_status, sub_cell_type) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(LN_status) %>%
+  mutate(proportion = count / sum(count) * 100)
+
+library(ggplot2)
+library(ggsci)
+npg_pal <- pal_npg()(10)
+npg_extended <- colorRampPalette(npg_pal)(14)
+
+prop_data <- prop_data %>%
+  mutate(sub_cell_type = as.character(sub_cell_type))
+
+# 绘制堆叠条形图
+p <- ggplot(prop_data, aes(x = LN_status, y = proportion, fill = sub_cell_type)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(values = cluster_colors) +
+  labs(title = "Cell Type Distribution: LN+ vs LN-",
+       x = "LN Status", y = "Proportion (%)", fill = "Cell Type") +
+  theme_minimal() +
+  theme(
+    # 坐标轴线条和刻度
+    axis.line = element_line(color = "black", linewidth = 0.5),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.ticks.length = unit(0.15, "cm"),
+    # 坐标轴文本
+    axis.text.x = element_text(angle = 45, hjust = 1, color = "black", size = 10),
+    axis.text.y = element_text(color = "black", size = 10),
+    # 坐标轴标题
+    axis.title.x = element_text(color = "black", size = 12, face = "bold"),
+    axis.title.y = element_text(color = "black", size = 12, face = "bold"),
+    # 面板背景
+    panel.grid.major = element_line(color = "gray90"),
+    panel.grid.minor = element_blank(),
+    # 图例
+    legend.position = "right",
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 9)
+  )
+
+# 保存为PDF
+pdf("Malignant_sc_celltype_distribution_LN_status.pdf", width = 4, height = 6)
+print(p)
+dev.off()
+
+library(tidyverse)
+library(ggplot2)
+
+# ==================== 1. 计算各样本中各亚群的占比 ====================
+prop_data <- Malignant_sc@meta.data %>%
+  filter(!is.na(LN_status)) %>%
+  group_by(LN_status, orig.ident, sub_cell_type) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(LN_status, orig.ident) %>%
+  mutate(proportion = count / sum(count) * 100)
+
+# ==================== 2. 按 LN_status 排序：LN+ 在前，LN- 在后 ====================
+samples_LNpos <- prop_data %>% 
+  filter(LN_status == "LN+") %>% 
+  distinct(orig.ident) %>% 
+  pull(orig.ident) %>% 
+  sort()
+
+samples_LNneg <- prop_data %>% 
+  filter(LN_status == "LN-") %>% 
+  distinct(orig.ident) %>% 
+  pull(orig.ident) %>% 
+  sort()
+
+sample_order <- c(samples_LNpos, samples_LNneg)
+prop_data$orig.ident <- factor(prop_data$orig.ident, levels = sample_order)
+
+# ==================== 3. 处理亚型顺序 ====================
+prop_data$sub_cell_type <- as.character(prop_data$sub_cell_type)
+type_order <- sort(unique(prop_data$sub_cell_type))
+prop_data$sub_cell_type <- factor(prop_data$sub_cell_type, levels = type_order)
+
+# ==================== 4. 绘制水平堆叠条形图 ====================
+p <- ggplot(prop_data, aes(x = proportion, y = orig.ident, fill = sub_cell_type)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.8) +
+  scale_fill_manual(values = cluster_colors, name = "Cell Type") +
+  labs(title = "Cell Type Proportion by Sample (LN+ / LN-)",
+       x = "Proportion (%)", y = "Sample") +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(size = 10),
+    axis.text.y = element_text(size = 8),
+    axis.title = element_text(size = 12, face = "bold"),
+    panel.grid.major.x = element_line(color = "gray90"),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    legend.position = "bottom",
+    legend.title = element_text(size = 8),
+    legend.text = element_text(size = 6),
+    legend.key.size = unit(0.4, "cm")
+  ) +
+  guides(fill = guide_legend(nrow = 6, byrow = TRUE))   # 放在 theme() 外面
+
+# ==================== 5. 添加 LN+ / LN- 分界线和标签 ====================
+n_LNpos <- length(samples_LNpos)
+if (n_LNpos > 0) {
+  p <- p + geom_hline(yintercept = n_LNpos + 0.5, linetype = "dashed", color = "red", linewidth = 0.5)
+}
+
+# 添加分组标签（在 y 轴右侧或图内）
+p <- p + annotate("text", x = 95, y = n_LNpos/2 + 0.5, label = "LN+", size = 4, fontface = "bold", hjust = 1) +
+         annotate("text", x = 95, y = n_LNpos + (length(samples_LNneg)/2) + 0.5, label = "LN-", size = 4, fontface = "bold", hjust = 1)
+
+# ==================== 6. 保存 ====================
+pdf("Malignant_sc_celltype_proportion_by_sample_LN_status_horizontal.pdf", width = 4, height = 8)
+print(p)
+dev.off()
+
 ```
 # malignant mapping
 ```R
@@ -6518,7 +8548,7 @@ library(Seurat)
 library(dplyr)
 
 Malignant_sc <- readRDS("malignant_sc_anno.rds")
-Malignant <- readRDS("malignant_unknown_anno_0.6.rds")
+Malignant <- readRDS("malignant_anno.rds")
 
 # ===================== 【1】内存 + 并行关闭 =====================
 options(future.globals.maxSize = 100 * 1024^3)  # 100G
@@ -6540,8 +8570,8 @@ Malignant <- NormalizeData(Malignant)
 Malignant_sc <- NormalizeData(Malignant_sc)
 
 # 高变基因
-Malignant <- FindVariableFeatures(Malignant, nfeatures = 2000)
-Malignant_sc <- FindVariableFeatures(Malignant_sc, nfeatures = 2000)
+Malignant <- FindVariableFeatures(Malignant, nfeatures = 3000)
+Malignant_sc <- FindVariableFeatures(Malignant_sc, nfeatures = 3000)
 
 # 共同基因
 overlap.genes <- intersect(rownames(Malignant), rownames(Malignant_sc))
@@ -6630,37 +8660,28 @@ dev.off()
 
 #dotplot
 all_genes <- c(
-  # 1. Tumor_EMT-like
-  "FN1", "COL1A1", "TAGLN",
-  # 2. Tumor_Inflamed_1
-  "CD74", "HLA-DRA", "IGHG1/2",
-  # 3. Tumor_Inflamed_2
-  "HLA-E", "CD74", "MHC I",
-  # 4. Tumor_Inflamed_3
-  "APOE", "CD68", "CTSD",
-  # 5. Tumor_Inflamed_4
-  "CD74", "IGHG1/2", "HLA-DRA",
-  # 6. Tumor_Metabolic_1
-  "G6PD", "PGD", "TALDO1",
-  # 7. Tumor_Metabolic_2
-  "G6PD", "SPP1", "NAMPT",
-  # 8. Tumor_Proliferative_1
-  "TOP2A", "MKI67", "TYMS",
-  # 9. Tumor_Proliferative_2
-  "TOP2A", "MKI67", "CCNB1",
-  # 10. Tumor_Secretory
-  "SCGB1A1", "SCGB3A1", "TFF3",
-  # 11. Tumor_Squamous_1
-  "KRT17", "KRT14", "S100A9",
-  # 12. Tumor_Squamous_2
-  "KRT16", "KRT6A", "S100A8",
-  # 13. Tumor_Squamous_3
-  "KRT16", "S100A9", "SPRR3",
-  # 14. Tumor_Stem-like
-  "SOX2", "EPCAM", "CDH1",
-  # 单细胞特有亚型（最后）
-  "NDUFA4L2", "SLC2A1", "VEGFA",   # Tumor_Hypoxia
-  "MYH11", "SPARCL1", "SFRP1"      # Tumor_Mesenchymal-like
+  # ===== E: EMT-like (Cluster 8) =====
+  "SPARCL1", "COL4A2", "FASN",
+  
+  # ===== I: Immune-inflamed (Cluster 1, 3) =====
+  "IGKC", "IGLL5", "APOE", 
+  
+  # ===== I: Immunogenic (Cluster 2, 5) =====
+   "TAPBP", "PSMB9",
+  
+  # ===== M: Metabolic_1 (Cluster 0) =====
+  "AKR1C1", "NQO1", "CPT1A", "TXNRD1",
+  
+  # ===== M: Metabolic_2 (Cluster 9) =====
+  "ALDH3A1", 
+  
+  # ===== P: Proliferative (Cluster 4, 7) =====
+ "MCM3", "HMGCS1", "LAMC2", 
+  
+  # ===== S: Secretory (Cluster 6) =====
+  "SCGB1A1", "SCGB3A1", "MUC4", 
+  # ===== S: Stem-like (Cluster 4) =====
+  "SOX2", "PTGS2", "MCM3"
 )
 all_genes <- unique(all_genes)  # 去重（如 CD74, G6PD, TOP2A, KRT16 等重复）
 
@@ -6693,6 +8714,133 @@ p_combined <- p1 / p2 +
 
 ggsave("bubble_plot_tumor_final.pdf", plot = p_combined, width = 18, height = 14)
 
+#heatmap
+library(pheatmap)
+library(ggplot2)
+library(dplyr)
+
+# ==================== 1. 获取单细胞 Malignant_sc 的 top 200 基因 ====================
+cat("正在计算 Malignant_sc 的标记基因...\n")
+Malignant_sc_markers <- FindAllMarkers(Malignant_sc, 
+                                        only.pos = TRUE, 
+                                        min.pct = 0.25, 
+                                        logfc.threshold = 0.25, 
+                                        test.use = "wilcox")
+Malignant_sc_significant <- subset(Malignant_sc_markers, p_val_adj < 0.05)
+Malignant_sc_top <- Malignant_sc_significant %>% 
+                    group_by(cluster) %>% 
+                    top_n(n = 200, wt = avg_log2FC)
+sc_genes <- unique(Malignant_sc_top$gene)
+cat("单细胞 top 200 基因数:", length(sc_genes), "\n")
+
+# ==================== 2. 获取空间 Malignant 的 top 200 基因 ====================
+cat("正在计算 Malignant 的标记基因...\n")
+Malignant_markers <- FindAllMarkers(Malignant, 
+                                     only.pos = TRUE, 
+                                     min.pct = 0.25, 
+                                     logfc.threshold = 0.25, 
+                                     test.use = "wilcox")
+Malignant_significant <- subset(Malignant_markers, p_val_adj < 0.05)
+Malignant_top <- Malignant_significant %>% 
+                 group_by(cluster) %>% 
+                 top_n(n = 200, wt = avg_log2FC)
+sp_genes <- unique(Malignant_top$gene)
+cat("空间 top 200 基因数:", length(sp_genes), "\n")
+
+# ==================== 3. 计算重叠基因 ====================
+overlap.genes <- intersect(sc_genes, sp_genes)
+cat("重叠基因数:", length(overlap.genes), "\n")
+
+# 如果重叠基因太少，给出警告
+if (length(overlap.genes) < 50) {
+  cat("警告：重叠基因较少，建议增大 top_n 或使用高变基因\n")
+}
+
+# ==================== 4. 获取细胞类型 ====================
+sc_types <- unique(Malignant_sc$sub_cell_type)
+sp_types <- unique(Malignant$sub_cell_type)
+cat("单细胞类型数:", length(sc_types), "\n")
+cat("空间类型数:", length(sp_types), "\n")
+
+# ==================== 5. 获取表达数据 ====================
+# 使用 counts layer 并做 log1p 转换
+expr_sc <- GetAssayData(Malignant_sc, assay = "RNA", layer = "counts")[overlap.genes, , drop = FALSE]
+expr_sp <- GetAssayData(Malignant, assay = "RNA", layer = "counts")[overlap.genes, , drop = FALSE]
+
+expr_sc <- log1p(expr_sc)
+expr_sp <- log1p(expr_sp)
+
+min_cells <- 5
+
+# ==================== 6. 计算平均表达谱 ====================
+# 单细胞
+sc_avg <- matrix(NA, nrow = length(sc_types), ncol = length(overlap.genes))
+rownames(sc_avg) <- sc_types
+colnames(sc_avg) <- overlap.genes
+for (i in seq_along(sc_types)) {
+  ct <- sc_types[i]
+  cells <- colnames(Malignant_sc)[Malignant_sc$sub_cell_type == ct]
+  if (length(cells) >= min_cells) {
+    sc_avg[i, ] <- rowMeans(expr_sc[, cells, drop = FALSE])
+  } else {
+    cat("单细胞类型", ct, "细胞数不足", min_cells, "，跳过\n")
+  }
+}
+
+# 空间
+sp_avg <- matrix(NA, nrow = length(sp_types), ncol = length(overlap.genes))
+rownames(sp_avg) <- sp_types
+colnames(sp_avg) <- overlap.genes
+for (i in seq_along(sp_types)) {
+  ct <- sp_types[i]
+  cells <- colnames(Malignant)[Malignant$sub_cell_type == ct]
+  if (length(cells) >= min_cells) {
+    sp_avg[i, ] <- rowMeans(expr_sp[, cells, drop = FALSE])
+  } else {
+    cat("空间类型", ct, "细胞数不足", min_cells, "，跳过\n")
+  }
+}
+
+# 移除全NA的行
+sc_avg <- sc_avg[complete.cases(sc_avg), , drop = FALSE]
+sp_avg <- sp_avg[complete.cases(sp_avg), , drop = FALSE]
+cat("有效单细胞类型数:", nrow(sc_avg), "\n")
+cat("有效空间类型数:", nrow(sp_avg), "\n")
+
+# ==================== 7. 计算相关性矩阵 ====================
+cor_matrix <- matrix(NA, nrow = nrow(sc_avg), ncol = nrow(sp_avg),
+                     dimnames = list(rownames(sc_avg), rownames(sp_avg)))
+for (i in 1:nrow(sc_avg)) {
+  for (j in 1:nrow(sp_avg)) {
+    cor_matrix[i, j] <- cor(sc_avg[i, ], sp_avg[j, ], method = "spearman", use = "complete.obs")
+  }
+}
+
+cat("相关性范围:", range(cor_matrix, na.rm = TRUE), "\n")
+plot_width <- 14   # 增加宽度
+plot_height <- 12  # 增加高度
+# ==================== 8. 绘制热图 ====================
+pdf("malignant_sc_subcelltype_correlation.pdf", width = plot_width, height = plot_height)
+
+# 计算需要的边距：左边距（行名）+ 右边距（图例）+ 底部边距（列名）+ 顶部边距（标题）
+# 使用 cellwidth 和 cellheight 控制每个格子的大小，使热图变小
+pheatmap(cor_matrix,
+         main = paste("Spearman correlation (", length(overlap.genes), " genes)", sep = ""),
+         fontsize = 12,                    # 增大基础字体（原 8 → 12）
+         fontsize_row = 10,                # 行名大小（原 8 → 10）
+         fontsize_col = 10,                # 列名大小（原 8 → 10）
+         fontsize_number = 6,              # 数字大小（如果显示）
+         color = colorRampPalette(c("blue", "white", "red"))(100),
+         cluster_rows = TRUE,
+         cluster_cols = TRUE,
+         display_numbers = FALSE,
+         # 关键：控制格子大小，让热图变小
+         cellwidth = 18,                   # 每个格子宽度（像素）
+         cellheight = 18,                  # 每个格子高度（像素）
+         # 调整边距（增加底部和左边空间给长标签）
+         margins = c(12, 12))              # 底部边距12，左边边距12
+
+dev.off()
 ```
 # different expr genes(malignant)
 ```R
@@ -6933,21 +9081,36 @@ ggsave("metabolic1_vs_metabolic2_pathway_diff.pdf", plot = p, width = 10, height
 fib <- subset(obj,subset=cell_type=="Fibroblasts")
 
 fib <- NormalizeData(fib)
-fib <- FindVariableFeatures(fib, nfeatures = 2000)
+fib <- FindVariableFeatures(fib, nfeatures = 3000)
 hvgs <- VariableFeatures(fib)
 fib <- ScaleData(fib, features = hvgs)
 fib <- RunPCA(fib, features = hvgs, npcs = 50)
 p <- ElbowPlot(fib, ndims = 30)
 ggsave("p3.png",plot=p)
 
-fib <- FindNeighbors(fib, dims = 1:20)
+pca_var <- fib[["pca"]]@stdev^2 / sum(fib[["pca"]]@stdev^2)
+cumsum_var <- cumsum(pca_var)
+
+# 看达到多少 PC 时累计方差 > 70% / 80% / 90%
+which(cumsum_var > 0.7)[1]   # 70%
+which(cumsum_var > 0.8)[1]   # 80%
+which(cumsum_var > 0.9)[1]   # 90%
+
+
+library(harmony)
+fib <- RunHarmony(fib, "dataset")
+
+fib <- FindNeighbors(fib, reduction = "harmony",dims = 1:23)
 fib <- FindClusters(fib, resolution = 0.3)
-fib <- RunUMAP(fib, dims = 1:20)
+fib <- RunUMAP(fib,reduction = "harmony", dims = 1:23)
+
+fib <- subset(fib,subset=seurat_clusters %in% c(0,1,2,6,7,9))
+fib <- RunUMAP(fib, reduction = "harmony", dims = 1:23, return.model = TRUE)
 
 library(ggplot2)
 library(ggsci)
 npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(10)
+npg_extended <- colorRampPalette(npg_pal)(12)
 
 seurat_clusters <- as.character(unique(fib@meta.data$seurat_clusters))  # 转换为字符向量
 num_legend_items <- length(seurat_clusters)  # 图例的个数
@@ -6992,6 +9155,8 @@ DimPlot(fib, reduction = "umap", label = TRUE, pt.size = 1, label.size = 8) +
 
 dev.off()
 
+p <- DimPlot(fib, reduction = "umap", group.by = "orig.ident", label = FALSE)
+ggsave("fib_orig.png",plot=p)
 
 library(dplyr)
 fib_markers <- FindAllMarkers(fib, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use = "wilcox")
@@ -7008,12 +9173,48 @@ identity_mapping <- c(
   "3" = "Fib_pCAF"
 )
 
+identity_mapping <- c(
+  "0" = "Fib_myCAF",
+  "1" = "Fib_matCAF",
+  "2" = "Fib_iCAF",
+  "6" = "Fib_Pericyte",
+  "7" = "Fib_pCAF"
+)
+fib$seurat_clusters <- factor(fib$seurat_clusters)
+
+table(fib$seurat_clusters)
 sub_cell_type <- identity_mapping[fib@meta.data$seurat_clusters]
 fib@meta.data$sub_cell_type <- sub_cell_type
 
 
 npg_pal <- pal_npg()(10)
 npg_extended <- colorRampPalette(npg_pal)(5)
+
+cluster_colors <- c(
+  # 浅色系在前（浅蓝第一个）
+  "#A0CBE8",   # 1 浅蓝（你要的放第一个）
+  "#FFBE7D",   # 2 浅橙
+  "#8CD17D",   # 3 浅绿
+  "#86BCB6",   # 4 浅青
+  "#FF9D9A",   # 5 浅红
+  "#FABFD2",   # 6 浅粉
+  "#D4A6C8",   # 7 浅紫
+  "#F1CE63",   # 8 淡黄
+  "#D7B5A6",   # 9 浅棕
+  "#B07AA1",   # 10 紫灰
+  "#BAB0AC",   # 11 浅灰
+  
+  # 深色系在后
+  "#4E79A7",   # 12 深蓝
+  "#F28E2B",   # 13 橙
+  "#59A14F",   # 14 深绿
+  "#E15759",   # 15 红
+  "#499894",   # 16 青绿
+  "#D37295",   # 17 玫红
+  "#B6992D",   # 18 土黄
+  "#9D7660",   # 19 棕
+  "#79706E"    # 20 深灰
+)
 
 cell_types <- as.character(unique(fib@meta.data$sub_cell_type))
 num_legend_items <- length(cell_types)  # 图例的个数
@@ -7029,7 +9230,7 @@ DimPlot(fib, reduction = "umap", label = TRUE, pt.size = 1, group.by = "sub_cell
     xlab("UMAP_1") +
     ylab("UMAP_2") +
     ggtitle(NULL) +
-    scale_color_manual(values = npg_pal) +
+    scale_color_manual(values = cluster_colors) +
     coord_fixed(ratio = 1) +
     guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
     theme(
@@ -7302,7 +9503,8 @@ mPT <- subset(obj,subset=tissue=="mPT")
 ```
 # macro sc
 ```R
-macro <- subset(obj,subset=cell_type=="Macrophages")
+obj_sc <- readRDS("sc_obj_anno.rds")
+macro <- subset(obj_sc,subset=cell_type=="Macrophages")
 library(Seurat)
 macro <- NormalizeData(macro)
 macro <- FindVariableFeatures(macro, nfeatures = 2000)
@@ -7313,14 +9515,27 @@ library(ggplot2)
 p <- ElbowPlot(macro, ndims = 30)
 ggsave("p3.png",plot=p)
 
-macro <- FindNeighbors(macro, dims = 1:20)
+pca_var <- macro[["pca"]]@stdev^2 / sum(macro[["pca"]]@stdev^2)
+cumsum_var <- cumsum(pca_var)
+
+# 看达到多少 PC 时累计方差 > 70% / 80% / 90%
+which(cumsum_var > 0.7)[1]   # 70%
+which(cumsum_var > 0.8)[1]   # 80%
+which(cumsum_var > 0.9)[1]   # 90%
+
+library(harmony)
+macro <- RunHarmony(macro, "dataset")
+macro <- FindNeighbors(macro, reduction = "harmony",dims = 1:21)
 macro <- FindClusters(macro, resolution = 0.3)
-macro <- RunUMAP(macro, dims = 1:20)
+macro <- RunUMAP(macro, reduction = "harmony", dims = 1:21)
+
+macro <- subset(macro,subset=seurat_clusters %in% c(1,2,3,5,6,8,9,10,11))
+macro <- RunUMAP(macro, reduction = "harmony", dims = 1:21)
 
 library(ggplot2)
 library(ggsci)
 npg_pal <- pal_npg()(10)
-npg_extended <- colorRampPalette(npg_pal)(10)
+npg_extended <- colorRampPalette(npg_pal)(17)
 
 seurat_clusters <- as.character(unique(macro@meta.data$seurat_clusters))  # 转换为字符向量
 num_legend_items <- length(seurat_clusters)  # 图例的个数
@@ -7365,6 +9580,8 @@ DimPlot(macro, reduction = "umap", label = TRUE, pt.size = 1, label.size = 8) +
 
 dev.off()
 
+p <- DimPlot(macro, reduction = "umap", group.by = "dataset", label = FALSE)
+ggsave("macro_orig.png",plot=p)
 
 library(dplyr)
 macro_markers <- FindAllMarkers(macro, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use = "wilcox")
@@ -7384,15 +9601,54 @@ identity_mapping <- c(
   "7" = "Macro_Proliferative"
 )
 
+identity_mapping <- c(
+  "1"  = "Macro_Lipid-associated_1",
+  "2"  = "Macro_Tissue-resident",
+  "3"  = "Macro_Pro-inflammatory_1",
+  "5"  = "Macro_Lipid-associated_2",
+  "6"  = "Macro_Immunosuppressive",
+  "8"  = "Macro_Pro-inflammatory_2",
+  "9"  = "Macro_Stress-response",
+  "10" = "Macro_Proliferative",
+  "11" = "Macro_Complement-enriched"
+)
 
-sub_cell_type <- identity_mapping[macro_sc@meta.data$seurat_clusters]
-macro_sc@meta.data$sub_cell_type <- sub_cell_type
+macro$seurat_clusters <- factor(macro$seurat_clusters)
+
+table(macro$seurat_clusters)
+
+sub_cell_type <- identity_mapping[macro@meta.data$seurat_clusters]
+macro@meta.data$sub_cell_type <- sub_cell_type
 
 
 npg_pal <- pal_npg()(10)
 npg_extended <- colorRampPalette(npg_pal)(5)
-
-cell_types <- as.character(unique(macro_sc@meta.data$sub_cell_type))
+cluster_colors <- c(
+  # 浅色系在前（浅蓝第一个）
+  "#A0CBE8",   # 1 浅蓝（你要的放第一个）
+  "#FFBE7D",   # 2 浅橙
+  "#8CD17D",   # 3 浅绿
+  "#86BCB6",   # 4 浅青
+  "#FF9D9A",   # 5 浅红
+  "#FABFD2",   # 6 浅粉
+  "#D4A6C8",   # 7 浅紫
+  "#F1CE63",   # 8 淡黄
+  "#D7B5A6",   # 9 浅棕
+  "#B07AA1",   # 10 紫灰
+  "#BAB0AC",   # 11 浅灰
+  
+  # 深色系在后
+  "#4E79A7",   # 12 深蓝
+  "#F28E2B",   # 13 橙
+  "#59A14F",   # 14 深绿
+  "#E15759",   # 15 红
+  "#499894",   # 16 青绿
+  "#D37295",   # 17 玫红
+  "#B6992D",   # 18 土黄
+  "#9D7660",   # 19 棕
+  "#79706E"    # 20 深灰
+)
+cell_types <- as.character(unique(macro@meta.data$sub_cell_type))
 num_legend_items <- length(cell_types)  # 图例的个数
 max_label_length <- max(nchar(cell_types))  # 图例名称的最大长度
 
@@ -7402,11 +9658,11 @@ legend_width_factor <- 100  # 每个图例项增加的宽度
 label_length_factor <- 10  # 每个字符增加的宽度
 dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
 pdf("macro_sc_annotation.pdf", width = dynamic_width/300, height = base_height/300)
-DimPlot(macro_sc, reduction = "umap", label = TRUE, pt.size = 1, group.by = "sub_cell_type", label.size = 4) +
+DimPlot(macro, reduction = "umap", label = TRUE, pt.size = 1, group.by = "sub_cell_type", label.size = 4) +
     xlab("UMAP_1") +
     ylab("UMAP_2") +
     ggtitle(NULL) +
-    scale_color_manual(values = npg_pal) +
+    scale_color_manual(values = cluster_colors) +
     coord_fixed(ratio = 1) +
     guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
     theme(
@@ -8030,6 +10286,64 @@ ggsave("bubble_plot_mast_optimized.pdf", plot = p_combined, width = 16, height =
 ```R
 #找到最佳k
 bsub -q mpi -n 24 -J Rscript best_k_sub.r
+#重新画best-k curve
+
+out_dir <- "./cellcharter_results_autok"
+all_stability <- readRDS("./cellcharter_results_autok/autok_combined_results.rds")
+pdf(file.path(out_dir, "stability_curve_combined.pdf"), width = 12, height = 6)
+
+# 提取数据
+k_vals <- all_stability$all_stability$k
+stability_vals <- all_stability$all_stability$stability
+best_k <- all_stability$global_best_k
+
+# 计算局部最大值（只针对稳定值 > 0 的区域，避免尾部零值干扰）
+# 找到稳定值 > 0 的索引
+pos_idx <- which(stability_vals > 0)
+if (length(pos_idx) >= 3) {
+  stability_pos <- stability_vals[pos_idx]
+  k_pos <- k_vals[pos_idx]
+  # 计算局部最大值
+  peaks_idx <- which(diff(sign(diff(stability_pos))) == -2) + 1
+  peaks_k <- k_pos[peaks_idx]
+  peaks_stability <- stability_pos[peaks_idx]
+} else {
+  peaks_k <- NULL
+  peaks_stability <- NULL
+}
+
+# 绘图
+plot(k_vals, stability_vals,
+     type = "b",           # 同时画点和线
+     xlab = "Number of clusters (k)",
+     ylab = "Stability score",
+     main = "Cluster stability across k values",
+     pch = 1,              # 空心圆点
+     col = "black",
+     lty = 1,
+     lwd = 1.5,
+     ylim = c(0, max(stability_vals) * 1.05))
+
+# 标注局部最大值点（实心红点）
+if (length(peaks_k) > 0) {
+  points(peaks_k, peaks_stability,
+         col = "red", pch = 16, cex = 1.5)
+}
+
+# 最佳 k 值竖线
+abline(v = best_k, col = "blue", lty = 2, lwd = 1.5)
+
+
+
+# 图例
+legend("topright",
+       legend = c("Stability", "Local maxima", "Best k"),
+       col = c("black", "red", "blue"),
+       pch = c(1, 16, NA),
+       lty = c(1, NA, 2),
+       bty = "n")
+
+dev.off()
 #最佳k聚类划分CN
 bsub -q mpi -n 24 -J Rscript run_with_fixed_k.r
 #CN画图
@@ -8324,3 +10638,5229 @@ p <- DimPlot(temp_seurat,
 sample_filename <- paste0("spatial_domain_highlight_", target_sample, "_", target_cn, "_specific_types.pdf")
 ggsave(sample_filename, p, width = 14, height = 10, dpi = 300)
 message(paste("保存高亮图:", sample_filename))
+```
+# fov 点图
+```R
+library(ggplot2)
+library(dplyr)
+
+# 指定的6种细胞类型
+target_cell_types <- c("Malignant cells", "Fibroblasts", "Endothelial cells", 
+                       "T cells", "Macrophages", "Dendritic cells")
+
+# 指定的6个 FOV
+selected_fovs <- c(152, 153, 154, 156, 157, 158)
+fov_data <- obj@meta.data %>% filter(fov %in% selected_fovs)
+
+# 创建分组变量
+fov_data$cell_group <- "Other"
+for (ct in target_cell_types) {
+  fov_data$cell_group[fov_data$CellType == ct] <- ct
+}
+
+# 颜色方案（RColorBrewer Set1 经典配色）
+cell_colors <- c(
+  "Malignant cells" = "#df928e",
+  "Fibroblasts" = "#1f78b4",
+  "Endothelial cells" = "#B5EFB5",
+  "T cells" = "#ffc089",
+  "Macrophages" = "#6a3d9a",
+  "Dendritic cells" = "#dbc43f",
+  "Other" = "#E0E0E0"
+)
+primcol2 = c('#1f78b4','#ffc089','#B5EFB5','#793c1b',
+             '#6a3d9a','#333333','#ffff33',
+             '#df928e')
+# 只保留出现在数据中的颜色
+used_colors <- cell_colors[names(cell_colors) %in% unique(fov_data$cell_group)]
+if ("Other" %in% unique(fov_data$cell_group) && !"Other" %in% names(used_colors)) {
+  used_colors <- c(used_colors, "Other" = "#E0E0E0")
+}
+
+
+p <- ggplot(fov_data, aes(x = CenterX_global_px, y = CenterY_global_px, color = cell_group)) +
+  geom_point(size = 0.01, alpha = 1) +  
+  scale_color_manual(values = used_colors, name = "Cell Type") +
+  labs(title = "mPT FOVs",
+       x = "X Coordinate (px)",
+       y = "Y Coordinate (px)") +
+  theme_bw() +
+  theme(
+    aspect.ratio = 1/2,  # 👈 就加这一行！
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+    legend.position = "right",
+    panel.grid = element_blank(),
+    panel.background = element_rect(fill = "white", color = NA),
+    # 关键：图例点大小
+    legend.key.size = unit(0.8, "cm"),      # 图例键大小
+    legend.text = element_text(size = 10)   # 图例文字大小
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 5)))  # 图例点大小
+
+ggsave("fovs_combined_real_coords_mPT_fov152-158.pdf", p, width = 7, height = 3.5, dpi = 300)
+
+#nmpt
+selected_fovs <- c(365,366,367,368,371,372,373,374)
+
+# 筛选数据
+fov_data <- obj@meta.data %>% filter(fov %in% selected_fovs)
+
+# 创建分组变量
+fov_data$cell_group <- "Other"
+for (ct in target_cell_types) {
+  fov_data$cell_group[fov_data$CellType == ct] <- ct
+}
+
+# 颜色方案（RColorBrewer Set1 经典配色）
+cell_colors <- c(
+  "Malignant cells" = "#df928e",
+  "Fibroblasts" = "#1f78b4",
+  "Endothelial cells" = "#B5EFB5",
+  "T cells" = "#ffc089",
+  "Macrophages" = "#6a3d9a",
+  "Dendritic cells" = "#dbc43f",
+  "Other" = "#E0E0E0"
+)
+
+# 只保留出现在数据中的颜色
+used_colors <- cell_colors[names(cell_colors) %in% unique(fov_data$cell_group)]
+if ("Other" %in% unique(fov_data$cell_group) && !"Other" %in% names(used_colors)) {
+  used_colors <- c(used_colors, "Other" = "#E0E0E0")
+}
+
+
+p <- ggplot(fov_data, aes(x = CenterX_global_px, y = CenterY_global_px, color = cell_group)) +
+  geom_point(size = 0.01, alpha = 1) +  
+  scale_color_manual(values = used_colors, name = "Cell Type") +
+  labs(title = "nmPT FOVs",
+       x = "X Coordinate (px)",
+       y = "Y Coordinate (px)") +
+  theme_bw() +
+  theme(
+    aspect.ratio = 1/2,  # 👈 就加这一行！
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+    legend.position = "right",
+    panel.grid = element_blank(),
+    panel.background = element_rect(fill = "white", color = NA),
+    # 关键：图例点大小
+    legend.key.size = unit(0.8, "cm"),      # 图例键大小
+    legend.text = element_text(size = 10)   # 图例文字大小
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 5)))  # 图例点大小
+
+ggsave("fovs_combined_real_coords_nmPT_fov365-374.pdf", p, width = 7, height = 3.5, dpi = 300)
+
+selected_fovs <- c(228,229,233,234)
+fov_data <- obj@meta.data %>% filter(fov %in% selected_fovs)
+
+# 创建分组变量
+fov_data$cell_group <- "Other"
+for (ct in target_cell_types) {
+  fov_data$cell_group[fov_data$CellType == ct] <- ct
+}
+
+# 颜色方案（RColorBrewer Set1 经典配色）
+cell_colors <- c(
+  "Malignant cells" = "#df928e",
+  "Fibroblasts" = "#1f78b4",
+  "Endothelial cells" = "#B5EFB5",
+  "T cells" = "#ffc089",
+  "Macrophages" = "#6a3d9a",
+  "Dendritic cells" = "#dbc43f",
+  "Other" = "#E0E0E0"
+)
+primcol2 = c('#1f78b4','#ffc089','#B5EFB5','#793c1b',
+             '#6a3d9a','#333333','#ffff33',
+             '#df928e')
+# 只保留出现在数据中的颜色
+used_colors <- cell_colors[names(cell_colors) %in% unique(fov_data$cell_group)]
+if ("Other" %in% unique(fov_data$cell_group) && !"Other" %in% names(used_colors)) {
+  used_colors <- c(used_colors, "Other" = "#E0E0E0")
+}
+
+
+p <- ggplot(fov_data, aes(x = CenterX_global_px, y = CenterY_global_px, color = cell_group)) +
+  geom_point(size = 0.04, alpha = 1) +  
+  scale_color_manual(values = used_colors, name = "Cell Type") +
+  labs(title = "metLN FOVs",
+       x = "X Coordinate (px)",
+       y = "Y Coordinate (px)") +
+  theme_bw() +
+  theme(
+    aspect.ratio = 1/2,  # 👈 就加这一行！
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+    legend.position = "right",
+    panel.grid = element_blank(),
+    panel.background = element_rect(fill = "white", color = NA),
+    # 关键：图例点大小
+    legend.key.size = unit(0.8, "cm"),      # 图例键大小
+    legend.text = element_text(size = 10)   # 图例文字大小
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 5)))  # 图例点大小
+
+ggsave("fovs_combined_real_coords_metLN_fov228-234.pdf", p, width = 7, height = 3.5, dpi = 300)
+
+#negLN
+selected_fovs <- c(303, 304, 305, 306, 307, 308)
+
+# 直接从 Seurat 对象的 metadata 中筛选
+fov_data <- obj@meta.data %>%
+  filter(!(tissue == "negLN" & CellType %in% c("Malignant cells", "Alveolar type II cells"))) %>%
+  filter(fov %in% selected_fovs)
+
+# 创建分组变量
+target_cell_types <- c("Malignant cells", "Fibroblasts", "Endothelial cells", 
+                       "T cells", "Macrophages", "Dendritic cells")
+
+fov_data$cell_group <- "Other"
+for (ct in target_cell_types) {
+  fov_data$cell_group[fov_data$CellType == ct] <- ct
+}
+
+# 查看结果
+table(fov_data$cell_group)
+
+# 颜色方案（RColorBrewer Set1 经典配色）
+cell_colors <- c(
+  "Malignant cells" = "#df928e",
+  "Fibroblasts" = "#1f78b4",
+  "Endothelial cells" = "#B5EFB5",
+  "T cells" = "#ffc089",
+  "Macrophages" = "#6a3d9a",
+  "Dendritic cells" = "#dbc43f",
+  "Other" = "#E0E0E0"
+)
+
+# 只保留出现在数据中的颜色
+used_colors <- cell_colors[names(cell_colors) %in% unique(fov_data$cell_group)]
+if ("Other" %in% unique(fov_data$cell_group) && !"Other" %in% names(used_colors)) {
+  used_colors <- c(used_colors, "Other" = "#E0E0E0")
+}
+
+
+p <- ggplot(fov_data, aes(x = CenterX_global_px, y = CenterY_global_px, color = cell_group)) +
+  geom_point(size = 0.04, alpha = 1) +  
+  scale_color_manual(values = used_colors, name = "Cell Type") +
+  labs(title = "negLN FOVs",
+       x = "X Coordinate (px)",
+       y = "Y Coordinate (px)") +
+  theme_bw() +
+  theme(
+    aspect.ratio = 1/2,  # 👈 就加这一行！
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+    legend.position = "right",
+    panel.grid = element_blank(),
+    panel.background = element_rect(fill = "white", color = NA),
+    # 关键：图例点大小
+    legend.key.size = unit(0.8, "cm"),      # 图例键大小
+    legend.text = element_text(size = 10)   # 图例文字大小
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 5)))  # 图例点大小
+
+ggsave("fovs_combined_real_coords_negLN_fov303-308.pdf", p, width = 7, height = 3.5, dpi = 300)
+```
+# 肿瘤亚型的空间分布
+```R
+library(ggplot2)
+library(dplyr)
+library(RColorBrewer)
+library(ggsai)
+
+# ===================== 提前定义恶性细胞亚型列表 =====================
+malignant_subtypes <- c(
+  "Tumor_Immune-inflamed_1", "Tumor_Immune-inflamed_2",
+  "Tumor_Metabolic_2", "Tumor_Metabolic_1",
+  "Tumor_Immunogenic", "Tumor_Stem-like",
+  "Tumor_EMT-like", "Tumor_Secretory", "Tumor_Proliferative"
+)
+
+# ===================== 第一步：数据准备 + 统一添加分面变量 =====================
+spatial_data <- obj@meta.data %>%
+  select(
+    CenterX_global_px, CenterY_global_px,
+    detailed, sample, fov, tissue,
+    Area.um2, Circularity, AspectRatio, NucArea,
+    Mean.PanCK, Mean.CD45, Mean.DAPI
+  ) %>%
+  filter(!is.na(CenterX_global_px), !is.na(CenterY_global_px)) %>%
+  # 1. 筛选目标tissue
+  filter(tissue %in% c("metLN", "negLN", "mPT", "nmPT")) %>%
+  filter(!is.na(tissue)) %>%
+  # 2. 标注cell_category（只保留恶性细胞亚型，其他归为背景）
+  mutate(
+    cell_category = case_when(
+      detailed %in% malignant_subtypes ~ detailed,
+      TRUE ~ "Other cells"
+    ),
+    # 3. 创建tissue_sample分面变量
+    tissue = factor(tissue, levels = c("metLN", "negLN", "mPT", "nmPT")),
+    tissue_sample = paste(tissue, sample, sep = "_")
+  )
+
+# 定义颜色（使用 NPG 调色板）
+n_tumor <- length(malignant_subtypes)
+npg_pal <- pal_npg()(10)  # NPG 默认有10种颜色
+tumor_colors <- colorRampPalette(npg_pal)(n_tumor)
+names(tumor_colors) <- malignant_subtypes
+
+# 其他细胞颜色（背景）
+other_color <- c("Other cells" = "#DCDCDC")
+
+# 合并所有颜色
+all_colors <- c(tumor_colors, other_color)
+
+# 调整图例顺序
+legend_order <- c(malignant_subtypes, "Other cells")
+
+# ===================== 第二步：分组1绘图（metLN, negLN） =====================
+group1_tissues <- c("metLN", "negLN")
+group1_data <- spatial_data %>% filter(tissue %in% group1_tissues)
+
+# 检查分组1数据
+if(nrow(group1_data) == 0) {
+  stop("分组1（metLN/negLN）无数据！")
+}
+
+# 按tissue_sample排序
+group1_data$tissue_sample <- factor(
+  group1_data$tissue_sample,
+  levels = unique(group1_data$tissue_sample[order(group1_data$tissue, group1_data$sample)])
+)
+
+# 计算分面行数（每行3个sample）
+total_facets1 <- length(unique(group1_data$tissue_sample))
+n_rows1 <- ceiling(total_facets1 / 3)
+
+# 绘图
+p_group1 <- ggplot(group1_data,
+                   aes(x = CenterX_global_px, y = CenterY_global_px, 
+                       color = cell_category)) +
+  # 第1层：Other cells（灰色背景）
+  geom_point(data = filter(group1_data, cell_category == "Other cells"),
+             alpha = 0.2, size = 0.3) +
+  # 第2层：恶性细胞亚型（彩色）
+  geom_point(data = filter(group1_data, cell_category %in% malignant_subtypes),
+             alpha = 0.9, size = 0.6) +
+  scale_color_manual(values = all_colors, breaks = legend_order) +
+  facet_wrap(~tissue_sample, scales = "free", ncol = 3, nrow = n_rows1) +
+  theme_minimal() +
+  labs(title = "Malignant Cell Subtypes Distribution - Lymph Nodes",
+       x = "X Coordinate (um)",
+       y = "Y Coordinate (um)",
+       color = "Cell Type") +
+  theme(
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+    strip.text = element_text(size = 10, face = "bold"),
+    strip.background = element_rect(fill = "gray90"),
+    legend.position = "bottom",
+    legend.box = "horizontal",
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 9, face = "bold"),
+    axis.text = element_text(size = 6),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid = element_line(color = "gray95")
+  )
+
+# 保存分组1PDF
+pdf("malignant_subtypes_LN.pdf", width = 15, height = 15)
+print(p_group1)
+dev.off()
+
+# ===================== 第三步：分组2绘图（mPT, nmPT） =====================
+group2_tissues <- c("mPT", "nmPT")
+group2_data <- spatial_data %>% filter(tissue %in% group2_tissues)
+
+if(nrow(group2_data) > 0) {
+  group2_data$tissue_sample <- factor(
+    group2_data$tissue_sample,
+    levels = unique(group2_data$tissue_sample[order(group2_data$tissue, group2_data$sample)])
+  )
+  
+  total_facets2 <- length(unique(group2_data$tissue_sample))
+  n_rows2 <- ceiling(total_facets2 / 3)
+  
+  p_group2 <- ggplot(group2_data,
+                     aes(x = CenterX_global_px, y = CenterY_global_px, 
+                         color = cell_category)) +
+    geom_point(data = filter(group2_data, cell_category == "Other cells"),
+               alpha = 0.2, size = 0.3) +
+    geom_point(data = filter(group2_data, cell_category %in% malignant_subtypes),
+               alpha = 0.9, size = 0.6) +
+    scale_color_manual(values = all_colors, breaks = legend_order) +
+    facet_wrap(~tissue_sample, scales = "free", ncol = 3, nrow = n_rows2) +
+    theme_minimal() +
+    labs(title = "Malignant Cell Subtypes Distribution - Primary Tumor",
+         x = "X Coordinate (um)",
+         y = "Y Coordinate (um)",
+         color = "Cell Type") +
+    theme(
+      panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+      panel.background = element_rect(fill = "white"),
+      plot.background = element_rect(fill = "white"),
+      plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+      strip.text = element_text(size = 10, face = "bold"),
+      strip.background = element_rect(fill = "gray90"),
+      legend.position = "bottom",
+      legend.box = "horizontal",
+      legend.text = element_text(size = 8),
+      legend.title = element_text(size = 9, face = "bold"),
+      axis.text = element_text(size = 6),
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      panel.grid = element_line(color = "gray95")
+    )
+  
+  pdf("malignant_subtypes_PT.pdf", width = 15, height = 15)
+  print(p_group2)
+  dev.off()
+}
+```
+# 丰度
+```R
+library(ggplot2)
+
+# 筛选目标细胞类型，例如 Tumor_Metabolic_1
+target_cell <- "Tumor_Immune-inflamed_1"
+data_subset <- obj@meta.data %>%
+  filter(sample == "C2", detailed == target_cell)
+
+# 使用 stat_density2d 绘制密度热图
+p <- ggplot(obj@meta.data %>% filter(sample == "C2"), 
+            aes(x = CenterX_global_px, y = CenterY_global_px)) +
+  # 背景点（所有细胞浅灰色）
+  geom_point(alpha = 0.1, size = 0.1, color = "lightgray") +
+  # 目标细胞密度等高线 + 填充
+  stat_density2d(data = data_subset,
+                 aes(fill = after_stat(density)), 
+                 geom = "raster", 
+                 contour = FALSE,
+                 alpha = 0.7) +
+  scale_fill_viridis_c(option = "plasma", name = "Density") +
+  coord_fixed() +
+  labs(title = paste("Spatial density of", target_cell),
+       x = "X Coordinate", y = "Y Coordinate") +
+  theme_minimal()
+
+ggsave(paste0("density_", target_cell, ".pdf"), p, width = 8, height = 6)
+```
+# fov 肿瘤亚型
+```R
+
+library(ggplot2)
+library(dplyr)
+
+# 指定的肿瘤亚型（根据你的 detailed 列中的实际名称）
+target_tumor_subtypes <- c("Tumor_Metabolic_1", "Tumor_Metabolic_2", 
+                           "Tumor_Immune-inflamed_1", "Tumor_Immune-inflamed_2",
+                           "Tumor_Immunogenic", "Tumor_Stem-like",
+                           "Tumor_EMT-like", "Tumor_Secretory", "Tumor_Proliferative")
+
+# 指定的 FOV
+selected_fovs <- c(257, 258)
+
+# 筛选数据：C2 样本 + 指定 FOV
+fov_data <- obj@meta.data %>%
+  filter(sample == "C2", fov %in% selected_fovs)
+
+# 创建分组变量：肿瘤亚型保留具体名称，其他细胞归为 "Other"
+fov_data$cell_group <- "Other"
+for (ct in target_tumor_subtypes) {
+  fov_data$cell_group[fov_data$detailed == ct] <- ct
+}
+
+# 颜色方案
+tumor_colors <- c(
+  "Tumor_Metabolic_1" = "#E41A1C",
+  "Tumor_Metabolic_2" = "#B22222",
+  "Tumor_Immune-inflamed_1" = "#E69F00",
+  "Tumor_Immune-inflamed_2" = "#D55E00",
+  "Tumor_Immunogenic" = "#4DAF4A",
+  "Tumor_Stem-like" = "#377EB8",
+  "Tumor_EMT-like" = "#984EA3",
+  "Tumor_Secretory" = "#FFD700",
+  "Tumor_Proliferative" = "#A65628"
+)
+
+other_color <- c("Other" = "#E0E0E0")
+cell_colors <- c(tumor_colors, other_color)
+
+# 只保留出现在数据中的颜色
+used_colors <- cell_colors[names(cell_colors) %in% unique(fov_data$cell_group)]
+if ("Other" %in% unique(fov_data$cell_group) && !"Other" %in% names(used_colors)) {
+  used_colors <- c(used_colors, "Other" = "#E0E0E0")
+}
+
+# 设置因子水平，确保 Other 在底层（先绘制），肿瘤细胞在上层
+fov_data$cell_group <- factor(fov_data$cell_group, 
+                               levels = c("Other", target_tumor_subtypes))
+
+# 绘图（分层绘制：先画 Other，再画肿瘤细胞）
+p <- ggplot() +
+  # 第1层：Other 细胞（底层）
+  geom_point(data = fov_data %>% filter(cell_group == "Other"),
+             aes(x = CenterX_global_px, y = CenterY_global_px),
+             color = "#E0E0E0", size = 0.01, alpha = 0.5) +
+  # 第2层：肿瘤亚型（上层）
+  geom_point(data = fov_data %>% filter(cell_group != "Other"),
+             aes(x = CenterX_global_px, y = CenterY_global_px, color = cell_group),
+             size = 0.01, alpha = 0.9) +
+  scale_color_manual(values = used_colors, name = "Cell Type") +
+  labs(title = "mPT (C2) - FOVs 257,258: Tumor Subtypes",
+       x = "X Coordinate (px)",
+       y = "Y Coordinate (px)") +
+  theme_bw() +
+  theme(
+    aspect.ratio = 1/2,
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+    legend.position = "right",
+    panel.grid = element_blank(),
+    panel.background = element_rect(fill = "white", color = NA),
+    legend.key.size = unit(0.6, "cm"),
+    legend.text = element_text(size = 8)
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 3), ncol = 1))
+
+# 保存
+ggsave("mPT_C2_fov257_258_tumor_subtypes.pdf", p, width = 7, height = 3.5, dpi = 300)
+```
+# DC
+```R
+options(future.globals.maxSize = 8000 * 1024^2)
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+obj <- readRDS("YA2025263-1_fin.rds")
+DC <- subset(obj,subset=CellType %in% c("Dendritic cells", "Plasmacytoid dendritic cells"))
+#DC <- SCTransform(DC,
+                  #vars.to.regress = "sample",
+                  #variable.features.n = 3000,
+                  #conserve.memory = TRUE,
+                  #verbose = TRUE)
+DC <- NormalizeData(DC)
+DC <- FindVariableFeatures(DC, nfeatures = 3000)
+hvgs <- VariableFeatures(DC)
+DC <- ScaleData(DC, features = hvgs)
+DC <- RunPCA(DC, features = hvgs, npcs = 50)
+
+#DC <- FindVariableFeatures(DC, selection.method = "vst", nfeatures = 4000)
+#hvgs <- VariableFeatures(DC)
+
+# 3. 关键：Scale 时 去除 线粒体、核糖体、细胞周期 干扰
+# 这是 DC 能分开的核心！
+#DC <- ScaleData(
+  DC,
+  features = hvgs,
+  vars.to.regress = c("nCount_RNA"), # 去批次/去污染
+  do.center = T, do.scale = T
+)
+
+
+
+# 5. 用 DC 特征基因跑 PCA，而不是全部基因
+#DC <- RunPCA(
+  DC,
+  npcs = 20,              # DC 亚型少，不需要50
+  verbose = F
+)
+
+
+p <- ElbowPlot(DC, ndims = 30)
+ggsave("p3.png",plot=p)
+pca_var <- DC[["pca"]]@stdev^2 / sum(DC[["pca"]]@stdev^2)
+cumsum_var <- cumsum(pca_var)
+
+# 看达到多少 PC 时累计方差 > 70% / 80% / 90%
+which(cumsum_var > 0.7)[1]   # 70%
+which(cumsum_var > 0.8)[1]   # 80%
+which(cumsum_var > 0.9)[1]   # 90%
+#library(harmony)
+#DC <- RunHarmony(DC,"tissue")
+
+DC <- FindNeighbors(DC, dims = 1:31)
+DC <- FindClusters(DC, resolution = 0.4)
+DC <- RunUMAP(DC, dims = 1:31)
+
+p <- DimPlot(DC, reduction = "umap", group.by = "sample", label = FALSE)
+ggsave("DC_orig.png", plot = p)
+
+library(ggplot2)
+library(ggsci)
+npg_pal <- pal_npg()(10)
+npg_extended <- colorRampPalette(npg_pal)(18)  # 0.6
+
+seurat_clusters <- as.character(unique(DC@meta.data$seurat_clusters))  # 转换为字符向量
+num_legend_items <- length(seurat_clusters)  # 图例的个数
+max_label_length <- max(nchar(seurat_clusters))  # 图例名称的最大长度
+
+base_width <- 3000  # 基础宽度
+base_height <- 3000  # 基础高度
+legend_width_factor <- 100  # 每个图例项增加的宽度
+label_length_factor <- 10  # 每个字符增加的宽度
+dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
+pdf("DC_clusters.pdf", width = dynamic_width / 300, height = base_height / 300)  # 转换为英寸
+
+DimPlot(DC, reduction = "umap", label = TRUE, pt.size = 1, label.size = 8) +
+    xlab("UMAP_1") +
+    ylab("UMAP_2") +
+    ggtitle(NULL) +
+    scale_color_manual(values = npg_extended) +
+    coord_fixed(ratio = 1) +
+    guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
+    theme(
+        text = element_text(size = 12, face = "bold"),
+        axis.text.x = element_text(size = 28, color = "black"),
+        axis.text.y = element_text(size = 28, color = "black"),
+        axis.title.x = element_text(size = 36, face = "bold", color = "black"),
+        axis.title.y = element_text(size = 36, face = "bold", color = "black", margin = margin(r = 20)),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        legend.text = element_text(size = 28, face = "bold", color = "black"),
+        legend.title = element_text(size = 28, face = "bold", color = "black"),
+        legend.position = "right",
+        legend.box.margin = margin(0, 0, 0, 0),
+        legend.key = element_blank(),
+        legend.background = element_blank(),
+        panel.background = element_rect(fill = "white", color = NA),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.line.x = element_line(color = "black", linewidth = 0.5),
+        axis.line.y = element_line(color = "black", linewidth = 0.5),
+        aspect.ratio = 1,
+        plot.margin = margin(10, 50, 10, 10)
+    )
+
+dev.off()
+
+library(dplyr)
+DC_markers <- FindAllMarkers(DC, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use = "wilcox")
+DC_significant_markers <- subset(DC_markers, p_val_adj < 0.05)
+#write.csv(DC_significant_markers, "DC_all_marker.csv")
+DC_significant_markers <- DC_significant_markers %>% group_by(cluster) %>% top_n(n = 50, wt = avg_log2FC)
+write.csv(DC_significant_markers, "DC_top_marker_50.csv")
+
+DC <- subset(DC,subset=seurat_clusters %in% c(0,1,2,3,4,5,6))
+DC <- RunUMAP(DC, dims = 1:31)
+library(ggplot2)
+library(pheatmap)
+library(dplyr)
+
+# ==================== 定义 DC 亚型基因集 ====================
+
+# 1. cDC1（1型常规树突状细胞）
+cdc1_genes <- c(
+  "CLEC9A", "XCR1", "BATF3", "IRF8", "IDO1",
+  "CADM1", "DNASE1L3", "WDFY4", "ITGAE", "CD103",
+  "TLR3", "TLR8", "IFNAR1", "IFNAR2", "STAT1",
+  "STAT2", "IRF1", "IRF7", "BATF2", "ZBTB46"
+)
+
+# 2. cDC2（2型常规树突状细胞）
+cdc2_genes <- c(
+  "CD1C", "CD1B", "CLEC10A", "FCER1A", "ITGAM",
+  "CD11B", "SIRPA", "CD172A", "FCGR2A", "FCGR2B",
+  "CLEC6A", "CLEC7A", "CLEC4A", "CLEC4C", "CD209",
+  "IL1R2", "IL1R1", "CD2", "CD5", "CD40"
+)
+
+# 3. pDC（浆细胞样树突状细胞）
+pdc_genes <- c(
+  "LILRA4", "IRF7", "TCF4", "CLEC4C", "IL3RA",
+  "CD123", "NRP1", "CD303", "CD304", "TLR7",
+  "TLR9", "BCL11A", "SPIB", "SPI1", "IRF8",
+  "PDCD1LG2", "CD300C", "CD86", "CD80", "CD40"
+)
+
+# 4. 成熟 DC（mDC）
+mature_dc_genes <- c(
+  "CCR7", "LAMP3", "CD83", "CD80", "CD86",
+  "CD40", "CD70", "CD40LG", "TNFRSF4", "TNFRSF9",
+  "CD274", "PDCD1LG2", "IDO1", "CCL19", "CCL22",
+  "CCL17", "CXCL10", "CXCL11", "IL6", "IL12A"
+)
+
+# 5. 迁移性 DC（Migratory DC）
+migratory_dc_genes <- c(
+  "CCR7", "CCL19", "CCL21", "CCL22", "CCL17",
+  "CD80", "CD86", "CD83", "LAMP3", "CD40",
+  "CD44", "MMP2", "MMP9", "S1PR1", "S1PR3",
+  "CXCR4", "CXCR5", "GPR183", "LTB", "LTBR"
+)
+
+# 6. 朗格汉斯细胞（Langerhans cells, LC）
+langerhans_genes <- c(
+  "CD207", "CD1A", "CD1C", "EPCAM", "KRT1",
+  "KRT10", "LANGERIN", "CD11B", "ITGAM", "CD11C",
+  "CD86", "CD80", "CD40", "CD274", "CXCR4",
+  "CCR6", "CCR7", "CD24", "CD44", "CD68"
+)
+
+# 7. 炎症性 DC（Inflammatory DC, infDC）
+inflammatory_dc_genes <- c(
+  "S100A8", "S100A9", "S100A12", "TNF", "IL1B",
+  "IL6", "CXCL8", "CCL2", "CCL3", "CCL4",
+  "CXCL1", "CXCL2", "CXCL3", "CCL20", "CCL5",
+  "NFKBIA", "NFKB1", "REL", "RELA", "STAT3"
+)
+
+# 8. 泛 DC 标志（pan-DC）
+pan_dc_genes <- c(
+  "FLT3", "ZBTB46", "IRF8", "ITGAX", "CD11C",
+  "HLA-DRA", "HLA-DRB", "CD86", "CD83", "CD40"
+)
+
+# ==================== 过滤存在的基因 ====================
+cdc1_genes <- cdc1_genes[cdc1_genes %in% rownames(DC)]
+cdc2_genes <- cdc2_genes[cdc2_genes %in% rownames(DC)]
+pdc_genes <- pdc_genes[pdc_genes %in% rownames(DC)]
+mature_dc_genes <- mature_dc_genes[mature_dc_genes %in% rownames(DC)]
+migratory_dc_genes <- migratory_dc_genes[migratory_dc_genes %in% rownames(DC)]
+langerhans_genes <- langerhans_genes[langerhans_genes %in% rownames(DC)]
+inflammatory_dc_genes <- inflammatory_dc_genes[inflammatory_dc_genes %in% rownames(DC)]
+
+cat("cDC1 基因数:", length(cdc1_genes), "\n")
+cat("cDC2 基因数:", length(cdc2_genes), "\n")
+cat("pDC 基因数:", length(pdc_genes), "\n")
+cat("成熟 DC 基因数:", length(mature_dc_genes), "\n")
+cat("迁移性 DC 基因数:", length(migratory_dc_genes), "\n")
+cat("朗格汉斯细胞 基因数:", length(langerhans_genes), "\n")
+cat("炎症性 DC 基因数:", length(inflammatory_dc_genes), "\n")
+
+# ==================== 计算评分 ====================
+DC <- AddModuleScore(DC, features = list(cdc1_genes), name = "cDC1_Score")
+DC <- AddModuleScore(DC, features = list(cdc2_genes), name = "cDC2_Score")
+DC <- AddModuleScore(DC, features = list(pdc_genes), name = "pDC_Score")
+DC <- AddModuleScore(DC, features = list(mature_dc_genes), name = "Mature_Score")
+DC <- AddModuleScore(DC, features = list(migratory_dc_genes), name = "Migratory_Score")
+DC <- AddModuleScore(DC, features = list(langerhans_genes), name = "LC_Score")
+DC <- AddModuleScore(DC, features = list(inflammatory_dc_genes), name = "InfDC_Score")
+
+# ==================== 计算每个 cluster 的平均评分 ====================
+score_cols <- c("cDC1_Score1", "cDC2_Score1", "pDC_Score1", 
+                "Mature_Score1", "LC_Score1", "InfDC_Score1")
+
+score_avg <- DC@meta.data %>%
+  group_by(seurat_clusters) %>%
+  summarise(across(all_of(score_cols), mean, na.rm = TRUE))
+
+# 转换为矩阵
+score_mat <- as.matrix(score_avg[, -1])
+rownames(score_mat) <- score_avg$seurat_clusters
+
+# ==================== 绘制热图 ====================
+# 按行缩放（Z-score）
+pheatmap(score_mat,
+         scale = "row",
+         cluster_rows = TRUE,
+         cluster_cols = FALSE,
+         main = "DC subset scores by cluster",
+         fontsize = 10,
+         color = colorRampPalette(c("blue", "white", "red"))(100),
+         filename = "DC_subset_scores_heatmap.pdf",
+         width = 10, height = 8)
+
+# 不缩放（原始值）
+pheatmap(score_mat,
+         scale = "none",
+         cluster_rows = TRUE,
+         cluster_cols = FALSE,
+         main = "DC subset scores by cluster (raw values)",
+         fontsize = 10,
+         color = colorRampPalette(c("blue", "white", "red"))(100),
+         filename = "DC_subset_scores_raw.pdf",
+         width = 10, height = 8)
+
+
+
+# ==================== 打印评分表 ====================
+print(score_avg)
+
+# ==================== 根据最高分自动命名建议 ====================
+score_cols_short <- c("cDC1", "cDC2", "pDC", "Mature",  "LC", "InfDC")
+colnames(score_mat) <- score_cols_short
+
+# 找出每个 cluster 的最高分亚型
+max_score <- apply(score_mat, 1, function(x) colnames(score_mat)[which.max(x)])
+max_value <- apply(score_mat, 1, max)
+
+cat("\n===== 命名建议 =====\n")
+for (i in seq_along(max_score)) {
+  cat("Cluster", rownames(score_mat)[i], ":", max_score[i], "(评分:", round(max_value[i], 3), ")\n")
+}
+
+identity_mapping <- c(
+  "0"= "DC_cDC2_1",
+  "1" = "DC_Mature",
+  "2"= "DC_cDC2_2",
+  "3" = "DC_pDC",
+  "4" = "DC_Mature",    
+  "5" = "DC_Inflammatory",
+  "6" = "DC_cDC1"
+)
+DC$seurat_clusters <- factor(DC$seurat_clusters)
+sub_cell_type <- identity_mapping[DC@meta.data$seurat_clusters]
+DC@meta.data$sub_cell_type <- sub_cell_type
+
+library(ggplot2)
+library(ggsci)
+npg_pal <- pal_npg()(10)
+npg_extended <- colorRampPalette(npg_pal)(5)
+cluster_colors <- c(
+  # 浅色系在前（浅蓝第一个）
+  "#A0CBE8",   # 1 浅蓝（你要的放第一个）
+  "#FFBE7D",   # 2 浅橙
+  "#8CD17D",   # 3 浅绿
+  "#86BCB6",   # 4 浅青
+  "#FF9D9A",   # 5 浅红
+  "#FABFD2",   # 6 浅粉
+  "#D4A6C8",   # 7 浅紫
+  "#F1CE63",   # 8 淡黄
+  "#D7B5A6",   # 9 浅棕
+  "#B07AA1",   # 10 紫灰
+  "#BAB0AC",   # 11 浅灰
+  
+  # 深色系在后
+  "#4E79A7",   # 12 深蓝
+  "#F28E2B",   # 13 橙
+  "#59A14F",   # 14 深绿
+  "#E15759",   # 15 红
+  "#499894",   # 16 青绿
+  "#D37295",   # 17 玫红
+  "#B6992D",   # 18 土黄
+  "#9D7660",   # 19 棕
+  "#79706E"    # 20 深灰
+)
+cell_types <- as.character(unique(DC@meta.data$sub_cell_type))
+num_legend_items <- length(cell_types)  # 图例的个数
+max_label_length <- max(nchar(cell_types))  # 图例名称的最大长度
+
+base_width <- 3000  # 基础宽度
+base_height <- 3000  # 基础高度
+legend_width_factor <- 100  # 每个图例项增加的宽度
+label_length_factor <- 10  # 每个字符增加的宽度
+dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
+pdf("DC_annotation.pdf", width = dynamic_width/300, height = base_height/300)
+DimPlot(DC, reduction = "umap", label = TRUE, pt.size = 1, group.by = "sub_cell_type", label.size = 4) +
+    xlab("UMAP_1") +
+    ylab("UMAP_2") +
+    ggtitle(NULL) +
+    scale_color_manual(values = cluster_colors ) +
+    coord_fixed(ratio = 1) +
+    guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
+    theme(
+        text = element_text(size = 8, face = "bold"),
+        axis.text.x = element_text(size = 28, color = "black"),
+        axis.text.y = element_text(size = 28, color = "black"),
+        axis.title.x = element_text(size = 36, face = "bold", color = "black"),
+        axis.title.y = element_text(size = 36, face = "bold", color = "black", margin = margin(r = 20)),  # 增加右侧间距
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        legend.text = element_text(size = 16, face = "bold", color = "black"),
+        legend.title = element_text(size = 16, face = "bold", color = "black"),
+        legend.position = "right",
+        legend.box.margin = margin(0, 0, 0, 0),
+        legend.key = element_blank(),
+        legend.background = element_blank(),
+        panel.background = element_rect(fill = "white", color = NA),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.line.x = element_line(color = "black", linewidth = 0.5),
+        axis.line.y = element_line(color = "black", linewidth = 0.5),
+        aspect.ratio = 1,
+        plot.margin = margin(10, 50, 10, 10)
+    )
+dev.off()
+```
+# DC sc
+```R
+obj <- readRDS("sc_obj_anno.rds")
+options(future.globals.maxSize = 8000 * 1024^2)
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+DC <- subset(obj,subset=cell_type %in% c("DC"))
+DC <- NormalizeData(DC)
+DC <- FindVariableFeatures(DC, nfeatures = 2000)
+hvgs <- VariableFeatures(DC)
+DC <- ScaleData(DC, features = hvgs)
+DC <- RunPCA(DC, features = hvgs, npcs = 50)
+
+library(ggplot2)
+p <- ElbowPlot(DC, ndims = 30)
+ggsave("p3.png", plot = p)
+
+pca_var <- DC[["pca"]]@stdev^2 / sum(DC[["pca"]]@stdev^2)
+cumsum_var <- cumsum(pca_var)
+
+# 看达到多少 PC 时累计方差 > 70% / 80% / 90%
+which(cumsum_var > 0.7)[1]   # 70%
+which(cumsum_var > 0.8)[1]   # 80%
+which(cumsum_var > 0.9)[1]   # 90%
+
+library(harmony)
+DC <- RunHarmony(DC, "dataset")
+DC <- FindNeighbors(DC, reduction = "harmony", dims = 1:20)
+DC <- FindClusters(DC, resolution = 0.2)
+DC <- RunUMAP(DC, reduction = "harmony", dims = 1:20)
+
+library(ggplot2)
+library(ggsci)
+npg_pal <- pal_npg()(10)
+npg_extended <- colorRampPalette(npg_pal)(17)
+
+seurat_clusters <- as.character(unique(DC@meta.data$seurat_clusters))  # 转换为字符向量
+num_legend_items <- length(seurat_clusters)  # 图例的个数
+max_label_length <- max(nchar(seurat_clusters))  # 图例名称的最大长度
+
+base_width <- 3000  # 基础宽度
+base_height <- 3000  # 基础高度
+legend_width_factor <- 100  # 每个图例项增加的宽度
+label_length_factor <- 10  # 每个字符增加的宽度
+dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
+pdf("DC_sc_clusters.pdf", width = dynamic_width / 300, height = base_height / 300)  # 转换为英寸
+
+DimPlot(DC, reduction = "umap", label = TRUE, pt.size = 1, label.size = 8) +
+    xlab("UMAP_1") +
+    ylab("UMAP_2") +
+    ggtitle(NULL) +
+    scale_color_manual(values = npg_extended) +
+    coord_fixed(ratio = 1) +
+    guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
+    theme(
+        text = element_text(size = 12, face = "bold"),
+        axis.text.x = element_text(size = 28, color = "black"),
+        axis.text.y = element_text(size = 28, color = "black"),
+        axis.title.x = element_text(size = 36, face = "bold", color = "black"),
+        axis.title.y = element_text(size = 36, face = "bold", color = "black", margin = margin(r = 20)),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        legend.text = element_text(size = 28, face = "bold", color = "black"),
+        legend.title = element_text(size = 28, face = "bold", color = "black"),
+        legend.position = "right",
+        legend.box.margin = margin(0, 0, 0, 0),
+        legend.key = element_blank(),
+        legend.background = element_blank(),
+        panel.background = element_rect(fill = "white", color = NA),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.line.x = element_line(color = "black", linewidth = 0.5),
+        axis.line.y = element_line(color = "black", linewidth = 0.5),
+        aspect.ratio = 1,
+        plot.margin = margin(10, 50, 10, 10)
+    )
+
+dev.off()
+
+p <- DimPlot(DC, reduction = "umap", group.by = "dataset", label = FALSE)
+ggsave("DC_orig.png", plot = p)
+
+library(dplyr)
+DC_markers <- FindAllMarkers(DC, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use = "wilcox")
+DC_significant_markers <- subset(DC_markers, p_val_adj < 0.05)
+#write.csv(DC_significant_markers, "DC_all_marker.csv")
+DC_significant_markers <- DC_significant_markers %>% group_by(cluster) %>% top_n(n = 50, wt = avg_log2FC)
+write.csv(DC_significant_markers, "DC_sc_top_marker_50.csv")
+
+pheatmap(score_mat,
+         scale = "row",
+         cluster_rows = TRUE,
+         cluster_cols = FALSE,
+         main = "DC subset scores by cluster",
+         fontsize = 10,
+         color = colorRampPalette(c("blue", "white", "red"))(100),
+         filename = "DC_sc_subset_scores_heatmap.pdf",
+         width = 10, height = 8)
+
+# 不缩放（原始值）
+pheatmap(score_mat,
+         scale = "none",
+         cluster_rows = TRUE,
+         cluster_cols = FALSE,
+         main = "DC subset scores by cluster (raw values)",
+         fontsize = 10,
+         color = colorRampPalette(c("blue", "white", "red"))(100),
+         filename = "DC_sc_subset_scores_raw.pdf",
+         width = 10, height = 8)
+
+DC <- subset(DC,subset=seurat_clusters %in% c(0,1,3,5,7,9))
+DC <- subset(DC,subset=seurat_clusters %in% c(0,1,3,5,7,9,10,11,12,13))
+DC <- RunUMAP(DC, reduction = "harmony",dims = 1:20)
+
+identity_mapping <- c(
+  "0" = "DC_Inflammatory",
+  "1" = "DC_cDC2",
+  "3" = "DC_pDC",
+  "5" = "DC_Langerhans",
+  "7" = "DC_Mature",
+  "9" = "DC_cDC1",
+  "10" = "DC_Inflammatory",
+  "11" = "DC_Inflammatory",
+  "12" = "DC_pDC",
+  "13" = "DC_Inflammatory"
+)
+
+identity_mapping <- c(
+  "0" = "DC_Inflammatory",
+  "1" = "DC_cDC2",
+  "3" = "DC_pDC",
+  "5" = "DC_Langerhans",
+  "7" = "DC_Mature",
+  "9" = "DC_cDC1"
+)
+DC$seurat_clusters <- factor(DC$seurat_clusters)
+sub_cell_type <- identity_mapping[DC@meta.data$seurat_clusters]
+DC@meta.data$sub_cell_type <- sub_cell_type
+
+library(ggplot2)
+library(ggsci)
+npg_pal <- pal_npg()(10)
+npg_extended <- colorRampPalette(npg_pal)(5)
+cluster_colors <- c(
+  # 浅色系在前（浅蓝第一个）
+  "#A0CBE8",   # 1 浅蓝（你要的放第一个）
+  "#FFBE7D",   # 2 浅橙
+  "#8CD17D",   # 3 浅绿
+  "#86BCB6",   # 4 浅青
+  "#FF9D9A",   # 5 浅红
+  "#FABFD2",   # 6 浅粉
+  "#D4A6C8",   # 7 浅紫
+  "#F1CE63",   # 8 淡黄
+  "#D7B5A6",   # 9 浅棕
+  "#B07AA1",   # 10 紫灰
+  "#BAB0AC",   # 11 浅灰
+  
+  # 深色系在后
+  "#4E79A7",   # 12 深蓝
+  "#F28E2B",   # 13 橙
+  "#59A14F",   # 14 深绿
+  "#E15759",   # 15 红
+  "#499894",   # 16 青绿
+  "#D37295",   # 17 玫红
+  "#B6992D",   # 18 土黄
+  "#9D7660",   # 19 棕
+  "#79706E"    # 20 深灰
+)
+cell_types <- as.character(unique(DC@meta.data$sub_cell_type))
+num_legend_items <- length(cell_types)  # 图例的个数
+max_label_length <- max(nchar(cell_types))  # 图例名称的最大长度
+
+base_width <- 3000  # 基础宽度
+base_height <- 3000  # 基础高度
+legend_width_factor <- 100  # 每个图例项增加的宽度
+label_length_factor <- 10  # 每个字符增加的宽度
+dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
+pdf("DC_sc_annotation.pdf", width = dynamic_width/300, height = base_height/300)
+DimPlot(DC, reduction = "umap", label = TRUE, pt.size = 1, group.by = "sub_cell_type", label.size = 4) +
+    xlab("UMAP_1") +
+    ylab("UMAP_2") +
+    ggtitle(NULL) +
+    scale_color_manual(values = cluster_colors ) +
+    coord_fixed(ratio = 1) +
+    guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
+    theme(
+        text = element_text(size = 8, face = "bold"),
+        axis.text.x = element_text(size = 28, color = "black"),
+        axis.text.y = element_text(size = 28, color = "black"),
+        axis.title.x = element_text(size = 36, face = "bold", color = "black"),
+        axis.title.y = element_text(size = 36, face = "bold", color = "black", margin = margin(r = 20)),  # 增加右侧间距
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        legend.text = element_text(size = 16, face = "bold", color = "black"),
+        legend.title = element_text(size = 16, face = "bold", color = "black"),
+        legend.position = "right",
+        legend.box.margin = margin(0, 0, 0, 0),
+        legend.key = element_blank(),
+        legend.background = element_blank(),
+        panel.background = element_rect(fill = "white", color = NA),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.line.x = element_line(color = "black", linewidth = 0.5),
+        axis.line.y = element_line(color = "black", linewidth = 0.5),
+        aspect.ratio = 1,
+        plot.margin = margin(10, 50, 10, 10)
+    )
+dev.off()
+```
+# B 
+```R
+options(future.globals.maxSize = 8000 * 1024^2)
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+obj <- readRDS("YA2025263-1_fin.rds")
+B <- subset(obj,subset=CellType %in% c("B cells", "Germinal center B cells", "immature B cells"))
+B <- NormalizeData(B)
+B <- FindVariableFeatures(B, nfeatures = 2000)
+hvgs <- VariableFeatures(B)
+B <- ScaleData(B, features = hvgs)
+B <- RunPCA(B, features = hvgs, npcs = 50)
+
+p <- ElbowPlot(B, ndims = 30)
+ggsave("p3.png", plot = p)
+pca_var <- B[["pca"]]@stdev^2 / sum(B[["pca"]]@stdev^2)
+cumsum_var <- cumsum(pca_var)
+
+# 看达到多少 PC 时累计方差 > 70% / 80% / 90%
+which(cumsum_var > 0.7)[1]   # 70%
+which(cumsum_var > 0.8)[1]   # 80%
+which(cumsum_var > 0.9)[1]   # 90%
+
+B <- FindNeighbors(B, dims = 1:30)
+B <- FindClusters(B, resolution = 0.3)
+B <- RunUMAP(B, dims = 1:30)
+
+library(ggplot2)
+library(ggsci)
+npg_pal <- pal_npg()(10)
+npg_extended <- colorRampPalette(npg_pal)(17)
+
+seurat_clusters <- as.character(unique(B@meta.data$seurat_clusters))  # 转换为字符向量
+num_legend_items <- length(seurat_clusters)  # 图例的个数
+max_label_length <- max(nchar(seurat_clusters))  # 图例名称的最大长度
+
+base_width <- 3000  # 基础宽度
+base_height <- 3000  # 基础高度
+legend_width_factor <- 100  # 每个图例项增加的宽度
+label_length_factor <- 10  # 每个字符增加的宽度
+dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
+pdf("B_clusters.pdf", width = dynamic_width / 300, height = base_height / 300)  # 转换为英寸
+
+DimPlot(B, reduction = "umap", label = TRUE, pt.size = 1, label.size = 8) +
+    xlab("UMAP_1") +
+    ylab("UMAP_2") +
+    ggtitle(NULL) +
+    scale_color_manual(values = npg_extended) +
+    coord_fixed(ratio = 1) +
+    guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
+    theme(
+        text = element_text(size = 12, face = "bold"),
+        axis.text.x = element_text(size = 28, color = "black"),
+        axis.text.y = element_text(size = 28, color = "black"),
+        axis.title.x = element_text(size = 36, face = "bold", color = "black"),
+        axis.title.y = element_text(size = 36, face = "bold", color = "black", margin = margin(r = 20)),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        legend.text = element_text(size = 28, face = "bold", color = "black"),
+        legend.title = element_text(size = 28, face = "bold", color = "black"),
+        legend.position = "right",
+        legend.box.margin = margin(0, 0, 0, 0),
+        legend.key = element_blank(),
+        legend.background = element_blank(),
+        panel.background = element_rect(fill = "white", color = NA),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.line.x = element_line(color = "black", linewidth = 0.5),
+        axis.line.y = element_line(color = "black", linewidth = 0.5),
+        aspect.ratio = 1,
+        plot.margin = margin(10, 50, 10, 10)
+    )
+
+dev.off()
+
+p <- DimPlot(B, reduction = "umap", group.by = "dataset", label = FALSE)
+ggsave("B_orig.png", plot = p)
+
+library(dplyr)
+B_markers <- FindAllMarkers(B, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use = "wilcox")
+B_significant_markers <- subset(B_markers, p_val_adj < 0.05)
+#write.csv(B_significant_markers, "B_all_marker.csv")
+B_significant_markers <- B_significant_markers %>% group_by(cluster) %>% top_n(n = 50, wt = avg_log2FC)
+write.csv(B_significant_markers, "B_top_marker_50.csv")
+
+# ==================== B细胞亚型基因集 ====================
+library(Seurat)
+library(dplyr)
+library(pheatmap)
+
+# ==================== B 细胞完整专属基因集（无交叉污染）====================
+# 1. Immature B (未成熟B，骨髓未成熟，专属强)
+immature_b_genes <- c(
+  "VPREB1", "VPREB3", "IGLL1", "DNTT", "RAG1", "RAG2", "MME", "CD10"
+)
+
+transitional_b_genes <- c(
+  "CD24",      # 过渡B早期标志
+  "CD38",      # 过渡B早期标志
+  "BTLA",      # B、T淋巴细胞衰减因子
+  "MME",       # 中性内肽酶，在未成熟B表达
+  "VPREB3",    # 前B细胞标志，过渡期残留
+  "IGLL1",     # 与VPREB3类似，未成熟B特征
+  "PTPRC",     # CD45，过渡B高表达
+  "TCL1A"      # 辅助区分（TCL1A在过渡B中高，成熟B中也中高，但结合负选）
+)
+
+naive_b_genes <- c(
+  "MS4A1", "CD19", "CD37", "CD79A", "CD79B", 
+  "TCL1A", "LTB", "TXNIP", "CD52", "BTG1"
+)
+
+gc_b_genes <- c(
+  "BCL6", "AICDA", "MEF2C", "POU2AF1", "TCL1A", 
+  "LMO2", "BCL7A", "MYC", "CD38"
+)
+
+memory_b_genes <- c(
+  "CD27", "CD44", "CD80", "CD86", "CXCR3", 
+  "CD200", "ITGB1", "FCRL3", "FCRL4"
+)
+
+activated_b_genes <- c(
+  "CD69", "EGR1", "NFKBIZ", "DUSP2", "FOSB", 
+  "JUNB", "CD40", "CD70", "IL4R"
+)
+
+plasmablast_genes <- c(
+  "IRF4", "PRDM1", "XBP1", "SDC1", "CD38", 
+  "MKI67", "IGHM", "DERL3"
+)
+
+
+plasma_genes <- c(
+  "JCHAIN", "MZB1", "XBP1", "IGKC", "IGLC1", 
+  "IGHG1", "IGHA1", "SDC1", "FKBP11", "HERPUD1"
+)
+# Regulatory B（Breg，免疫抑制）
+
+breg_genes <- c(
+  "IL10", "TGFB1", "CD5", "CD1D", "PDCD1LG2", 
+  "LAG3", "CD200", "CD14"
+)
+# Proliferating B（增殖B，不分亚型）
+
+proliferating_b_genes <- c(
+  "MKI67", "TOP2A", "PCNA", "CCNB1", "CCNA2", "CDK1",
+  "BIRC5", "AURKB", "PLK1", "TYMS", "RRM2", "ASPM"
+)
+mature_b_genes <- c(
+  "CD19", "CD22", "BLK", "BANK1", "PAX5", "POU2F2", "CIITA", "FCER2","MS4A1","CD79A", "CD79B"
+)
+
+# ==================== 过滤在B对象中存在的基因 ====================
+immature_b_genes     <- immature_b_genes[immature_b_genes %in% rownames(B)]
+mature_b_genes     <- mature_b_genes[mature_b_genes %in% rownames(B)]
+transitional_b_genes <- transitional_b_genes[transitional_b_genes %in% rownames(B)]
+naive_b_genes        <- naive_b_genes[naive_b_genes %in% rownames(B)]
+
+gc_b_genes           <- gc_b_genes[gc_b_genes %in% rownames(B)]
+memory_b_genes       <- memory_b_genes[memory_b_genes %in% rownames(B)]
+activated_b_genes    <- activated_b_genes[activated_b_genes %in% rownames(B)]
+plasmablast_genes    <- plasmablast_genes[plasmablast_genes %in% rownames(B)]
+plasma_genes         <- plasma_genes[plasma_genes %in% rownames(B)]
+breg_genes           <- breg_genes[breg_genes %in% rownames(B)]
+proliferating_b_genes <- proliferating_b_genes[proliferating_b_genes %in% rownames(B)]
+
+# 输出数量
+cat("Immature B:    ", length(immature_b_genes), "\n")
+cat("mature B:    ", length(mature_b_genes), "\n")
+cat("Transitional B:", length(transitional_b_genes), "\n")
+cat("Naive B:       ", length(naive_b_genes), "\n")
+cat("GC B:          ", length(gc_b_genes), "\n")
+cat("Memory B:      ", length(memory_b_genes), "\n")
+cat("Activated B:   ", length(activated_b_genes), "\n")
+cat("Plasmablast:   ", length(plasmablast_genes), "\n")
+cat("Plasma:        ", length(plasma_genes), "\n")
+cat("Breg:          ", length(breg_genes), "\n")
+cat("增殖 B 基因数:", length(proliferating_b_genes), "\n")
+
+# ==================== 模块评分 ====================
+B <- AddModuleScore(B, features = list(immature_b_genes),     name = "ImmatureB_Score")
+B <- AddModuleScore(B, features = list(mature_b_genes),     name = "MatureB_Score")
+B <- AddModuleScore(B, features = list(transitional_b_genes), name = "TransitionalB_Score")
+B <- AddModuleScore(B, features = list(naive_b_genes),        name = "NaiveB_Score")
+B <- AddModuleScore(B, features = list(gc_b_genes),           name = "GCB_Score")
+B <- AddModuleScore(B, features = list(memory_b_genes),       name = "MemoryB_Score")
+B <- AddModuleScore(B, features = list(activated_b_genes),    name = "ActivatedB_Score")
+B <- AddModuleScore(B, features = list(plasmablast_genes),    name = "Plasmablast_Score")
+B <- AddModuleScore(B, features = list(plasma_genes),         name = "Plasma_Score")
+B <- AddModuleScore(B, features = list(breg_genes),           name = "Breg_Score")
+B <- AddModuleScore(B, features = list(proliferating_b_genes), name = "Proliferating_Score")
+
+# ==================== 按cluster计算平均评分 ====================
+score_cols <- c(
+  "ImmatureB_Score1", "TransitionalB_Score1", "NaiveB_Score1",
+   "GCB_Score1", "MemoryB_Score1",
+  "ActivatedB_Score1", "Plasmablast_Score1", "Plasma_Score1", "Breg_Score1", "Proliferating_Score1"
+)
+
+score_avg <- B@meta.data %>%
+  group_by(seurat_clusters) %>%
+  summarise(across(all_of(score_cols), mean, na.rm = TRUE))
+
+score_mat <- as.matrix(score_avg[, -1])
+rownames(score_mat) <- score_avg$seurat_clusters
+
+# ==================== 绘制热图 ====================
+my_color <- colorRampPalette(c("royalblue", "white", "red"))(100)
+my_breaks <- seq(-max(abs(score_mat)), max(abs(score_mat)), length.out = 101)
+
+# 按行缩放（推荐用于文章）
+pheatmap(score_mat,
+         scale = "row",
+         cluster_rows = TRUE,
+         cluster_cols = FALSE,
+         main = "B cell subset scores by cluster",
+         fontsize = 10,
+         color = my_color,
+         filename = "B_subset_scores_heatmap.pdf",
+         width = 10, height = 8)
+# 原始值热图
+max_raw <- max(abs(score_mat))
+my_breaks_raw <- seq(-max_raw, max_raw, length.out = 101)
+
+pheatmap(score_mat,
+         scale = "none",
+         cluster_rows = TRUE,
+         cluster_cols = FALSE,
+         main = "B cell subset scores (raw)",
+         fontsize = 10,
+         color = my_color,
+         breaks = my_breaks_raw,
+         filename = "B_subset_scores_raw.pdf",
+         width = 10, height = 8)
+
+
+# ==================== 输出表格 ====================
+print(score_avg)
+
+# ==================== 自动命名 ====================
+score_cols_short <- c(
+  "Immature B", "Transitional B", "Naive B", 
+  "GC B", "Memory B", "Activated B", "Plasmablast", "Plasma", "Breg","Proliferating B"
+)
+colnames(score_mat) <- score_cols_short
+
+max_score <- apply(score_mat, 1, function(x) colnames(score_mat)[which.max(x)])
+max_value <- apply(score_mat, 1, max)
+
+cat("\n===== B细胞最终命名建议 =====\n")
+for (i in seq_along(max_score)) {
+  cat("Cluster", rownames(score_mat)[i], ":", max_score[i],
+      " (score =", round(max_value[i], 3), ")\n")
+}
+
+
+
+B <- subset(B,subset=seurat_clusters %in% c(0,1,2,3,4,5,6,7))
+B <- RunUMAP(B, dims = 1:30)
+
+identity_mapping <- c(
+  "0" = "B_Naive_1",
+  "1" = "B_Naive_2",
+  "2" = "B_Plasma_1",
+  "3" = "B_Plasma_2",
+  "4" = "B_Naive_3",
+  "5" = "B_Germinal-center",
+  "6" = "B_Proliferative",
+  "7" = "B_Activated"
+)
+B$seurat_clusters <- factor(B$seurat_clusters)
+sub_cell_type <- identity_mapping[B@meta.data$seurat_clusters]
+B@meta.data$sub_cell_type <- sub_cell_type
+
+library(ggplot2)
+library(ggsci)
+npg_pal <- pal_npg()(10)
+npg_extended <- colorRampPalette(npg_pal)(5)
+cluster_colors <- c(
+  # 浅色系在前（浅蓝第一个）
+  "#A0CBE8",   # 1 浅蓝（你要的放第一个）
+  "#FFBE7D",   # 2 浅橙
+  "#8CD17D",   # 3 浅绿
+  "#86BCB6",   # 4 浅青
+  "#FF9D9A",   # 5 浅红
+  "#FABFD2",   # 6 浅粉
+  "#D4A6C8",   # 7 浅紫
+  "#F1CE63",   # 8 淡黄
+  "#D7B5A6",   # 9 浅棕
+  "#B07AA1",   # 10 紫灰
+  "#BAB0AC",   # 11 浅灰
+  
+  # 深色系在后
+  "#4E79A7",   # 12 深蓝
+  "#F28E2B",   # 13 橙
+  "#59A14F",   # 14 深绿
+  "#E15759",   # 15 红
+  "#499894",   # 16 青绿
+  "#D37295",   # 17 玫红
+  "#B6992D",   # 18 土黄
+  "#9D7660",   # 19 棕
+  "#79706E"    # 20 深灰
+)
+cell_types <- as.character(unique(B@meta.data$sub_cell_type))
+num_legend_items <- length(cell_types)  # 图例的个数
+max_label_length <- max(nchar(cell_types))  # 图例名称的最大长度
+
+base_width <- 3000  # 基础宽度
+base_height <- 3000  # 基础高度
+legend_width_factor <- 100  # 每个图例项增加的宽度
+label_length_factor <- 10  # 每个字符增加的宽度
+dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
+pdf("B_annotation.pdf", width = dynamic_width/300, height = base_height/300)
+DimPlot(B, reduction = "umap", label = TRUE, pt.size = 1, group.by = "sub_cell_type", label.size = 4) +
+    xlab("UMAP_1") +
+    ylab("UMAP_2") +
+    ggtitle(NULL) +
+    scale_color_manual(values = cluster_colors ) +
+    coord_fixed(ratio = 1) +
+    guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
+    theme(
+        text = element_text(size = 8, face = "bold"),
+        axis.text.x = element_text(size = 28, color = "black"),
+        axis.text.y = element_text(size = 28, color = "black"),
+        axis.title.x = element_text(size = 36, face = "bold", color = "black"),
+        axis.title.y = element_text(size = 36, face = "bold", color = "black", margin = margin(r = 20)),  # 增加右侧间距
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        legend.text = element_text(size = 16, face = "bold", color = "black"),
+        legend.title = element_text(size = 16, face = "bold", color = "black"),
+        legend.position = "right",
+        legend.box.margin = margin(0, 0, 0, 0),
+        legend.key = element_blank(),
+        legend.background = element_blank(),
+        panel.background = element_rect(fill = "white", color = NA),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.line.x = element_line(color = "black", linewidth = 0.5),
+        axis.line.y = element_line(color = "black", linewidth = 0.5),
+        aspect.ratio = 1,
+        plot.margin = margin(10, 50, 10, 10)
+    )
+dev.off()
+```
+# B sc
+```R
+obj <- readRDS("sc_obj_anno.rds")
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+
+B <- subset(obj,subset=cell_type %in% c("B cells"))
+B <- NormalizeData(B)
+B <- FindVariableFeatures(B, nfeatures = 2000)
+hvgs <- VariableFeatures(B)
+B <- ScaleData(B, features = hvgs)
+B <- RunPCA(B, features = hvgs, npcs = 50)
+
+p <- ElbowPlot(B, ndims = 30)
+ggsave("p3.png", plot = p)
+pca_var <- B[["pca"]]@stdev^2 / sum(B[["pca"]]@stdev^2)
+cumsum_var <- cumsum(pca_var)
+
+# 看达到多少 PC 时累计方差 > 70% / 80% / 90%
+which(cumsum_var > 0.7)[1]   # 70%
+which(cumsum_var > 0.8)[1]   # 80%
+which(cumsum_var > 0.9)[1]   # 90%
+
+library(harmony)
+B <- RunHarmony(B, "dataset")
+B <- FindNeighbors(B, reduction = "harmony", dims = 1:27)
+B <- FindClusters(B, resolution = 0.2)
+B <- RunUMAP(B, reduction = "harmony", dims = 1:27)
+
+library(ggplot2)
+library(ggsci)
+npg_pal <- pal_npg()(10)
+npg_extended <- colorRampPalette(npg_pal)(17)
+
+seurat_clusters <- as.character(unique(B@meta.data$seurat_clusters))  # 转换为字符向量
+num_legend_items <- length(seurat_clusters)  # 图例的个数
+max_label_length <- max(nchar(seurat_clusters))  # 图例名称的最大长度
+
+base_width <- 3000  # 基础宽度
+base_height <- 3000  # 基础高度
+legend_width_factor <- 100  # 每个图例项增加的宽度
+label_length_factor <- 10  # 每个字符增加的宽度
+dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
+pdf("B_sc_clusters.pdf", width = dynamic_width / 300, height = base_height / 300)  # 转换为英寸
+
+DimPlot(B, reduction = "umap", label = TRUE, pt.size = 1, label.size = 8) +
+    xlab("UMAP_1") +
+    ylab("UMAP_2") +
+    ggtitle(NULL) +
+    scale_color_manual(values = npg_extended) +
+    coord_fixed(ratio = 1) +
+    guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
+    theme(
+        text = element_text(size = 12, face = "bold"),
+        axis.text.x = element_text(size = 28, color = "black"),
+        axis.text.y = element_text(size = 28, color = "black"),
+        axis.title.x = element_text(size = 36, face = "bold", color = "black"),
+        axis.title.y = element_text(size = 36, face = "bold", color = "black", margin = margin(r = 20)),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        legend.text = element_text(size = 28, face = "bold", color = "black"),
+        legend.title = element_text(size = 28, face = "bold", color = "black"),
+        legend.position = "right",
+        legend.box.margin = margin(0, 0, 0, 0),
+        legend.key = element_blank(),
+        legend.background = element_blank(),
+        panel.background = element_rect(fill = "white", color = NA),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.line.x = element_line(color = "black", linewidth = 0.5),
+        axis.line.y = element_line(color = "black", linewidth = 0.5),
+        aspect.ratio = 1,
+        plot.margin = margin(10, 50, 10, 10)
+    )
+
+dev.off()
+
+p <- DimPlot(B, reduction = "umap", group.by = "dataset", label = FALSE)
+ggsave("B_orig.png", plot = p)
+
+library(dplyr)
+B_markers <- FindAllMarkers(B, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use = "wilcox")
+B_significant_markers <- subset(B_markers, p_val_adj < 0.05)
+#write.csv(B_significant_markers, "B_all_marker.csv")
+B_significant_markers <- B_significant_markers %>% group_by(cluster) %>% top_n(n = 50, wt = avg_log2FC)
+write.csv(B_significant_markers, "B_sc_top_marker_50.csv")
+
+# ==================== 绘制热图 ====================
+my_color <- colorRampPalette(c("royalblue", "white", "red"))(100)
+my_breaks <- seq(-max(abs(score_mat)), max(abs(score_mat)), length.out = 101)
+
+# 按行缩放（推荐用于文章）
+pheatmap(score_mat,
+         scale = "row",
+         cluster_rows = TRUE,
+         cluster_cols = FALSE,
+         main = "B cell subset scores by cluster",
+         fontsize = 10,
+         color = my_color,
+         filename = "B_sc_subset_scores_heatmap.pdf",
+         width = 10, height = 8)
+# 原始值热图
+max_raw <- max(abs(score_mat))
+my_breaks_raw <- seq(-max_raw, max_raw, length.out = 101)
+
+pheatmap(score_mat,
+         scale = "none",
+         cluster_rows = TRUE,
+         cluster_cols = FALSE,
+         main = "B cell subset scores (raw)",
+         fontsize = 10,
+         color = my_color,
+         breaks = my_breaks_raw,
+         filename = "B_sc_subset_scores_raw.pdf",
+         width = 10, height = 8)
+
+
+# ==================== 输出表格 ====================
+print(score_avg)
+
+# ==================== 自动命名 ====================
+score_cols_short <- c(
+  "Immature B", "Transitional B", "Naive B", 
+  "GC B", "Memory B", "Activated B", "Plasmablast", "Plasma", "Breg","Proliferating B"
+)
+colnames(score_mat) <- score_cols_short
+
+max_score <- apply(score_mat, 1, function(x) colnames(score_mat)[which.max(x)])
+max_value <- apply(score_mat, 1, max)
+
+cat("\n===== B细胞最终命名建议 =====\n")
+for (i in seq_along(max_score)) {
+  cat("Cluster", rownames(score_mat)[i], ":", max_score[i],
+      " (score =", round(max_value[i], 3), ")\n")
+}
+
+B <- subset(B,subset=seurat_clusters %in% c(0,1,2,3,5,6,9))
+B <- RunUMAP(B, reduction = "harmony",dims = 1:27)
+
+identity_mapping <- c(
+  "0" = "B_Memory_1",
+  "1" = "B_Naive",
+  "2" = "B_Memory_2",
+  "3" = "B_Activated",
+  "5" = "B_Germinal-center",
+  "6" = "B_Plasma_1",
+  "9" = "B_Plasma_2"
+)
+B$seurat_clusters <- factor(B$seurat_clusters)
+sub_cell_type <- identity_mapping[B@meta.data$seurat_clusters]
+B@meta.data$sub_cell_type <- sub_cell_type
+
+library(ggplot2)
+library(ggsci)
+npg_pal <- pal_npg()(10)
+npg_extended <- colorRampPalette(npg_pal)(5)
+cluster_colors <- c(
+  # 浅色系在前（浅蓝第一个）
+  "#A0CBE8",   # 1 浅蓝（你要的放第一个）
+  "#FFBE7D",   # 2 浅橙
+  "#8CD17D",   # 3 浅绿
+  "#86BCB6",   # 4 浅青
+  "#FF9D9A",   # 5 浅红
+  "#FABFD2",   # 6 浅粉
+  "#D4A6C8",   # 7 浅紫
+  "#F1CE63",   # 8 淡黄
+  "#D7B5A6",   # 9 浅棕
+  "#B07AA1",   # 10 紫灰
+  "#BAB0AC",   # 11 浅灰
+  
+  # 深色系在后
+  "#4E79A7",   # 12 深蓝
+  "#F28E2B",   # 13 橙
+  "#59A14F",   # 14 深绿
+  "#E15759",   # 15 红
+  "#499894",   # 16 青绿
+  "#D37295",   # 17 玫红
+  "#B6992D",   # 18 土黄
+  "#9D7660",   # 19 棕
+  "#79706E"    # 20 深灰
+)
+cell_types <- as.character(unique(B@meta.data$sub_cell_type))
+num_legend_items <- length(cell_types)  # 图例的个数
+max_label_length <- max(nchar(cell_types))  # 图例名称的最大长度
+
+base_width <- 3000  # 基础宽度
+base_height <- 3000  # 基础高度
+legend_width_factor <- 100  # 每个图例项增加的宽度
+label_length_factor <- 10  # 每个字符增加的宽度
+dynamic_width <- base_width + (num_legend_items * legend_width_factor) + (max_label_length * label_length_factor)
+pdf("B_sc_annotation.pdf", width = dynamic_width/300, height = base_height/300)
+DimPlot(B, reduction = "umap", label = TRUE, pt.size = 1, group.by = "sub_cell_type", label.size = 4) +
+    xlab("UMAP_1") +
+    ylab("UMAP_2") +
+    ggtitle(NULL) +
+    scale_color_manual(values = cluster_colors ) +
+    coord_fixed(ratio = 1) +
+    guides(color = guide_legend(title = NULL, override.aes = list(size = 5))) +
+    theme(
+        text = element_text(size = 8, face = "bold"),
+        axis.text.x = element_text(size = 28, color = "black"),
+        axis.text.y = element_text(size = 28, color = "black"),
+        axis.title.x = element_text(size = 36, face = "bold", color = "black"),
+        axis.title.y = element_text(size = 36, face = "bold", color = "black", margin = margin(r = 20)),  # 增加右侧间距
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        legend.text = element_text(size = 16, face = "bold", color = "black"),
+        legend.title = element_text(size = 16, face = "bold", color = "black"),
+        legend.position = "right",
+        legend.box.margin = margin(0, 0, 0, 0),
+        legend.key = element_blank(),
+        legend.background = element_blank(),
+        panel.background = element_rect(fill = "white", color = NA),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.line.x = element_line(color = "black", linewidth = 0.5),
+        axis.line.y = element_line(color = "black", linewidth = 0.5),
+        aspect.ratio = 1,
+        plot.margin = margin(10, 50, 10, 10)
+    )
+dev.off()
+```
+# mPT all subtype chat
+```R
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+library(pheatmap)
+library(deldir)
+library(doParallel)
+library(foreach)
+
+# ===================== 数据加载 =====================
+obj <- readRDS("YA2025263-1_fin.rds")
+Malignant <- readRDS("malignant_anno.rds")
+fib <- readRDS("fib_anno_new.rds")
+macro <- readRDS("macro_anno_new.rds")
+t_cells <- readRDS("t_anno.rds")
+DC <- readRDS("DC_anno.rds")
+B <- readRDS("B_anno.rds")
+# ===================== 定义样本与组织的对应关系 =====================
+sample_tissue <- data.frame(
+  sample = c("A1", "A2", "A3", "A4", "A5", 
+             "B1", "B2", "B3", "B4", "B5",
+             "C1", "C2", "C3", "C4", "C5",
+             "D1", "D2", "D3", "D4", "D5"),
+  tissue = c("nmPT", "negLN", "nmPT", "negLN", "nmPT",
+             "negLN", "nmPT", "negLN", "mPT", "negLN",
+             "metLN", "mPT", "negLN", "metLN", "mPT",
+             "negLN", "metLN", "mPT", "negLN", "metLN")
+)
+obj$tissue <- sample_tissue$tissue[match(obj$sample, sample_tissue$sample)]
+
+# ===================== 细胞类型注释 =====================
+obj$CellType <- recode(obj$CellType,
+                       #"Malignant cells" = "unknown",
+                       "Basal cells" = "Malignant cells"
+)
+
+# 检查
+table(obj$CellType)
+
+obj@meta.data$sub_cell_type <- NA
+common_cells <- intersect(rownames(Malignant@meta.data), rownames(obj@meta.data))
+obj@meta.data[common_cells, "sub_cell_type"] <- Malignant@meta.data[common_cells, "sub_cell_type"]
+
+common_cells <- intersect(rownames(fib@meta.data), rownames(obj@meta.data))
+obj@meta.data[common_cells, "sub_cell_type"] <- fib@meta.data[common_cells, "sub_cell_type"]
+
+common_cells <- intersect(rownames(macro@meta.data), rownames(obj@meta.data))
+obj@meta.data[common_cells, "sub_cell_type"] <- macro@meta.data[common_cells, "sub_cell_type"]
+
+common_cells <- intersect(rownames(t_cells@meta.data), rownames(obj@meta.data))
+obj@meta.data[common_cells, "sub_cell_type"] <- t_cells@meta.data[common_cells, "sub_cell_type"]
+
+common_cells <- intersect(rownames(DC@meta.data), rownames(obj@meta.data))
+obj@meta.data[common_cells, "sub_cell_type"] <- DC@meta.data[common_cells, "sub_cell_type"]
+
+common_cells <- intersect(rownames(B@meta.data), rownames(obj@meta.data))
+obj@meta.data[common_cells, "sub_cell_type"] <- B@meta.data[common_cells, "sub_cell_type"]
+
+cat("成功注释的细胞数：", sum(!is.na(obj@meta.data$sub_cell_type)), "\n")
+cat("obj中sub_cell_type列的唯一值：", paste(unique(obj@meta.data$sub_cell_type), collapse = ", "), "\n")
+
+
+print(class(obj@meta.data$CellType))  # 查看类型（应该是factor）
+cell_type_levels <- levels(obj@meta.data$CellType)  # 提取因子水平（数字→名称映射）
+cat("CellType因子水平（数字→名称）：\n")
+print(cell_type_levels)
+
+# 1. 重置detailed列（先清空错误赋值）
+obj@meta.data$detailed <- NA
+
+# 2. 优先级1：填充sub_cell_type（非NA的细胞，保留原名称）
+sub_cell_idx <- !is.na(obj@meta.data$sub_cell_type)
+obj@meta.data$detailed[sub_cell_idx] <- as.character(obj@meta.data$sub_cell_type[sub_cell_idx])
+cat("优先级1（sub_cell_type）填充：", sum(sub_cell_idx), "个细胞\n")
+
+
+
+# 4. 优先级3：填充CellType（剩余细胞，关键：转字符+用因子水平映射真实名称）
+cell_type_idx <- is.na(obj@meta.data$detailed) & !is.na(obj@meta.data$CellType)
+# 方法：如果CellType是因子，用levels映射；否则直接转字符
+if (is.factor(obj@meta.data$CellType)) {
+  # 因子类型：用因子水平把数字编码转成真实名称
+  obj@meta.data$detailed[cell_type_idx] <- cell_type_levels[as.integer(obj@meta.data$CellType[cell_type_idx])]
+} else {
+  # 字符类型：直接转字符
+  obj@meta.data$detailed[cell_type_idx] <- as.character(obj@meta.data$CellType[cell_type_idx])
+}
+cat("优先级3（CellType）填充：", sum(cell_type_idx), "个细胞\n")
+
+# 验证修复结果
+cat("\n=== 修复后detailed列前10行 ===")
+print(head(obj@meta.data[, c("sub_cell_type", "CellType", "detailed")], 10))
+cat("\n=== 修复后detailed列前15个类型 ===")
+print(head(sort(table(obj@meta.data$detailed), decreasing = TRUE), 15))
+
+remove_types <- c("B cells", "Dendritic cells", "Germinal center B cells", 
+                  "immature B cells", "Malignant cells", "T cells")
+
+# 方法：保留不在移除列表中的细胞
+cells_keep <- which(!(obj@meta.data$detailed %in% remove_types))
+obj_filtered <- obj[, cells_keep]
+
+# 或者用逻辑向量
+keep <- !(obj@meta.data$detailed %in% remove_types)
+obj_filtered <- obj[, keep]
+
+# 检查结果
+ncol(obj_filtered)
+table(obj_filtered@meta.data$detailed)
+
+#chat_mPT
+
+#画连通图
+library(ggplot2)
+library(deldir)
+library(igraph)
+
+# ==================== 1. 提取 C5 样本 FOV 50 的数据 ====================
+sample_cells <- subset(mPT, subset = sample == "C5" & fov == 50)
+
+# 获取坐标和标签
+coords <- sample_cells@meta.data[, c("CenterX_global_px", "CenterY_global_px")]
+coords <- coords[!is.na(coords[,1]) & !is.na(coords[,2]), , drop = FALSE]
+labels <- as.character(sample_cells@meta.data$detailed)
+names(labels) <- rownames(coords)
+
+# 移除NA标签
+valid_idx <- !is.na(labels)
+coords <- coords[valid_idx, , drop = FALSE]
+labels <- labels[valid_idx]
+
+cat("FOV 50 有效细胞数量：", length(labels), "\n")
+
+# ==================== 2. 计算 Delaunay 三角剖分和连通图 ====================
+x <- coords[,1]
+y <- coords[,2]
+
+deld <- deldir(x, y, rw = c(range(x), range(y)))
+segs <- deld$delsgs
+
+# 构建边
+edges <- cbind(segs$ind1, segs$ind2)
+edges <- edges[edges[,1] != edges[,2], , drop = FALSE]
+edges <- t(apply(edges, 1, function(x) sort(x)))
+edges <- unique(edges)
+edges_df <- data.frame(from = edges[,1], to = edges[,2])
+
+# 计算连通分量
+g <- graph_from_data_frame(edges_df, directed = FALSE)
+comp <- components(g)
+
+# ==================== 3. 准备绘图数据 ====================
+spatial_df <- data.frame(
+  x = x,
+  y = y,
+  cell_type = labels,
+  component = as.factor(comp$membership)
+)
+
+# 获取边坐标
+edge_coords <- do.call(rbind, lapply(1:nrow(edges_df), function(i) {
+  from_idx <- edges_df$from[i]
+  to_idx <- edges_df$to[i]
+  data.frame(
+    x = spatial_df$x[from_idx],
+    y = spatial_df$y[from_idx],
+    xend = spatial_df$x[to_idx],
+    yend = spatial_df$y[to_idx],
+    component = spatial_df$component[from_idx]
+  )
+}))
+
+# ==================== 4. 绘图 ====================
+p <- ggplot() +
+  geom_point(data = spatial_df, aes(x = x, y = y, color = cell_type), 
+             size = 1, alpha = 0.7) +
+  geom_segment(data = edge_coords, 
+               aes(x = x, y = y, xend = xend, yend = yend, group = component),
+               color = "gray40", alpha = 0.3, linewidth = 0.2) +
+  theme_minimal() +
+  coord_fixed() +
+  labs(title = "C5 Sample - FOV 50: Spatial Cell Connectivity Network",
+       x = "X Coordinate (px)", y = "Y Coordinate (px)") +
+  theme(legend.position = "right")
+
+# 保存
+ggsave("C5_FOV50_spatial_network.pdf", p, width = 14, height = 10)
+
+#剩下的，要保存各自的文件 
+if (length(all_cell_types) >= 2) {
+  # 计算平均 log2FC（初始化为0）
+  avg_log2fc <- matrix(0, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                       dimnames = list(all_cell_types, all_cell_types))
+  
+  # 记录每个单元格有多少个有效样本
+  n_effective <- matrix(0, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                         dimnames = list(all_cell_types, all_cell_types))
+  
+  # 存储合并 chi2 和自由度（也要设置 dimnames）
+  combined_chi2 <- matrix(0, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                          dimnames = list(all_cell_types, all_cell_types))
+  combined_df <- matrix(0, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                        dimnames = list(all_cell_types, all_cell_types))
+  
+  for (sample_id in names(all_results)) {
+    res <- all_results[[sample_id]]
+    
+    # 当前样本的细胞类型
+    current_types <- res$cell_types
+    
+    # 只处理当前样本中存在的细胞类型
+    for (i in seq_along(current_types)) {
+      for (j in seq_along(current_types)) {
+        ct_i <- current_types[i]
+        ct_j <- current_types[j]
+        
+        avg_log2fc[ct_i, ct_j] <- avg_log2fc[ct_i, ct_j] + res$mat_log2fc[ct_i, ct_j]
+        n_effective[ct_i, ct_j] <- n_effective[ct_i, ct_j] + 1
+        
+        combined_chi2[ct_i, ct_j] <- combined_chi2[ct_i, ct_j] + (-2 * log(res$mat_p[ct_i, ct_j] + 1e-10))
+        combined_df[ct_i, ct_j] <- combined_df[ct_i, ct_j] + 2
+      }
+    }
+  }
+  
+  # 计算平均 log2FC
+  avg_log2fc <- avg_log2fc / n_effective
+  
+  # 计算合并 p 值
+  combined_p <- matrix(1, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                       dimnames = list(all_cell_types, all_cell_types))
+  for (i in seq_along(all_cell_types)) {
+    for (j in seq_along(all_cell_types)) {
+      if (combined_df[i, j] > 0) {
+        combined_p[i, j] <- pchisq(combined_chi2[i, j], df = combined_df[i, j], lower.tail = FALSE)
+      }
+    }
+  }
+  
+  # 处理 NaN 和 Inf
+  avg_log2fc[is.nan(avg_log2fc)] <- 0
+  avg_log2fc[is.infinite(avg_log2fc) & avg_log2fc < 0] <- -10
+  avg_log2fc[is.infinite(avg_log2fc) & avg_log2fc > 0] <- 10
+  avg_log2fc[avg_log2fc > 10] <- 10
+  avg_log2fc[avg_log2fc < -10] <- -10
+  
+  # 显著性标注（只标星号）
+  signif_symbols <- matrix("", nrow = length(all_cell_types), ncol = length(all_cell_types),
+                           dimnames = list(all_cell_types, all_cell_types))
+  signif_symbols[combined_p < 0.001] <- "***"
+  signif_symbols[combined_p < 0.01 & combined_p >= 0.001] <- "**"
+  signif_symbols[combined_p < 0.05 & combined_p >= 0.01] <- "*"
+  
+  # 绘制平均热图
+  p_avg <- pheatmap(avg_log2fc,
+                    cluster_rows = TRUE,
+                    cluster_cols = TRUE,
+                    main = "Average Log2(Fold Change) across mPT samples",
+                    fontsize = 10,
+                    display_numbers = signif_symbols,
+                    number_color = "black",
+                    fontsize_number = 8,
+                    filename = "mPT_all_samples_average_contact_log2fc_detailed_subtype.pdf",
+                    width = 14, height = 12)
+  
+  
+  # 保存整合结果
+  integrated_results <- list(
+    all_cell_types = all_cell_types,
+    avg_log2fc = avg_log2fc,
+    combined_p = combined_p,
+    n_effective = n_effective,
+    n_samples = length(all_results),
+    individual_results = all_results
+  )
+  
+  saveRDS(integrated_results, file = "mPT_integrated_results_detailed_subtype.rds")
+}
+
+# ===================== 全部细胞类型之间两两互作强度排序（仅显著，排除自身）=====================
+
+# ===================== 加载数据 =====================
+integrated_results <- readRDS("mPT_integrated_results_detailed_subtype.rds")
+avg_log2fc <- integrated_results$avg_log2fc
+combined_p <- integrated_results$combined_p
+all_cell_types <- integrated_results$all_cell_types
+
+# 构建映射 (detailed 亚群 → CellType 大类)
+library(dplyr)
+mapping <- mPT@meta.data %>%
+  select(detailed, CellType) %>%
+  distinct()
+
+# ===================== 主循环 =====================
+interactions <- data.frame()
+
+for (ct1 in all_cell_types) {
+  for (ct2 in all_cell_types) {
+    
+    # 1. 排除自身
+    if (ct1 == ct2) next
+    
+    # 2. 只保留显著
+    pval <- combined_p[ct1, ct2]
+    log2fc <- avg_log2fc[ct1, ct2]
+    if (is.na(pval) || pval >= 0.05) next
+    
+    # 3. 获取 CellType 大类
+    ct1_big <- mapping$CellType[match(ct1, mapping$detailed)]
+    ct2_big <- mapping$CellType[match(ct2, mapping$detailed)]
+    
+    # ===================== 【核心：严格排除】 =====================
+    # 规则 1：只要 CellType 相同 → 一律排除
+    if (ct1_big == ct2_big) {
+      next
+    }
+    
+    # 规则 2：额外排除 Tumor / T / B / DC / Macro / Fib 内部
+    g1 <- case_when(
+      startsWith(ct1, "Tumor_") ~ "Tumor",
+      startsWith(ct1, "T_") ~ "T",
+      startsWith(ct1, "B_") ~ "B",
+      startsWith(ct1, "DC_") ~ "DC",
+      startsWith(ct1, "Macro_") ~ "Macro",
+      startsWith(ct1, "Fib_") ~ "Fib",
+      TRUE ~ "Other"
+    )
+    
+    g2 <- case_when(
+      startsWith(ct2, "Tumor_") ~ "Tumor",
+      startsWith(ct2, "T_") ~ "T",
+      startsWith(ct2, "B_") ~ "B",
+      startsWith(ct2, "DC_") ~ "DC",
+      startsWith(ct2, "Macro_") ~ "Macro",
+      startsWith(ct2, "Fib_") ~ "Fib",
+      TRUE ~ "Other"
+    )
+    
+    # 同类主群内部 → 排除
+    if (g1 == g2 & g1 != "Other") {
+      next
+    }
+    
+    # ===================== 能走到这里 = 全部保留 =====================
+    interactions <- rbind(interactions, data.frame(
+      detailed1 = ct1,
+      detailed2 = ct2,
+      CellType1 = ct1_big,
+      CellType2 = ct2_big,
+      group1 = g1,
+      group2 = g2,
+      log2FC = log2fc,
+      p_value = pval,
+      stringsAsFactors = FALSE
+    ))
+  }
+}
+
+# ===================== 排序：从正到负，由大到小 =====================
+if (nrow(interactions) > 0) {
+  interactions_sorted <- interactions[order(-interactions$log2FC), ]
+  
+  interactions_sorted$signif <- ""
+  interactions_sorted$signif[interactions_sorted$p_value < 0.05]  <- "*"
+  interactions_sorted$signif[interactions_sorted$p_value < 0.01]  <- "**"
+  interactions_sorted$signif[interactions_sorted$p_value < 0.001] <- "***"
+  
+  cat("\n===== 最终显著互作（正→负 大→小）=====\n")
+  print(head(interactions_sorted[, c("detailed1","detailed2","CellType1","CellType2","log2FC","signif")], 30))
+  
+  write.csv(interactions_sorted, "mPT_subtype_significant_interactions.csv", row.names = FALSE)
+  cat("\n文件已保存：final_significant_interactions.csv\n")
+  
+} else {
+  cat("没有符合条件的显著互作\n")
+}
+
+# ===================== 去重 + 绘图 =====================
+library(ggplot2)
+library(dplyr)
+
+# 1. 去重：把 A↔B 和 B↔A 视为同一对
+unique_inter <- interactions_sorted %>%
+  rowwise() %>%
+  mutate(pair = paste(sort(c(detailed1, detailed2)), collapse = " ↔ ")) %>%
+  ungroup() %>%
+  distinct(pair, .keep_all = TRUE) %>%
+  arrange(-log2FC)
+
+# 2. 取去重后的 top30
+top30 <- head(unique_inter, 30)
+
+# 3. 保证顺序
+top30 <- top30 %>% arrange(log2FC)
+top30$pair <- factor(top30$pair, levels = top30$pair)
+
+# 4. 绘图（正常出条形）
+p <- ggplot(top30, aes(x = pair, y = log2FC, fill = log2FC > 0)) +
+  geom_col(width = 0.7) +
+  coord_flip() +
+  scale_fill_manual(values = c("TRUE" = "#E74C3C", "FALSE" = "#6699ff")) +
+  geom_text(aes(label = signif), hjust = -0.2, size = 3.5) +
+  labs(title = "Top30 Unique Cell-Cell Interactions",
+       x = "Cell Pair", y = "log2FC") +
+  theme_bw() +
+  theme(axis.text.y = element_text(size = 15),
+        plot.title = element_text(hjust = 0.5))
+
+ggsave("mPT_subtype_Top30_interactions_no_duplicate.pdf", p, width = 16, height = 10)
+cat("✅ 去重完成，条形图已正常生成\n")
+
+# ===================== 最终微调版：字更大 + 图更小 + TOP10 + 拼图 =====================
+library(ggplot2)
+library(dplyr)
+library(patchwork)
+
+# 1. 总结果去重
+unique_total <- interactions_sorted %>%
+  rowwise() %>%
+  mutate(pair_key = paste(sort(c(detailed1, detailed2)), collapse = "_")) %>%
+  ungroup() %>%
+  distinct(pair_key, .keep_all = TRUE) %>%
+  arrange(desc(log2FC))
+
+# 2. 提取肿瘤亚型
+tumor_types <- grep("^Tumor_", all_cell_types, value = TRUE)
+
+if (length(tumor_types) == 0) {
+  cat("未找到 Tumor 亚型\n")
+} else {
+  plot_list <- list()
+  
+  for (tumor in tumor_types) {
+    tumor_dat <- unique_total %>%
+      filter(detailed1 == !!tumor | detailed2 == !!tumor)
+    if (nrow(tumor_dat) == 0) next
+    
+    # 取 TOP10
+    top10 <- head(tumor_dat, 10)
+    top10 <- top10 %>% arrange(log2FC)
+    top10$label <- paste(top10$detailed1, "↔", top10$detailed2)
+    top10$label <- factor(top10$label, levels = unique(top10$label))
+    
+    # 画图：字更大 + 更清晰
+    p <- ggplot(top10, aes(x = label, y = log2FC, fill = log2FC > 0)) +
+      geom_col(width = 0.75) +
+      coord_flip() +
+      scale_fill_manual(values = c("#4A90E2", "#E74C3C")) +
+      geom_text(aes(label = signif), hjust = -0.2, size = 4.5, fontface="bold") +
+      labs(title = tumor, y = "log2FC", x = "") +
+      theme_bw(base_size = 13) +  # 全局字更大
+      theme(
+        plot.title = element_text(hjust = 0.5, size = 14, face="bold"),
+        axis.text.y = element_text(size = 12),  # Y轴字明显更大
+        axis.text.x = element_text(size = 11),
+        axis.title = element_text(size = 12),
+        legend.position = "none"
+      )
+    
+    # 保存单图：尺寸更小（宽度8 高度6）
+    ggsave(paste0("mPT_subtype_", tumor, "_Top10.pdf"), p, width=8, height=6, dpi=300)
+    plot_list[[tumor]] <- p
+  }
+  
+  # 拼图：整体更小
+  if (length(plot_list) > 0) {
+    combined <- wrap_plots(plot_list, ncol=2) + plot_layout(guides="collect")
+    ggsave("mPT_subtype_all_tumors_top10_combined.pdf", combined, width=20, height=5*ceiling(length(plot_list)/2), dpi=300)
+    cat("\n✅ 画图完成：字更大 + 图更小！\n")
+  }
+}
+```
+# nmPT all subtype chat
+```R
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+library(pheatmap)
+library(deldir)
+library(doParallel)
+library(foreach)
+
+nmPT <- readRDS("nmPT_detailed.rds")
+#chat_nmPT
+
+#后续
+if (length(all_cell_types) >= 2) {
+  # 计算平均 log2FC（初始化为0）
+  avg_log2fc <- matrix(0, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                       dimnames = list(all_cell_types, all_cell_types))
+  
+  # 记录每个单元格有多少个有效样本
+  n_effective <- matrix(0, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                         dimnames = list(all_cell_types, all_cell_types))
+  
+  # 存储合并 chi2 和自由度（也要设置 dimnames）
+  combined_chi2 <- matrix(0, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                          dimnames = list(all_cell_types, all_cell_types))
+  combined_df <- matrix(0, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                        dimnames = list(all_cell_types, all_cell_types))
+  
+  for (sample_id in names(all_results)) {
+    res <- all_results[[sample_id]]
+    
+    # 当前样本的细胞类型
+    current_types <- res$cell_types
+    
+    # 只处理当前样本中存在的细胞类型
+    for (i in seq_along(current_types)) {
+      for (j in seq_along(current_types)) {
+        ct_i <- current_types[i]
+        ct_j <- current_types[j]
+        
+        avg_log2fc[ct_i, ct_j] <- avg_log2fc[ct_i, ct_j] + res$mat_log2fc[ct_i, ct_j]
+        n_effective[ct_i, ct_j] <- n_effective[ct_i, ct_j] + 1
+        
+        combined_chi2[ct_i, ct_j] <- combined_chi2[ct_i, ct_j] + (-2 * log(res$mat_p[ct_i, ct_j] + 1e-10))
+        combined_df[ct_i, ct_j] <- combined_df[ct_i, ct_j] + 2
+      }
+    }
+  }
+  
+  # 计算平均 log2FC
+  avg_log2fc <- avg_log2fc / n_effective
+  
+  # 计算合并 p 值
+  combined_p <- matrix(1, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                       dimnames = list(all_cell_types, all_cell_types))
+  for (i in seq_along(all_cell_types)) {
+    for (j in seq_along(all_cell_types)) {
+      if (combined_df[i, j] > 0) {
+        combined_p[i, j] <- pchisq(combined_chi2[i, j], df = combined_df[i, j], lower.tail = FALSE)
+      }
+    }
+  }
+  
+  # 处理 NaN 和 Inf
+  avg_log2fc[is.nan(avg_log2fc)] <- 0
+  avg_log2fc[is.infinite(avg_log2fc) & avg_log2fc < 0] <- -10
+  avg_log2fc[is.infinite(avg_log2fc) & avg_log2fc > 0] <- 10
+  avg_log2fc[avg_log2fc > 10] <- 10
+  avg_log2fc[avg_log2fc < -10] <- -10
+  
+  # 显著性标注（只标星号）
+  signif_symbols <- matrix("", nrow = length(all_cell_types), ncol = length(all_cell_types),
+                           dimnames = list(all_cell_types, all_cell_types))
+  signif_symbols[combined_p < 0.001] <- "***"
+  signif_symbols[combined_p < 0.01 & combined_p >= 0.001] <- "**"
+  signif_symbols[combined_p < 0.05 & combined_p >= 0.01] <- "*"
+  
+  # 绘制平均热图
+  p_avg <- pheatmap(avg_log2fc,
+                    cluster_rows = TRUE,
+                    cluster_cols = TRUE,
+                    main = "Average Log2(Fold Change) across nmPT samples",
+                    fontsize = 10,
+                    display_numbers = signif_symbols,
+                    number_color = "black",
+                    fontsize_number = 8,
+                    filename = "nmPT_all_samples_average_contact_log2fc_detailed_subtype.pdf",
+                    width = 14, height = 12)
+  
+  # 保存整合结果
+  integrated_results <- list(
+    all_cell_types = all_cell_types,
+    avg_log2fc = avg_log2fc,
+    combined_p = combined_p,
+    n_effective = n_effective,
+    n_samples = length(all_results),
+    individual_results = all_results
+  )
+  
+  saveRDS(integrated_results, file = "nmPT_integrated_results_detailed_subtype.rds")
+  cat("保存整合结果：nmPT_integrated_results.rds\n")
+}
+
+# ===================== 全部细胞类型之间两两互作强度排序（仅显著，排除自身）=====================
+
+# ===================== 加载数据 =====================
+integrated_results <- readRDS("nmPT_integrated_results_detailed_subtype.rds")
+avg_log2fc <- integrated_results$avg_log2fc
+combined_p <- integrated_results$combined_p
+all_cell_types <- integrated_results$all_cell_types
+
+# 构建映射 (detailed 亚群 → CellType 大类)
+library(dplyr)
+mapping <- nmPT@meta.data %>%
+  select(detailed, CellType) %>%
+  distinct()
+
+# ===================== 主循环 =====================
+interactions <- data.frame()
+
+for (ct1 in all_cell_types) {
+  for (ct2 in all_cell_types) {
+    
+    # 1. 排除自身
+    if (ct1 == ct2) next
+    
+    # 2. 只保留显著
+    pval <- combined_p[ct1, ct2]
+    log2fc <- avg_log2fc[ct1, ct2]
+    if (is.na(pval) || pval >= 0.05) next
+    
+    # 3. 获取 CellType 大类
+    ct1_big <- mapping$CellType[match(ct1, mapping$detailed)]
+    ct2_big <- mapping$CellType[match(ct2, mapping$detailed)]
+    
+    # ===================== 【核心：严格排除】 =====================
+    # 规则 1：只要 CellType 相同 → 一律排除
+    if (ct1_big == ct2_big) {
+      next
+    }
+    
+    # 规则 2：额外排除 Tumor / T / B / DC / Macro / Fib 内部
+    g1 <- case_when(
+      startsWith(ct1, "Tumor_") ~ "Tumor",
+      startsWith(ct1, "T_") ~ "T",
+      startsWith(ct1, "B_") ~ "B",
+      startsWith(ct1, "DC_") ~ "DC",
+      startsWith(ct1, "Macro_") ~ "Macro",
+      startsWith(ct1, "Fib_") ~ "Fib",
+      TRUE ~ "Other"
+    )
+    
+    g2 <- case_when(
+      startsWith(ct2, "Tumor_") ~ "Tumor",
+      startsWith(ct2, "T_") ~ "T",
+      startsWith(ct2, "B_") ~ "B",
+      startsWith(ct2, "DC_") ~ "DC",
+      startsWith(ct2, "Macro_") ~ "Macro",
+      startsWith(ct2, "Fib_") ~ "Fib",
+      TRUE ~ "Other"
+    )
+    
+    # 同类主群内部 → 排除
+    if (g1 == g2 & g1 != "Other") {
+      next
+    }
+    
+    # ===================== 能走到这里 = 全部保留 =====================
+    interactions <- rbind(interactions, data.frame(
+      detailed1 = ct1,
+      detailed2 = ct2,
+      CellType1 = ct1_big,
+      CellType2 = ct2_big,
+      group1 = g1,
+      group2 = g2,
+      log2FC = log2fc,
+      p_value = pval,
+      stringsAsFactors = FALSE
+    ))
+  }
+}
+
+# ===================== 排序：从正到负，由大到小 =====================
+if (nrow(interactions) > 0) {
+  interactions_sorted <- interactions[order(-interactions$log2FC), ]
+  
+  interactions_sorted$signif <- ""
+  interactions_sorted$signif[interactions_sorted$p_value < 0.05]  <- "*"
+  interactions_sorted$signif[interactions_sorted$p_value < 0.01]  <- "**"
+  interactions_sorted$signif[interactions_sorted$p_value < 0.001] <- "***"
+  
+  cat("\n===== 最终显著互作（正→负 大→小）=====\n")
+  print(head(interactions_sorted[, c("detailed1","detailed2","CellType1","CellType2","log2FC","signif")], 30))
+  
+  write.csv(interactions_sorted, "nmPT_subtype_significant_interactions.csv", row.names = FALSE)
+  cat("\n文件已保存：final_significant_interactions.csv\n")
+  
+} else {
+  cat("没有符合条件的显著互作\n")
+}
+
+# ===================== 去重 + 绘图 =====================
+library(ggplot2)
+library(dplyr)
+
+# 1. 去重：把 A↔B 和 B↔A 视为同一对
+unique_inter <- interactions_sorted %>%
+  rowwise() %>%
+  mutate(pair = paste(sort(c(detailed1, detailed2)), collapse = " ↔ ")) %>%
+  ungroup() %>%
+  distinct(pair, .keep_all = TRUE) %>%
+  arrange(-log2FC)
+
+# 2. 取去重后的 top30
+top30 <- head(unique_inter, 30)
+
+# 3. 保证顺序
+top30 <- top30 %>% arrange(log2FC)
+top30$pair <- factor(top30$pair, levels = top30$pair)
+
+# 4. 绘图（正常出条形）
+p <- ggplot(top30, aes(x = pair, y = log2FC, fill = log2FC > 0)) +
+  geom_col(width = 0.7) +
+  coord_flip() +
+  scale_fill_manual(values = c("TRUE" = "#E74C3C", "FALSE" = "#6699ff")) +
+  geom_text(aes(label = signif), hjust = -0.2, size = 3.5) +
+  labs(title = "Top30 Unique Cell-Cell Interactions",
+       x = "Cell Pair", y = "log2FC") +
+  theme_bw() +
+  theme(axis.text.y = element_text(size = 15),
+        plot.title = element_text(hjust = 0.5))
+
+ggsave("nmPT_subtype_Top30_interactions_no_duplicate.pdf", p, width = 16, height = 10)
+cat("✅ 去重完成，条形图已正常生成\n")
+
+# ===================== 最终微调版：字更大 + 图更小 + TOP10 + 拼图 =====================
+library(ggplot2)
+library(dplyr)
+library(patchwork)
+
+# 1. 总结果去重
+unique_total <- interactions_sorted %>%
+  rowwise() %>%
+  mutate(pair_key = paste(sort(c(detailed1, detailed2)), collapse = "_")) %>%
+  ungroup() %>%
+  distinct(pair_key, .keep_all = TRUE) %>%
+  arrange(desc(log2FC))
+
+# 2. 提取肿瘤亚型
+tumor_types <- grep("^Tumor_", all_cell_types, value = TRUE)
+
+if (length(tumor_types) == 0) {
+  cat("未找到 Tumor 亚型\n")
+} else {
+  plot_list <- list()
+  
+  for (tumor in tumor_types) {
+    tumor_dat <- unique_total %>%
+      filter(detailed1 == !!tumor | detailed2 == !!tumor)
+    if (nrow(tumor_dat) == 0) next
+    
+    # 取 TOP10
+    top10 <- head(tumor_dat, 10)
+    top10 <- top10 %>% arrange(log2FC)
+    top10$label <- paste(top10$detailed1, "↔", top10$detailed2)
+    top10$label <- factor(top10$label, levels = unique(top10$label))
+    
+    # 画图：字更大 + 更清晰
+    p <- ggplot(top10, aes(x = label, y = log2FC, fill = log2FC > 0)) +
+      geom_col(width = 0.75) +
+      coord_flip() +
+      scale_fill_manual(values = c("#4A90E2", "#E74C3C")) +
+      geom_text(aes(label = signif), hjust = -0.2, size = 4.5, fontface="bold") +
+      labs(title = tumor, y = "log2FC", x = "") +
+      theme_bw(base_size = 13) +  # 全局字更大
+      theme(
+        plot.title = element_text(hjust = 0.5, size = 14, face="bold"),
+        axis.text.y = element_text(size = 12),  # Y轴字明显更大
+        axis.text.x = element_text(size = 11),
+        axis.title = element_text(size = 12),
+        legend.position = "none"
+      )
+    
+    # 保存单图：尺寸更小（宽度8 高度6）
+    ggsave(paste0("nmPT_subtype_", tumor, "_Top10.pdf"), p, width=8, height=6, dpi=300)
+    plot_list[[tumor]] <- p
+  }
+  
+  # 拼图：整体更小
+  if (length(plot_list) > 0) {
+    combined <- wrap_plots(plot_list, ncol=2) + plot_layout(guides="collect")
+    ggsave("nmPT_subtype_all_tumors_top10_combined.pdf", combined, width=20, height=5*ceiling(length(plot_list)/2), dpi=300)
+    cat("\n✅ 画图完成：字更大 + 图更小！\n")
+  }
+}
+```
+# metLN all subtype chat
+```R
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+library(pheatmap)
+library(deldir)
+library(doParallel)
+library(foreach)
+
+metLN <- readRDS("metLN_detailed.rds")
+samples <- unique(metLN$sample)
+
+all_results <- list()
+
+for (sample_id in samples) {
+  cat("\n\n########## 处理样本：", sample_id, " ##########\n")
+  
+  # 提取该样本的细胞
+  sample_cells <- subset(metLN, subset = sample == sample_id)
+  
+  if (nrow(sample_cells@meta.data) == 0) {
+    cat("警告：", sample_id, "没有细胞，跳过\n")
+    next
+  }
+  
+  # 获取坐标和标签
+  coords <- sample_cells@meta.data[, c("CenterX_global_px", "CenterY_global_px")]
+  coords <- coords[!is.na(coords[,1]) & !is.na(coords[,2]), , drop = FALSE]
+  labels <- as.character(sample_cells@meta.data$detailed)
+  names(labels) <- rownames(coords)
+  
+  # 移除NA标签
+  valid_idx <- !is.na(labels)
+  coords <- coords[valid_idx, , drop = FALSE]
+  labels <- labels[valid_idx]
+  
+  cat("有效细胞数量：", length(labels), "\n")
+  cat("细胞类型分布：\n")
+  print(table(labels))
+  
+  # 过滤稀有细胞类型（可选，数量 < 50 的过滤）
+  cell_counts <- table(labels)
+  rare_threshold <- 50
+  keep_types <- names(cell_counts[cell_counts >= rare_threshold])
+  keep_cells <- labels %in% keep_types
+  coords <- coords[keep_cells, , drop = FALSE]
+  labels <- labels[keep_cells]
+  
+  cat("过滤稀有细胞后数量：", length(labels), "\n")
+  
+  if (length(labels) < 100) {
+    cat("警告：", sample_id, "过滤后细胞太少，跳过\n")
+    next
+  }
+  
+  # 确保坐标是数值型
+  coords <- as.matrix(coords)
+  colnames(coords) <- c("x", "y")
+  
+  # 运行分析
+  result <- run_spatial_analysis(coords, labels, sample_id, nperm = 1000)
+  
+  if (!is.null(result)) {
+    all_results[[sample_id]] <- result
+    
+    # 绘制并保存热图
+    if (nrow(result$mat_log2fc) > 1 && ncol(result$mat_log2fc) > 1) {
+      # ===== 修改：处理 -Inf 和 +Inf，然后裁剪 =====
+      mat_plot <- result$mat_log2fc
+      
+      # 替换 -Inf 为 -10
+      mat_plot[is.infinite(mat_plot) & mat_plot < 0] <- -10
+      # 替换 +Inf 为 10
+      mat_plot[is.infinite(mat_plot) & mat_plot > 0] <- 10
+      
+      # 裁剪超出 [-10, 10] 的范围
+      mat_plot[mat_plot > 10] <- 10
+      mat_plot[mat_plot < -10] <- -10
+      
+      # 显著性标注
+      signif_symbols <- matrix("", nrow = length(result$cell_types), 
+                                ncol = length(result$cell_types),
+                                dimnames = list(result$cell_types, result$cell_types))
+      signif_symbols[result$mat_p < 0.001] <- "***"
+      signif_symbols[result$mat_p < 0.01 & result$mat_p >= 0.001] <- "**"
+      signif_symbols[result$mat_p < 0.05 & result$mat_p >= 0.01] <- "*"
+      
+      # 热图
+      p <- pheatmap(mat_plot,
+                    cluster_rows = TRUE,
+                    cluster_cols = TRUE,
+                    main = paste("Log2(Fold Change) -", sample_id),
+                    fontsize = 10,
+                    display_numbers = signif_symbols,
+                    number_color = "black",
+                    fontsize_number = 8,
+                    #filename = paste0("mPT_", sample_id, "_contact_log2fc.pdf"),
+                    width = 12, height = 10)
+      
+      cat("保存热图：mPT_", sample_id, "_contact_log2fc.pdf\n", sep = "")
+    }
+    
+    # 保存结果文件
+    #saveRDS(result, file = paste0("mPT_", sample_id, "_results.rds"))
+    cat("保存结果：mPT_", sample_id, "_results.rds\n", sep = "")
+  }
+}
+saveRDS(all_results, file = "metLN_all_results_subtype_interaction.rds")
+
+all_cell_types <- unique(unlist(lapply(all_results, function(x) x$cell_types)))
+cat("总细胞类型数量：", length(all_cell_types), "\n")
+cat("所有细胞类型：", paste(all_cell_types, collapse = ", "), "\n")
+
+if (length(all_cell_types) >= 2) {
+  # 计算平均 log2FC（初始化为0）
+  avg_log2fc <- matrix(0, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                       dimnames = list(all_cell_types, all_cell_types))
+  
+  # 记录每个单元格有多少个有效样本
+  n_effective <- matrix(0, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                         dimnames = list(all_cell_types, all_cell_types))
+  
+  # 存储合并 chi2 和自由度（也要设置 dimnames）
+  combined_chi2 <- matrix(0, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                          dimnames = list(all_cell_types, all_cell_types))
+  combined_df <- matrix(0, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                        dimnames = list(all_cell_types, all_cell_types))
+  
+  for (sample_id in names(all_results)) {
+    res <- all_results[[sample_id]]
+    
+    # 当前样本的细胞类型
+    current_types <- res$cell_types
+    
+    # 只处理当前样本中存在的细胞类型
+    for (i in seq_along(current_types)) {
+      for (j in seq_along(current_types)) {
+        ct_i <- current_types[i]
+        ct_j <- current_types[j]
+        
+        avg_log2fc[ct_i, ct_j] <- avg_log2fc[ct_i, ct_j] + res$mat_log2fc[ct_i, ct_j]
+        n_effective[ct_i, ct_j] <- n_effective[ct_i, ct_j] + 1
+        
+        combined_chi2[ct_i, ct_j] <- combined_chi2[ct_i, ct_j] + (-2 * log(res$mat_p[ct_i, ct_j] + 1e-10))
+        combined_df[ct_i, ct_j] <- combined_df[ct_i, ct_j] + 2
+      }
+    }
+  }
+  
+  # 计算平均 log2FC
+  avg_log2fc <- avg_log2fc / n_effective
+  
+  # 计算合并 p 值
+  combined_p <- matrix(1, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                       dimnames = list(all_cell_types, all_cell_types))
+  for (i in seq_along(all_cell_types)) {
+    for (j in seq_along(all_cell_types)) {
+      if (combined_df[i, j] > 0) {
+        combined_p[i, j] <- pchisq(combined_chi2[i, j], df = combined_df[i, j], lower.tail = FALSE)
+      }
+    }
+  }
+  
+  # 处理 NaN 和 Inf
+  avg_log2fc[is.nan(avg_log2fc)] <- 0
+  avg_log2fc[is.infinite(avg_log2fc) & avg_log2fc < 0] <- -10
+  avg_log2fc[is.infinite(avg_log2fc) & avg_log2fc > 0] <- 10
+  avg_log2fc[avg_log2fc > 10] <- 10
+  avg_log2fc[avg_log2fc < -10] <- -10
+  
+  # 显著性标注（只标星号）
+  signif_symbols <- matrix("", nrow = length(all_cell_types), ncol = length(all_cell_types),
+                           dimnames = list(all_cell_types, all_cell_types))
+  signif_symbols[combined_p < 0.001] <- "***"
+  signif_symbols[combined_p < 0.01 & combined_p >= 0.001] <- "**"
+  signif_symbols[combined_p < 0.05 & combined_p >= 0.01] <- "*"
+  
+  # 绘制平均热图
+  p_avg <- pheatmap(avg_log2fc,
+                    cluster_rows = TRUE,
+                    cluster_cols = TRUE,
+                    main = "Average Log2(Fold Change) across metLN samples",
+                    fontsize = 10,
+                    display_numbers = signif_symbols,
+                    number_color = "black",
+                    fontsize_number = 8,
+                    filename = "metLN_all_samples_average_contact_log2fc_detailed_subtype.pdf",
+                    width = 14, height = 12)
+
+  
+  # 保存整合结果
+  integrated_results <- list(
+    all_cell_types = all_cell_types,
+    avg_log2fc = avg_log2fc,
+    combined_p = combined_p,
+    n_effective = n_effective,
+    n_samples = length(all_results),
+    individual_results = all_results
+  )
+  
+  saveRDS(integrated_results, file = "metLN_integrated_results_detailed_subtype.rds")
+}
+
+# ===================== 全部细胞类型之间两两互作强度排序（仅显著，排除自身）=====================
+
+# ===================== 加载数据 =====================
+integrated_results <- readRDS("metLN_integrated_results_detailed_subtype.rds")
+avg_log2fc <- integrated_results$avg_log2fc
+combined_p <- integrated_results$combined_p
+all_cell_types <- integrated_results$all_cell_types
+
+# 构建映射 (detailed 亚群 → CellType 大类)
+library(dplyr)
+mapping <- metLN@meta.data %>%
+  select(detailed, CellType) %>%
+  distinct()
+
+# ===================== 主循环 =====================
+interactions <- data.frame()
+
+for (ct1 in all_cell_types) {
+  for (ct2 in all_cell_types) {
+    
+    # 1. 排除自身
+    if (ct1 == ct2) next
+    
+    # 2. 只保留显著
+    pval <- combined_p[ct1, ct2]
+    log2fc <- avg_log2fc[ct1, ct2]
+    if (is.na(pval) || pval >= 0.05) next
+    
+    # 3. 获取 CellType 大类
+    ct1_big <- mapping$CellType[match(ct1, mapping$detailed)]
+    ct2_big <- mapping$CellType[match(ct2, mapping$detailed)]
+    
+    # ===================== 【核心：严格排除】 =====================
+    # 规则 1：只要 CellType 相同 → 一律排除
+    if (ct1_big == ct2_big) {
+      next
+    }
+    
+    # 规则 2：额外排除 Tumor / T / B / DC / Macro / Fib 内部
+    g1 <- case_when(
+      startsWith(ct1, "Tumor_") ~ "Tumor",
+      startsWith(ct1, "T_") ~ "T",
+      startsWith(ct1, "B_") ~ "B",
+      startsWith(ct1, "DC_") ~ "DC",
+      startsWith(ct1, "Macro_") ~ "Macro",
+      startsWith(ct1, "Fib_") ~ "Fib",
+      TRUE ~ "Other"
+    )
+    
+    g2 <- case_when(
+      startsWith(ct2, "Tumor_") ~ "Tumor",
+      startsWith(ct2, "T_") ~ "T",
+      startsWith(ct2, "B_") ~ "B",
+      startsWith(ct2, "DC_") ~ "DC",
+      startsWith(ct2, "Macro_") ~ "Macro",
+      startsWith(ct2, "Fib_") ~ "Fib",
+      TRUE ~ "Other"
+    )
+    
+    # 同类主群内部 → 排除
+    if (g1 == g2 & g1 != "Other") {
+      next
+    }
+    
+    # ===================== 能走到这里 = 全部保留 =====================
+    interactions <- rbind(interactions, data.frame(
+      detailed1 = ct1,
+      detailed2 = ct2,
+      CellType1 = ct1_big,
+      CellType2 = ct2_big,
+      group1 = g1,
+      group2 = g2,
+      log2FC = log2fc,
+      p_value = pval,
+      stringsAsFactors = FALSE
+    ))
+  }
+}
+
+# ===================== 排序：从正到负，由大到小 =====================
+if (nrow(interactions) > 0) {
+  interactions_sorted <- interactions[order(-interactions$log2FC), ]
+  
+  interactions_sorted$signif <- ""
+  interactions_sorted$signif[interactions_sorted$p_value < 0.05]  <- "*"
+  interactions_sorted$signif[interactions_sorted$p_value < 0.01]  <- "**"
+  interactions_sorted$signif[interactions_sorted$p_value < 0.001] <- "***"
+  
+  cat("\n===== 最终显著互作（正→负 大→小）=====\n")
+  print(head(interactions_sorted[, c("detailed1","detailed2","CellType1","CellType2","log2FC","signif")], 30))
+  
+  write.csv(interactions_sorted, "metLN_subtype_significant_interactions.csv", row.names = FALSE)
+  cat("\n文件已保存：final_significant_interactions.csv\n")
+  
+} else {
+  cat("没有符合条件的显著互作\n")
+}
+
+# ===================== 去重 + 绘图 =====================
+library(ggplot2)
+library(dplyr)
+
+# 1. 去重：把 A↔B 和 B↔A 视为同一对
+unique_inter <- interactions_sorted %>%
+  rowwise() %>%
+  mutate(pair = paste(sort(c(detailed1, detailed2)), collapse = " ↔ ")) %>%
+  ungroup() %>%
+  distinct(pair, .keep_all = TRUE) %>%
+  arrange(-log2FC)
+
+# 2. 取去重后的 top30
+top30 <- head(unique_inter, 30)
+
+# 3. 保证顺序
+top30 <- top30 %>% arrange(log2FC)
+top30$pair <- factor(top30$pair, levels = top30$pair)
+
+# 4. 绘图（正常出条形）
+p <- ggplot(top30, aes(x = pair, y = log2FC, fill = log2FC > 0)) +
+  geom_col(width = 0.7) +
+  coord_flip() +
+  scale_fill_manual(values = c("TRUE" = "#E74C3C", "FALSE" = "#6699ff")) +
+  geom_text(aes(label = signif), hjust = -0.2, size = 3.5) +
+  labs(title = "Top30 Unique Cell-Cell Interactions",
+       x = "Cell Pair", y = "log2FC") +
+  theme_bw() +
+  theme(axis.text.y = element_text(size = 15),
+        plot.title = element_text(hjust = 0.5))
+
+ggsave("metLN_subtype_Top30_interactions_no_duplicate.pdf", p, width = 16, height = 10)
+cat("✅ 去重完成，条形图已正常生成\n")
+
+# ===================== 最终微调版：字更大 + 图更小 + TOP10 + 拼图 =====================
+library(ggplot2)
+library(dplyr)
+library(patchwork)
+
+# 1. 总结果去重
+unique_total <- interactions_sorted %>%
+  rowwise() %>%
+  mutate(pair_key = paste(sort(c(detailed1, detailed2)), collapse = "_")) %>%
+  ungroup() %>%
+  distinct(pair_key, .keep_all = TRUE) %>%
+  arrange(desc(log2FC))
+
+# 2. 提取肿瘤亚型
+tumor_types <- grep("^Tumor_", all_cell_types, value = TRUE)
+
+if (length(tumor_types) == 0) {
+  cat("未找到 Tumor 亚型\n")
+} else {
+  plot_list <- list()
+  
+  for (tumor in tumor_types) {
+    tumor_dat <- unique_total %>%
+      filter(detailed1 == !!tumor | detailed2 == !!tumor)
+    if (nrow(tumor_dat) == 0) next
+    
+    # 取 TOP10
+    top10 <- head(tumor_dat, 10)
+    top10 <- top10 %>% arrange(log2FC)
+    top10$label <- paste(top10$detailed1, "↔", top10$detailed2)
+    top10$label <- factor(top10$label, levels = unique(top10$label))
+    
+    # 画图：字更大 + 更清晰
+    p <- ggplot(top10, aes(x = label, y = log2FC, fill = log2FC > 0)) +
+      geom_col(width = 0.75) +
+      coord_flip() +
+      scale_fill_manual(values = c("#4A90E2", "#E74C3C")) +
+      geom_text(aes(label = signif), hjust = -0.2, size = 4.5, fontface="bold") +
+      labs(title = tumor, y = "log2FC", x = "") +
+      theme_bw(base_size = 13) +  # 全局字更大
+      theme(
+        plot.title = element_text(hjust = 0.5, size = 14, face="bold"),
+        axis.text.y = element_text(size = 12),  # Y轴字明显更大
+        axis.text.x = element_text(size = 11),
+        axis.title = element_text(size = 12),
+        legend.position = "none"
+      )
+    
+    # 保存单图：尺寸更小（宽度8 高度6）
+    ggsave(paste0("metLN_subtype_", tumor, "_Top10.pdf"), p, width=8, height=6, dpi=300)
+    plot_list[[tumor]] <- p
+  }
+  
+  # 拼图：整体更小
+  if (length(plot_list) > 0) {
+    combined <- wrap_plots(plot_list, ncol=2) + plot_layout(guides="collect")
+    ggsave("metLN_subtype_all_tumors_top10_combined.pdf", combined, width=20, height=5*ceiling(length(plot_list)/2), dpi=300)
+    cat("\n✅ 画图完成：字更大 + 图更小！\n")
+  }
+}
+```
+# mPT subtype CN
+```R
+library(Seurat)
+library(ggplot2)
+library(patchwork)
+library(pheatmap)
+library(vegan)
+library(dplyr)
+library(tidyr)
+library(RColorBrewer)
+
+# 加载结果
+message("=== 加载 CellCharter 结果 ===")
+mPT <- readRDS("mPT_cellcharter_FINAL.rds")
+
+#CN组成
+# 查看每个CN的细胞组成
+cn_composition <- table(mPT@meta.data$cellcharter_cluster, 
+                        mPT@meta.data$detailed)
+
+# 计算每个CN的比例
+cn_prop <- prop.table(cn_composition, margin = 1) * 100
+
+# 打印每个CN的主要细胞类型（前5种）
+for (cn in rownames(cn_prop)) {
+  cat("\n=== CN", cn, "===\n")
+  top10 <- sort(cn_prop[cn, ], decreasing = TRUE)[1:10]
+  for (i in 1:length(top10)) {
+    cat(names(top10)[i], ": ", round(top10[i], 1), "%\n", sep = "")
+  }
+}
+
+#CN注释
+
+cn_annotation_detailed <- c(
+  "1"  = "Alveolar_Homeostatic_Zone",
+  "2"  = "Immune_Zone",
+  "3"  = "Stromal_Remodeling_Zone",
+  "4"  = "TLS_Zone",
+  "5"  = "Inflammatory_Vascular_Zone",
+  "6"  = "Macrophage_Dominant_Zone_A",
+  "7"  = "Vascular_Stromal_Zone",
+  "8"  = "Pericyte_Dominant_Zone",
+  "9"  = "Plasma_Enriched_Zone_A",
+  "10" = "Plasma_Enriched_Zone_B",
+  "11" = "Metabolic_Tumor_Core_A",
+  "12" = "Metabolic_Tumor_Mast_Interface",
+  "13" = "Metabolic_Tumor_Core_B",
+  "14" = "Metabolic_Tumor_Stromal_Interface",
+  "15" = "Plasma_Enriched_Zone_C"
+)
+# 应用到 Seurat 对象
+mPT@meta.data$cn_detailed <- cn_annotation_detailed[as.character(mPT@meta.data$cellcharter_cluster)]
+
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(patchwork)
+
+# 定义颜色（你的20种颜色）
+cluster_colors <- c(
+  "#A0CBE8", "#FFBE7D", "#8CD17D", "#86BCB6", "#FF9D9A",
+  "#FABFD2", "#D4A6C8", "#F1CE63", "#D7B5A6", "#B07AA1",
+  "#BAB0AC", "#4E79A7", "#F28E2B", "#59A14F", "#E15759",
+  "#499894", "#D37295", "#B6992D", "#9D7660", "#79706E"
+)
+
+# =====================
+# 1. 准备数据
+# =====================
+
+# 假设你的 mPT 对象中有：
+# - cn_detailed: CN编号 (1-15)
+# - sample: 样本名称
+
+# 计算总体比例
+total_prop <- mPT@meta.data %>%
+  group_by(cn_detailed) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  mutate(proportion = count / sum(count) * 100,
+         type = "Overall")
+
+# 计算各样本比例
+sample_prop <- mPT@meta.data %>%
+  group_by(sample, cn_detailed) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(sample) %>%
+  mutate(proportion = count / sum(count) * 100,
+         type = sample) %>%
+  ungroup()
+
+# 合并数据
+combined_data <- bind_rows(total_prop, sample_prop)
+
+# 确保 cn_detailed 是因子（按数字顺序）
+combined_data$cn_detailed <- factor(combined_data$cn_detailed, 
+                                     levels = sort(unique(combined_data$cn_detailed)))
+
+# =====================
+# 方法1：分面图（推荐）
+# =====================
+
+# 总体 + 各样本分面显示
+p_facet <- ggplot(combined_data, aes(x = type, y = proportion, fill = cn_detailed)) +
+  geom_bar(stat = "identity", position = "fill", width = 0.7) +
+  scale_fill_manual(values = cluster_colors, name = "Cell Neighborhood") +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(title = "CN Proportion by Sample",
+       x = "",
+       y = "Proportion") +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title = element_text(size = 12, face = "bold"),
+    legend.position = "right",
+    legend.text = element_text(size = 8),
+    strip.background = element_rect(fill = "lightgray"),
+    strip.text = element_text(size = 10, face = "bold")
+  )
+
+ggsave("mPT_cn_proportion_by_sample_facet.pdf", p_facet, width = 6, height = 6, dpi = 300)
+
+# 3. 每个邻域细胞组成热图
+# =====================
+message("=== 3. 生成邻域细胞组成热图 ===")
+
+cluster_composition <- table(mPT@meta.data$cellcharter_cluster, 
+                           mPT@meta.data$detailed)
+
+cluster_composition_df <- as.data.frame(cluster_composition)
+colnames(cluster_composition_df) <- c("Cluster", "CellType", "Count")
+
+cluster_totals <- aggregate(Count ~ Cluster, data = cluster_composition_df, sum)
+cluster_composition_df <- merge(cluster_composition_df, cluster_totals, by = "Cluster")
+cluster_composition_df$Proportion <- cluster_composition_df$Count.x / cluster_composition_df$Count.y
+
+# 转换为宽格式
+heatmap_data <- cluster_composition_df %>%
+  select(Cluster, CellType, Proportion) %>%
+  pivot_wider(names_from = CellType, values_from = Proportion, values_fill = 0)
+
+# 按Cluster数字排序
+cluster_numeric <- as.numeric(as.character(heatmap_data$Cluster))
+heatmap_data <- heatmap_data[order(cluster_numeric), ]
+
+# 创建行标签（使用你的注释名称）
+row_labels_annotated <- cn_annotation_detailed[as.character(cluster_numeric[order(cluster_numeric)])]
+
+# 设置行名
+rownames(heatmap_data) <- row_labels_annotated
+heatmap_matrix <- as.matrix(heatmap_data[, -1])
+
+# 绘制热图（字体增大的版本）
+p_heatmap <- pheatmap(heatmap_matrix,
+                    cluster_rows = TRUE,
+                    cluster_cols = TRUE,
+                    display_numbers = FALSE,
+                    main = "Cell Type Composition by Spatial Domain",
+                    fontsize = 14,           # 全局字体增大
+                    fontsize_row = 10,       # 行标签字体（注释名称较长，用10合适）
+                    fontsize_col = 9,        # 列标签字体
+                    labels_row = row_labels_annotated,
+                    color = colorRampPalette(c("#f0f0f0", "#3182bd", "#08519c"))(100),
+                    cellwidth = 11,          # 单元格宽度
+                    cellheight = 11)         # 单元格高度
+
+# 保存
+pdf("mPT_CN_cell_type_composition_heatmap_annotated.pdf", width = 16, height = 12)
+print(p_heatmap)
+dev.off()
+
+library(ggplot2)
+library(dplyr)
+library(scales)
+library(RColorBrewer)
+
+# 计算每个 CN 中每种细胞类型的数量
+stack_data_count <- mPT@meta.data %>%
+  group_by(cn_detailed, detailed) %>%
+  summarise(count = n(), .groups = "drop")
+
+# 为每个 CN 找出 top 10 细胞类型
+top10_per_cn <- stack_data_count %>%
+  group_by(cn_detailed) %>%
+  arrange(desc(count)) %>%
+  slice_head(n = 10) %>%
+  ungroup()
+
+# 将非 top 10 的细胞类型合并为 "Other"
+stack_data_top10 <- stack_data_count %>%
+  left_join(top10_per_cn %>% select(cn_detailed, detailed) %>% mutate(is_top10 = TRUE),
+            by = c("cn_detailed", "detailed")) %>%
+  mutate(detailed_grouped = ifelse(is_top10, detailed, "Other")) %>%
+  group_by(cn_detailed, detailed_grouped) %>%
+  summarise(count = sum(count), .groups = "drop")
+
+# 按首字母顺序排序 CN
+cn_order <- sort(unique(stack_data_top10$cn_detailed))
+stack_data_top10$cn_detailed <- factor(stack_data_top10$cn_detailed, levels = cn_order)
+
+# 获取所有需要着色的类别
+all_cell_types <- unique(stack_data_top10$detailed_grouped)
+n_colors_needed <- length(all_cell_types)
+
+# 方案1：使用彩虹色（qualitative调色板）
+# 提取足够多的颜色
+if(n_colors_needed <= 12) {
+  cell_colors <- brewer.pal(n_colors_needed, "Set3")
+} else {
+  # 使用 colorRampPalette 生成更多颜色
+  get_palette <- colorRampPalette(brewer.pal(12, "Set3"))
+  cell_colors <- get_palette(n_colors_needed)
+}
+names(cell_colors) <- all_cell_types
+
+# 确保 "Other" 是灰色
+if("Other" %in% names(cell_colors)) {
+  cell_colors["Other"] <- "#D3D3D3"
+}
+
+# 绘制
+p_count_top10 <- ggplot(stack_data_top10, aes(x = cn_detailed, y = count, fill = detailed_grouped)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.8) +
+  scale_fill_manual(values = cell_colors, name = "Cell Type") +
+  labs(title = "Cell Type Count by CN (Top 10 per CN + Others)",
+       x = "Cell Neighborhood (CN)",
+       y = "Cell Count") +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title = element_text(size = 12, face = "bold"),
+    legend.position = "right",
+    legend.text = element_text(size = 8),
+    legend.key.size = unit(0.4, "cm")
+  )
+
+ggsave("mPT_cn_celltype_count_top10_per_CN.pdf", p_count_top10, width = 16, height = 8, dpi = 300)
+
+#Tumor 的CN组成
+tumor_cell_types <- grep("Tumor_", unique(mPT@meta.data$detailed), value = TRUE)
+
+if(length(tumor_cell_types) == 0) {
+  tumor_cell_types <- grep("tumor|malignant|cancer", 
+                           unique(mPT@meta.data$detailed), 
+                           value = TRUE, ignore.case = TRUE)
+}
+
+print(paste("找到", length(tumor_cell_types), "种肿瘤亚型："))
+print(tumor_cell_types)
+
+# =====================
+# 计算每种肿瘤亚型在各CN中的占比
+# =====================
+
+tumor_cn_composition <- mPT@meta.data %>%
+  filter(detailed %in% tumor_cell_types) %>%
+  group_by(detailed, cellcharter_cluster) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(detailed) %>%
+  mutate(proportion = count / sum(count) * 100) %>%
+  ungroup() %>%
+  filter(proportion > 0)
+
+# =====================
+# 确保 CN 按数字顺序排序 (CN1 到 CN15)
+# =====================
+
+# 获取所有出现的CN编号
+all_cn_numbers <- sort(unique(tumor_cn_composition$cellcharter_cluster))
+
+# 创建 CN 标签（CN1, CN2, ...）
+tumor_cn_composition$cn_label <- factor(
+  paste0("CN", tumor_cn_composition$cellcharter_cluster),
+  levels = paste0("CN", all_cn_numbers)  # 按数字顺序设置级别
+)
+
+# =====================
+# 定义颜色（CN1-CN15）
+# =====================
+
+cluster_colors <- c(
+  "#A0CBE8", "#FFBE7D", "#8CD17D", "#86BCB6", "#FF9D9A",
+  "#FABFD2", "#D4A6C8", "#F1CE63", "#D7B5A6", "#B07AA1",
+  "#BAB0AC", "#4E79A7", "#F28E2B", "#59A14F", "#E15759"
+)
+
+# 只取前15个颜色（对应CN1-CN15）
+cluster_colors_15 <- cluster_colors[1:15]
+names(cluster_colors_15) <- paste0("CN", 1:15)
+
+# 只保留实际出现的CN的颜色
+cn_colors <- cluster_colors_15[paste0("CN", all_cn_numbers)]
+
+# =====================
+# 绘制分面饼图
+# =====================
+
+p_facet_pie <- ggplot(tumor_cn_composition, aes(x = "", y = proportion, fill = cn_label)) +
+  geom_bar(stat = "identity", width = 1, color = "black", size = 0.5) +
+  coord_polar("y", start = 0) +
+  facet_wrap(~ detailed, ncol =5) +
+  scale_fill_manual(values = cn_colors, name = "CN", breaks = paste0("CN", 1:15)) +
+  labs(title = "mPT: CN Composition for Each Tumor Subtype") +
+  theme_void() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    strip.text = element_text(size = 10, face = "bold"),
+    legend.position = "right",
+    legend.title = element_text(size = 10, face = "bold"),
+    legend.text = element_text(size = 8),
+    legend.key.size = unit(0.4, "cm")
+  )
+
+print(p_facet_pie)
+ggsave("mPT_tumor_subtype_facet_pie.pdf", p_facet_pie, 
+       width = 14, height = ceiling(length(tumor_cell_types)/3) * 4, 
+       dpi = 300)
+
+#D3
+library(ggplot2)
+library(dplyr)
+
+# 提取D3样本中FOV 164和165的数据
+selected_fovs <- c(155, 159)
+fov_data <- mPT@meta.data %>% 
+  filter(sample == "D3", fov %in% selected_fovs)
+
+
+
+# 获取实际出现的CN注释，按首字母排序
+actual_cn <- sort(unique(fov_data$cn_detailed))
+print("按首字母排序的CN：")
+print(actual_cn)
+
+# 颜色向量（按顺序分配）
+cluster_colors <- c(
+  "#A0CBE8", "#FFBE7D", "#8CD17D", "#86BCB6", "#FF9D9A",
+  "#FABFD2", "#D4A6C8", "#F1CE63", "#D7B5A6", "#B07AA1",
+  "#BAB0AC", "#4E79A7", "#F28E2B", "#59A14F", "#E15759",
+  "#499894", "#D37295", "#B6992D", "#9D7660", "#79706E"
+)
+
+# 按顺序分配颜色
+used_colors <- cluster_colors[1:length(actual_cn)]
+names(used_colors) <- actual_cn
+
+
+# 绘制
+p <- ggplot(fov_data, aes(x = CenterX_global_px, y = CenterY_global_px, color = cn_detailed)) +
+  geom_point(size = 0.5, alpha = 0.8) +  
+  scale_color_manual(values = used_colors, name = "Cell Neighborhood") +
+  labs(title = "mPT D3 Sample: FOV 153 & 159 CN Distribution",
+       x = "X Coordinate (px)",
+       y = "Y Coordinate (px)") +
+  theme_bw() +
+  theme(
+    aspect.ratio = 1.5,
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+    legend.position = "right",
+    panel.grid = element_blank(),
+    panel.background = element_rect(fill = "white", color = NA),
+    legend.key.size = unit(0.6, "cm"),
+    legend.text = element_text(size = 7)
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 3), ncol = 1))
+
+ggsave("mPT_D3_FOV153_159_CN.pdf", p, width = 6, height = 8, dpi = 300)
+
+
+#fov 范围
+fov255_data <- mPT@meta.data %>% 
+  filter(sample == "C2", fov == 255)
+
+# 查看X坐标范围
+range_x <- range(fov255_data$CenterX_global_px)
+print(paste("X轴范围:", range_x[1], "~", range_x[2]))
+
+# 查看完整范围信息
+summary(fov255_data$CenterX_global_px)
+
+library(ggplot2)
+library(dplyr)
+
+# =====================
+# 1. 自动提取所有CN注释并分配固定颜色
+# =====================
+
+# 从mPT对象中自动提取所有唯一的CN注释
+all_cn_annotations <- sort(unique(mPT@meta.data$cn_detailed))
+print("所有CN注释：")
+print(all_cn_annotations)
+
+# 颜色向量（自动扩展）
+cluster_colors <- c(
+  "#A0CBE8", "#FFBE7D", "#8CD17D", "#86BCB6", "#FF9D9A",
+  "#FABFD2", "#D4A6C8", "#F1CE63", "#D7B5A6", "#B07AA1",
+  "#BAB0AC", "#4E79A7", "#F28E2B", "#59A14F", "#E15759",
+  "#499894", "#D37295", "#B6992D", "#9D7660", "#79706E"
+)
+
+# 自动分配颜色（循环使用颜色向量直到足够）
+fixed_colors <- rep(cluster_colors, length.out = length(all_cn_annotations))
+names(fixed_colors) <- all_cn_annotations
+
+print("颜色映射：")
+print(fixed_colors)
+
+# =====================
+# 2. 提取C2样本FOV 255和261的数据，并筛选X轴范围
+# =====================
+
+selected_fovs <- c(255, 254)
+fov_data <- mPT@meta.data %>% 
+  filter(sample == "C2", fov %in% selected_fovs)
+         #CenterX_global_px >= 49805, CenterX_global_px <= 54031)
+
+# =====================
+# 3. 绘图（颜色自动匹配）
+# =====================
+
+p <- ggplot(fov_data, aes(x = CenterX_global_px, y = CenterY_global_px, color = cn_detailed)) +
+  geom_point(size = 0.5, alpha = 0.8) +  
+  scale_color_manual(values = fixed_colors, name = "Cell Neighborhood") +
+  labs(title = "mPT C2 Sample: FOV 254 & 255 CN Distribution",
+       x = "X Coordinate (px)",
+       y = "Y Coordinate (px)") +
+  theme_bw() +
+  theme(
+    aspect.ratio = 0.5,
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+    legend.position = "right",
+    panel.grid = element_blank(),
+    panel.background = element_rect(fill = "white", color = NA),
+    legend.key.size = unit(0.6, "cm"),
+    legend.text = element_text(size = 7)
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 3), ncol = 1))
+
+ggsave("mPT_C2_FOV254_255_CN.pdf", p, width = 8, height = 4, dpi = 300)
+
+#CN4 B and T
+library(ggplot2)
+library(dplyr)
+library(patchwork)
+
+# ===================== 提取CN4中的B细胞和T细胞亚群 =====================
+
+# 筛选CN4的细胞
+cn4_cells <- mPT@meta.data %>% filter(cn_detailed == "TLS_Zone")
+
+# 提取B细胞亚群（以B_开头）
+b_cell_types <- grep("^B_", unique(cn4_cells$detailed), value = TRUE)
+
+# 提取T细胞亚群（以T_开头，排除Tumor）
+t_cell_types <- grep("^T_", unique(cn4_cells$detailed), value = TRUE)
+t_cell_types <- t_cell_types[!grepl("Tumor", t_cell_types)]
+
+cat("B细胞亚群：", paste(b_cell_types, collapse = ", "), "\n")
+cat("T细胞亚群：", paste(t_cell_types, collapse = ", "), "\n")
+
+# ===================== 颜色方案（都从第一个颜色开始） =====================
+
+cluster_colors <- c(
+  "#A0CBE8", "#FFBE7D", "#8CD17D", "#86BCB6", "#FF9D9A",
+  "#FABFD2", "#D4A6C8", "#F1CE63", "#D7B5A6", "#B07AA1",
+  "#BAB0AC", "#4E79A7", "#F28E2B", "#59A14F", "#E15759",
+  "#499894", "#D37295", "#B6992D", "#9D7660", "#79706E"
+)
+
+# ===================== 计算B细胞亚群占比 =====================
+
+b_data <- cn4_cells %>%
+  filter(detailed %in% b_cell_types) %>%
+  group_by(detailed) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  mutate(percentage = count / sum(count) * 100)
+
+# 按百分比排序
+b_data <- b_data %>% arrange(desc(percentage))
+b_data$detailed <- factor(b_data$detailed, levels = b_data$detailed)
+
+# 分配颜色（从第一个开始）
+b_colors <- cluster_colors[1:nrow(b_data)]
+names(b_colors) <- b_data$detailed
+
+# ===================== 计算T细胞亚群占比 =====================
+
+t_data <- cn4_cells %>%
+  filter(detailed %in% t_cell_types) %>%
+  group_by(detailed) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  mutate(percentage = count / sum(count) * 100)
+
+# 按百分比排序
+t_data <- t_data %>% arrange(desc(percentage))
+t_data$detailed <- factor(t_data$detailed, levels = t_data$detailed)
+
+# 分配颜色（也从第一个开始）
+t_colors <- cluster_colors[1:nrow(t_data)]
+names(t_colors) <- t_data$detailed
+
+# B细胞饼图（不显示比例数字）
+if (nrow(b_data) > 0) {
+  p_b <- ggplot(b_data, aes(x = "", y = percentage, fill = detailed)) +
+    geom_bar(stat = "identity", width = 1, color = "black", size = 0.5) +
+    coord_polar("y", start = 0) +
+    scale_fill_manual(values = b_colors, name = "B Cell Subtype") +
+    labs(title = paste0("B Cell Composition in CN4")) +
+    theme_void() +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+      legend.position = "right",
+      legend.text = element_text(size = 8)
+    )
+  
+  ggsave("CN4_B_cell_pie.pdf", p_b, width = 7, height = 5, dpi = 300)
+  print(p_b)
+}
+
+# T细胞饼图（不显示比例数字）
+if (nrow(t_data) > 0) {
+  p_t <- ggplot(t_data, aes(x = "", y = percentage, fill = detailed)) +
+    geom_bar(stat = "identity", width = 1, color = "black", size = 0.5) +
+    coord_polar("y", start = 0) +
+    scale_fill_manual(values = t_colors, name = "T Cell Subtype") +
+    labs(title = paste0("T Cell Composition in CN4")) +
+    theme_void() +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+      legend.position = "right",
+      legend.text = element_text(size = 8)
+    )
+  
+  ggsave("CN4_T_cell_pie.pdf", p_t, width = 7, height = 5, dpi = 300)
+  print(p_t)
+}
+
+# ===================== 两个饼图拼在一起 =====================
+
+if (nrow(b_data) > 0 && nrow(t_data) > 0) {
+  combined <- p_b + p_t +
+    plot_annotation(
+      title = "CN4 (TLS Zone) Immune Cell Composition",
+      theme = theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 14))
+    )
+  
+  ggsave("CN4_B_T_cell_pies_combined.pdf", combined, width = 12, height = 5, dpi = 300)
+  print(combined)
+}
+
+```
+# nmPT subtype CN
+```R
+library(Seurat)
+library(ggplot2)
+library(patchwork)
+library(pheatmap)
+library(vegan)
+library(dplyr)
+library(tidyr)
+library(RColorBrewer)
+
+# 加载结果
+message("=== 加载 CellCharter 结果 ===")
+nmPT <- readRDS("nmPT_cellcharter_FINAL.rds")
+
+#CN组成
+# 查看每个CN的细胞组成
+cn_composition <- table(nmPT@meta.data$cellcharter_cluster, 
+                        nmPT@meta.data$detailed)
+
+# 计算每个CN的比例
+cn_prop <- prop.table(cn_composition, margin = 1) * 100
+
+# 打印每个CN的主要细胞类型（前5种）
+for (cn in rownames(cn_prop)) {
+  cat("\n=== CN", cn, "===\n")
+  top10 <- sort(cn_prop[cn, ], decreasing = TRUE)[1:10]
+  for (i in 1:length(top10)) {
+    cat(names(top10)[i], ": ", round(top10[i], 1), "%\n", sep = "")
+  }
+}
+
+#CN注释
+cn_annotation_detailed <- c(
+  "1"  = "Vascular_Stromal_Zone",
+  "2"  = "Immune_Zone",
+  "3"  = "Macrophage_Dominant_Zone_A",
+  "4"  = "Macrophage_Dominant_Zone_B",
+  "5"  = "TLS_Zone",
+  "6"  = "Stromal_Remodeling_Zone",
+  "7"  = "Stem_Proliferative_Tumor_Zone_A",
+  "8"  = "Alveolar_Homeostatic_Zone",
+  "9"  = "Stem_Proliferative_Tumor_Zone_B",
+  "10" = "Mast_Cell_Dominant_Zone",
+  "11" = "Plasma_Enriched_Zone_B",
+  "12" = "Immunogenic_Tumor_Core_A",
+  "13" = "Immunogenic_Tumor_Core_B",
+  "14" = "Immunogenic_Tumor_Mast_Interface",
+  "15" = "Plasma_Enriched_Zone_D",
+  "16" = "Immunogenic_Tumor_Immune_Interface",
+  "17" = "EMT_Tumor_Core",
+  "18" = "Immunogenic_Tumor_Core_C",
+  "19" = "Plasma_Enriched_Zone_E",
+  "20" = "Stem_Proliferative_Tumor_Zone_C"
+)
+
+# 应用到 Seurat 对象
+nmPT@meta.data$cn_detailed <- cn_annotation_detailed[as.character(nmPT@meta.data$cellcharter_cluster)]
+
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(patchwork)
+
+# 定义颜色（你的20种颜色）
+cluster_colors <- c(
+  "#A0CBE8", "#FFBE7D", "#8CD17D", "#86BCB6", "#FF9D9A",
+  "#FABFD2", "#D4A6C8", "#F1CE63", "#D7B5A6", "#B07AA1",
+  "#BAB0AC", "#4E79A7", "#F28E2B", "#59A14F", "#E15759",
+  "#499894", "#D37295", "#B6992D", "#9D7660", "#79706E"
+)
+
+# =====================
+# 1. 准备数据
+# =====================
+
+# 假设你的 nmPT 对象中有：
+# - cn_detailed: CN编号 (1-15)
+# - sample: 样本名称
+
+# 计算总体比例
+total_prop <- nmPT@meta.data %>%
+  group_by(cn_detailed) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  mutate(proportion = count / sum(count) * 100,
+         type = "Overall")
+
+# 计算各样本比例
+sample_prop <- nmPT@meta.data %>%
+  group_by(sample, cn_detailed) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(sample) %>%
+  mutate(proportion = count / sum(count) * 100,
+         type = sample) %>%
+  ungroup()
+
+# 合并数据
+combined_data <- bind_rows(total_prop, sample_prop)
+
+# 确保 cn_detailed 是因子（按数字顺序）
+combined_data$cn_detailed <- factor(combined_data$cn_detailed, 
+                                     levels = sort(unique(combined_data$cn_detailed)))
+
+# =====================
+# 方法1：分面图（推荐）
+# =====================
+
+# 总体 + 各样本分面显示
+p_facet <- ggplot(combined_data, aes(x = type, y = proportion, fill = cn_detailed)) +
+  geom_bar(stat = "identity", position = "fill", width = 0.7) +
+  scale_fill_manual(values = cluster_colors, name = "Cell Neighborhood") +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(title = "CN Proportion by Sample",
+       x = "",
+       y = "Proportion") +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title = element_text(size = 12, face = "bold"),
+    legend.position = "right",
+    legend.text = element_text(size = 8),
+    strip.background = element_rect(fill = "lightgray"),
+    strip.text = element_text(size = 10, face = "bold")
+  )
+
+ggsave("nmPT_cn_proportion_by_sample_facet.pdf", p_facet, width = 6, height = 6, dpi = 300)
+
+# 3. 每个邻域细胞组成热图
+# =====================
+message("=== 3. 生成邻域细胞组成热图 ===")
+
+cluster_composition <- table(nmPT@meta.data$cellcharter_cluster, 
+                           nmPT@meta.data$detailed)
+
+cluster_composition_df <- as.data.frame(cluster_composition)
+colnames(cluster_composition_df) <- c("Cluster", "CellType", "Count")
+
+cluster_totals <- aggregate(Count ~ Cluster, data = cluster_composition_df, sum)
+cluster_composition_df <- merge(cluster_composition_df, cluster_totals, by = "Cluster")
+cluster_composition_df$Proportion <- cluster_composition_df$Count.x / cluster_composition_df$Count.y
+
+# 转换为宽格式
+heatmap_data <- cluster_composition_df %>%
+  select(Cluster, CellType, Proportion) %>%
+  pivot_wider(names_from = CellType, values_from = Proportion, values_fill = 0)
+
+# 按Cluster数字排序
+cluster_numeric <- as.numeric(as.character(heatmap_data$Cluster))
+heatmap_data <- heatmap_data[order(cluster_numeric), ]
+
+# 创建行标签（使用你的注释名称）
+row_labels_annotated <- cn_annotation_detailed[as.character(cluster_numeric[order(cluster_numeric)])]
+
+# 设置行名
+rownames(heatmap_data) <- row_labels_annotated
+heatmap_matrix <- as.matrix(heatmap_data[, -1])
+
+# 绘制热图（字体增大的版本）
+p_heatmap <- pheatmap(heatmap_matrix,
+                    cluster_rows = TRUE,
+                    cluster_cols = TRUE,
+                    display_numbers = FALSE,
+                    main = "Cell Type Composition by Spatial Domain",
+                    fontsize = 14,           # 全局字体增大
+                    fontsize_row = 10,       # 行标签字体（注释名称较长，用10合适）
+                    fontsize_col = 9,        # 列标签字体
+                    labels_row = row_labels_annotated,
+                    color = colorRampPalette(c("#f0f0f0", "#3182bd", "#08519c"))(100),
+                    cellwidth = 11,          # 单元格宽度
+                    cellheight = 11)         # 单元格高度
+
+# 保存
+pdf("nmPT_CN_cell_type_composition_heatmap_annotated.pdf", width = 16, height = 12)
+print(p_heatmap)
+dev.off()
+
+library(ggplot2)
+library(dplyr)
+library(scales)
+library(RColorBrewer)
+
+# 计算每个 CN 中每种细胞类型的数量
+stack_data_count <- nmPT@meta.data %>%
+  group_by(cn_detailed, detailed) %>%
+  summarise(count = n(), .groups = "drop")
+
+# 为每个 CN 找出 top 10 细胞类型
+top10_per_cn <- stack_data_count %>%
+  group_by(cn_detailed) %>%
+  arrange(desc(count)) %>%
+  slice_head(n = 10) %>%
+  ungroup()
+
+# 将非 top 10 的细胞类型合并为 "Other"
+stack_data_top10 <- stack_data_count %>%
+  left_join(top10_per_cn %>% select(cn_detailed, detailed) %>% mutate(is_top10 = TRUE),
+            by = c("cn_detailed", "detailed")) %>%
+  mutate(detailed_grouped = ifelse(is_top10, detailed, "Other")) %>%
+  group_by(cn_detailed, detailed_grouped) %>%
+  summarise(count = sum(count), .groups = "drop")
+
+# 按首字母顺序排序 CN
+cn_order <- sort(unique(stack_data_top10$cn_detailed))
+stack_data_top10$cn_detailed <- factor(stack_data_top10$cn_detailed, levels = cn_order)
+
+# 获取所有需要着色的类别
+all_cell_types <- unique(stack_data_top10$detailed_grouped)
+n_colors_needed <- length(all_cell_types)
+
+# 方案1：使用彩虹色（qualitative调色板）
+# 提取足够多的颜色
+if(n_colors_needed <= 12) {
+  cell_colors <- brewer.pal(n_colors_needed, "Set3")
+} else {
+  # 使用 colorRampPalette 生成更多颜色
+  get_palette <- colorRampPalette(brewer.pal(12, "Set3"))
+  cell_colors <- get_palette(n_colors_needed)
+}
+names(cell_colors) <- all_cell_types
+
+# 确保 "Other" 是灰色
+if("Other" %in% names(cell_colors)) {
+  cell_colors["Other"] <- "#D3D3D3"
+}
+
+# 绘制
+p_count_top10 <- ggplot(stack_data_top10, aes(x = cn_detailed, y = count, fill = detailed_grouped)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.8) +
+  scale_fill_manual(values = cell_colors, name = "Cell Type") +
+  labs(title = "Cell Type Count by CN (Top 10 per CN + Others)",
+       x = "Cell Neighborhood (CN)",
+       y = "Cell Count") +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title = element_text(size = 12, face = "bold"),
+    legend.position = "right",
+    legend.text = element_text(size = 8),
+    legend.key.size = unit(0.4, "cm")
+  )
+
+ggsave("nmPT_cn_celltype_count_top10_per_CN.pdf", p_count_top10, width = 16, height = 8, dpi = 300)
+
+#比较mPT和nmPT的immune zone
+library(ggplot2)
+library(dplyr)
+library(patchwork)
+
+# ===================== 提取两个数据集中 Immune_Zone 的细胞 =====================
+
+# mPT中的Immune_Zone
+mPT_immune <- mPT@meta.data %>% filter(cn_detailed == "Immune_Zone")
+mPT_immune$dataset <- "mPT"
+
+# nmPT中的Immune_Zone
+nmPT_immune <- nmPT@meta.data %>% filter(cn_detailed == "Immune_Zone")
+nmPT_immune$dataset <- "nmPT"
+
+# 合并数据
+combined_immune <- bind_rows(mPT_immune, nmPT_immune)
+
+cat("mPT Immune_Zone 细胞数：", nrow(mPT_immune), "\n")
+cat("nmPT Immune_Zone 细胞数：", nrow(nmPT_immune), "\n")
+
+# ===================== 1. 总细胞组成占比差异堆叠图 =====================
+
+# 计算每个数据集中各细胞类型的占比
+total_composition <- combined_immune %>%
+  group_by(dataset, detailed) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(dataset) %>%
+  mutate(percentage = count / sum(count) * 100) %>%
+  ungroup()
+
+# 获取top 15细胞类型（用于清晰显示）
+top_cell_types <- total_composition %>%
+  group_by(detailed) %>%
+  summarise(total_count = sum(count)) %>%
+  arrange(desc(total_count)) %>%
+  slice_head(n = 15) %>%
+  pull(detailed)
+
+# 其他细胞类型合并为 "Other"
+total_composition_plot <- total_composition %>%
+  mutate(cell_group = ifelse(detailed %in% top_cell_types, detailed, "Other")) %>%
+  group_by(dataset, cell_group) %>%
+  summarise(percentage = sum(percentage), .groups = "drop")
+
+# 颜色方案
+cluster_colors <- c(
+  "#A0CBE8", "#FFBE7D", "#8CD17D", "#86BCB6", "#FF9D9A",
+  "#FABFD2", "#D4A6C8", "#F1CE63", "#D7B5A6", "#B07AA1",
+  "#BAB0AC", "#4E79A7", "#F28E2B", "#59A14F", "#E15759",
+  "#499894", "#D37295", "#B6992D", "#9D7660", "#79706E", "#D3D3D3"
+)
+
+# 绘制堆叠图
+p_total <- ggplot(total_composition_plot, aes(x = dataset, y = percentage, fill = cell_group)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.6) +
+  scale_fill_manual(values = cluster_colors[1:length(unique(total_composition_plot$cell_group))], 
+                    name = "Cell Type") +
+  labs(title = "Immune_Zone: Cell Composition Comparison",
+       subtitle = paste("mPT (n=", nrow(mPT_immune), ") vs nmPT (n=", nrow(nmPT_immune), ")"),
+       x = "",
+       y = "Percentage (%)") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    plot.subtitle = element_text(hjust = 0.5, size = 10),
+    axis.text.x = element_text(size = 12, face = "bold"),
+    axis.text.y = element_text(size = 10),
+    axis.title.y = element_text(size = 11),
+    legend.position = "right",
+    legend.text = element_text(size = 7),
+    legend.key.size = unit(0.4, "cm")
+  )
+
+ggsave("Immune_Zone_composition_comparison_total.pdf", p_total, width = 12, height = 6, dpi = 300)
+print(p_total)
+
+# ===================== 2. T细胞亚群占比差异堆叠图 =====================
+
+# 提取T细胞（以 T_ 开头，排除 Tumor）
+t_cell_types <- grep("^T_", unique(combined_immune$detailed), value = TRUE)
+t_cell_types <- t_cell_types[!grepl("Tumor", t_cell_types)]
+
+t_composition <- combined_immune %>%
+  filter(detailed %in% t_cell_types) %>%
+  group_by(dataset, detailed) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(dataset) %>%
+  mutate(percentage = count / sum(count) * 100) %>%
+  ungroup()
+
+if (nrow(t_composition) > 0) {
+  p_t <- ggplot(t_composition, aes(x = dataset, y = percentage, fill = detailed)) +
+    geom_bar(stat = "identity", position = "stack", width = 0.6) +
+    scale_fill_manual(values = cluster_colors[1:length(unique(t_composition$detailed))], 
+                      name = "T Cell Subtype") +
+    labs(title = "Immune_Zone: T Cell Subtype Comparison",
+         x = "",
+         y = "Percentage (%)") +
+    theme_bw() +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+      axis.text.x = element_text(size = 12, face = "bold"),
+      axis.text.y = element_text(size = 10),
+      axis.title.y = element_text(size = 11),
+      legend.position = "right",
+      legend.text = element_text(size = 8),
+      legend.key.size = unit(0.4, "cm")
+    )
+  
+  ggsave("Immune_Zone_composition_comparison_T_cells.pdf", p_t, width = 5, height = 5, dpi = 300)
+  print(p_t)
+} else {
+  cat("没有找到T细胞\n")
+}
+
+#比较mPt和nmPT的TLS区
+library(ggplot2)
+library(dplyr)
+library(patchwork)
+
+# ===================== 提取两个数据集中 TLS_Zone 的细胞 =====================
+
+# mPT中的TLS_Zone
+mPT_tls <- mPT@meta.data %>% filter(cn_detailed == "TLS_Zone")
+mPT_tls$dataset <- "mPT"
+
+# nmPT中的TLS_Zone
+nmPT_tls <- nmPT@meta.data %>% filter(cn_detailed == "TLS_Zone")
+nmPT_tls$dataset <- "nmPT"
+
+# 合并数据
+combined_tls <- bind_rows(mPT_tls, nmPT_tls)
+
+cat("mPT TLS_Zone 细胞数：", nrow(mPT_tls), "\n")
+cat("nmPT TLS_Zone 细胞数：", nrow(nmPT_tls), "\n")
+
+# ===================== 颜色方案 =====================
+cluster_colors <- c(
+  "#A0CBE8", "#FFBE7D", "#8CD17D", "#86BCB6", "#FF9D9A",
+  "#FABFD2", "#D4A6C8", "#F1CE63", "#D7B5A6", "#B07AA1",
+  "#BAB0AC", "#4E79A7", "#F28E2B", "#59A14F", "#E15759",
+  "#499894", "#D37295", "#B6992D", "#9D7660", "#79706E", "#D3D3D3"
+)
+
+# ===================== 1. TLS_Zone 总细胞组成占比差异堆叠图 =====================
+
+# 计算每个数据集中各细胞类型的占比
+total_composition <- combined_tls %>%
+  group_by(dataset, detailed) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(dataset) %>%
+  mutate(percentage = count / sum(count) * 100) %>%
+  ungroup()
+
+# 获取top 15细胞类型
+top_cell_types <- total_composition %>%
+  group_by(detailed) %>%
+  summarise(total_count = sum(count)) %>%
+  arrange(desc(total_count)) %>%
+  slice_head(n = 15) %>%
+  pull(detailed)
+
+# 其他细胞类型合并为 "Other"
+total_composition_plot <- total_composition %>%
+  mutate(cell_group = ifelse(detailed %in% top_cell_types, detailed, "Other")) %>%
+  group_by(dataset, cell_group) %>%
+  summarise(percentage = sum(percentage), .groups = "drop")
+
+p_total <- ggplot(total_composition_plot, aes(x = dataset, y = percentage, fill = cell_group)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.6) +
+  scale_fill_manual(values = cluster_colors[1:length(unique(total_composition_plot$cell_group))], 
+                    name = "Cell Type") +
+  labs(title = "TLS_Zone: Cell Composition Comparison",
+       subtitle = paste("mPT (n=", nrow(mPT_tls), ") vs nmPT (n=", nrow(nmPT_tls), ")"),
+       x = "",
+       y = "Percentage (%)") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    plot.subtitle = element_text(hjust = 0.5, size = 10),
+    axis.text.x = element_text(size = 12, face = "bold"),
+    axis.text.y = element_text(size = 10),
+    axis.title.y = element_text(size = 11),
+    legend.position = "right",
+    legend.text = element_text(size = 7),
+    legend.key.size = unit(0.4, "cm")
+  )
+
+ggsave("TLS_Zone_composition_comparison_total.pdf", p_total, width = 12, height = 6, dpi = 300)
+print(p_total)
+
+# ===================== 2. TLS_Zone T细胞亚群占比差异堆叠图 =====================
+
+# 提取T细胞（以 T_ 开头，排除 Tumor）
+t_cell_types <- grep("^T_", unique(combined_tls$detailed), value = TRUE)
+t_cell_types <- t_cell_types[!grepl("Tumor", t_cell_types)]
+
+t_composition <- combined_tls %>%
+  filter(detailed %in% t_cell_types) %>%
+  group_by(dataset, detailed) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(dataset) %>%
+  mutate(percentage = count / sum(count) * 100) %>%
+  ungroup()
+
+if (nrow(t_composition) > 0) {
+  p_t <- ggplot(t_composition, aes(x = dataset, y = percentage, fill = detailed)) +
+    geom_bar(stat = "identity", position = "stack", width = 0.6) +
+    scale_fill_manual(values = cluster_colors[1:length(unique(t_composition$detailed))], 
+                      name = "T Cell Subtype") +
+    labs(title = "TLS_Zone: T Cell Subtype Comparison",
+         x = "",
+         y = "Percentage (%)") +
+    theme_bw() +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+      axis.text.x = element_text(size = 12, face = "bold"),
+      axis.text.y = element_text(size = 10),
+      axis.title.y = element_text(size = 11),
+      legend.position = "right",
+      legend.text = element_text(size = 8),
+      legend.key.size = unit(0.4, "cm")
+    )
+  
+  ggsave("TLS_Zone_composition_comparison_T_cells.pdf", p_t, width = 5, height = 5, dpi = 300)
+  print(p_t)
+} else {
+  cat("没有找到T细胞\n")
+}
+
+# ===================== 3. TLS_Zone B细胞亚群占比差异堆叠图 =====================
+
+# 提取B细胞（以 B_ 开头）
+b_cell_types <- grep("^B_", unique(combined_tls$detailed), value = TRUE)
+
+b_composition <- combined_tls %>%
+  filter(detailed %in% b_cell_types) %>%
+  group_by(dataset, detailed) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(dataset) %>%
+  mutate(percentage = count / sum(count) * 100) %>%
+  ungroup()
+
+if (nrow(b_composition) > 0) {
+  p_b <- ggplot(b_composition, aes(x = dataset, y = percentage, fill = detailed)) +
+    geom_bar(stat = "identity", position = "stack", width = 0.6) +
+    scale_fill_manual(values = cluster_colors[1:length(unique(b_composition$detailed))], 
+                      name = "B Cell Subtype") +
+    labs(title = "TLS_Zone: B Cell Subtype Comparison",
+         x = "",
+         y = "Percentage (%)") +
+    theme_bw() +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+      axis.text.x = element_text(size = 12, face = "bold"),
+      axis.text.y = element_text(size = 10),
+      axis.title.y = element_text(size = 11),
+      legend.position = "right",
+      legend.text = element_text(size = 8),
+      legend.key.size = unit(0.4, "cm")
+    )
+  
+  ggsave("TLS_Zone_composition_comparison_B_cells.pdf", p_b, width = 5, height = 5, dpi = 300)
+  print(p_b)
+} else {
+  cat("没有找到B细胞\n")
+}
+
+#A1肿瘤
+library(ggplot2)
+library(dplyr)
+
+# ===================== 提取 nmPT 中 A1 样本的数据 =====================
+
+a1_data <- nmPT@meta.data %>% filter(sample == "A1")
+
+# 筛选指定坐标范围
+a1_subset <- a1_data %>%
+  filter(
+    CenterX_global_px >= 94000 & CenterX_global_px <= 108000,
+    CenterY_global_px >= 5000 & CenterY_global_px <= 18000
+  )
+
+cat("筛选后细胞数：", nrow(a1_subset), "\n")
+
+# ===================== 获取实际出现的CN =====================
+actual_cn <- sort(unique(a1_subset$cn_detailed))
+cat("实际出现的CN：\n")
+print(actual_cn)
+
+# ===================== 定义颜色 =====================
+cluster_colors <- c(
+  "#A0CBE8", "#FFBE7D", "#8CD17D", "#86BCB6", "#FF9D9A",
+  "#FABFD2", "#D4A6C8", "#F1CE63", "#D7B5A6", "#B07AA1",
+  "#BAB0AC", "#4E79A7", "#F28E2B", "#59A14F", "#E15759",
+  "#499894", "#D37295", "#B6992D", "#9D7660", "#79706E"
+)
+
+# 将颜色直接赋给CN注释名称
+used_colors <- cluster_colors[1:length(actual_cn)]
+names(used_colors) <- actual_cn
+
+# ===================== 绘制点图 =====================
+
+p <- ggplot(a1_subset, aes(x = CenterX_global_px, y = CenterY_global_px, color = cn_detailed)) +
+  geom_point(size = 0.5, alpha = 0.8) +
+  scale_color_manual(values = used_colors, name = "Cell Neighborhood (CN)") +
+  coord_fixed() +
+  labs(
+    title = "nmPT A1 Sample: Spatial Distribution of Cell Neighborhoods",
+    subtitle = paste("X: 94000-108000, Y: 5000-18000 | Total cells:", nrow(a1_subset)),
+    x = "X Coordinate (px)",
+    y = "Y Coordinate (px)"
+  ) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
+    plot.subtitle = element_text(hjust = 0.5, size = 12),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid = element_blank(),
+    legend.position = "right",
+    legend.title = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 10),
+    legend.key.size = unit(0.8, "cm"),
+    aspect.ratio = 1
+  ) +
+   guides(color = guide_legend(override.aes = list(size = 4)))
+
+ggsave("nmPT_A1_CN_spatial_zoom.pdf", p, width = 12, height = 8, dpi = 300)
+print(p)
+
+selected_fovs <- c(280, 281, 282, 286, 287, 288, 292, 293, 294)
+
+b2_data <- nmPT@meta.data %>% 
+  filter(sample == "B2", fov %in% selected_fovs)
+
+# 筛选X轴范围
+b2_data <- b2_data %>%
+  filter(CenterX_global_px >= 73060 & CenterX_global_px <= 85024)
+
+cat("筛选后细胞数：", nrow(b2_data), "\n")
+cat("X轴范围：", range(b2_data$CenterX_global_px), "\n")
+cat("Y轴范围：", range(b2_data$CenterY_global_px), "\n")
+
+# ===================== 获取实际出现的CN =====================
+actual_cn <- sort(unique(b2_data$cn_detailed))
+cat("实际出现的CN：\n")
+print(actual_cn)
+
+# ===================== 定义颜色 =====================
+cluster_colors <- c(
+  "#A0CBE8", "#FFBE7D", "#8CD17D", "#86BCB6", "#FF9D9A",
+  "#FABFD2", "#D4A6C8", "#F1CE63", "#D7B5A6", "#B07AA1",
+  "#BAB0AC", "#4E79A7", "#F28E2B", "#59A14F", "#E15759",
+  "#499894", "#D37295", "#B6992D", "#9D7660", "#79706E"
+)
+
+# 将颜色直接赋给CN注释名称
+used_colors <- cluster_colors[1:length(actual_cn)]
+names(used_colors) <- actual_cn
+
+# ===================== 绘制点图（所有FOV在一张图上） =====================
+
+p <- ggplot(b2_data, aes(x = CenterX_global_px, y = CenterY_global_px, color = cn_detailed)) +
+  geom_point(size = 0.3, alpha = 0.8) +
+  scale_color_manual(values = used_colors, name = "Cell Neighborhood (CN)") +
+  coord_fixed(ratio = 1) +
+  labs(
+    title = "nmPT B2 Sample: Spatial Distribution of Cell Neighborhoods",
+    subtitle = paste("FOV:", paste(selected_fovs, collapse = ", "), 
+                     "| X: 73060-85024 | Total cells:", nrow(b2_data)),
+    x = "X Coordinate (px)",
+    y = "Y Coordinate (px)"
+  ) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 10),
+    plot.subtitle = element_text(hjust = 0.5, size = 8),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid = element_blank(),
+    legend.position = "right",
+    legend.title = element_text(size = 11, face = "bold"),
+    legend.text = element_text(size = 8),
+    legend.key.size = unit(0.8, "cm"),
+    aspect.ratio = 1  # 强制绘图区域为正方形
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 4)))
+
+ggsave("nmPT_B2_selected_FOVs_CN_spatial.pdf", p, width = 9, height = 6, dpi = 300)
+
+#Fib 的CN组成
+fib_cell_types <- grep("Fib_", unique(nmPT@meta.data$detailed), value = TRUE)
+
+
+fib_cell_types <- grep("Fib", 
+                           unique(nmPT@meta.data$detailed), 
+                           value = TRUE, ignore.case = TRUE)
+
+print(paste("找到", length(fib_cell_types), "种肿瘤亚型："))
+print(fib_cell_types)
+
+# =====================
+# 计算每种肿瘤亚型在各CN中的占比
+# =====================
+
+fib_cn_composition <- nmPT@meta.data %>%
+  filter(detailed %in% fib_cell_types) %>%
+  group_by(detailed, cellcharter_cluster) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(detailed) %>%
+  mutate(proportion = count / sum(count) * 100) %>%
+  ungroup() %>%
+  filter(proportion > 0)
+
+# =====================
+# 确保 CN 按数字顺序排序 (CN1 到 CN15)
+# =====================
+
+# 获取所有出现的CN编号
+all_cn_numbers <- sort(unique(fib_cn_composition$cellcharter_cluster))
+
+# 创建 CN 标签（CN1, CN2, ...）
+fib_cn_composition$cn_label <- factor(
+  paste0("CN", fib_cn_composition$cellcharter_cluster),
+  levels = paste0("CN", all_cn_numbers)  # 按数字顺序设置级别
+)
+
+# =====================
+# 定义颜色（CN1-CN15）
+# =====================
+
+cluster_colors <- c(
+  "#A0CBE8", "#FFBE7D", "#8CD17D", "#86BCB6", "#FF9D9A",
+  "#FABFD2", "#D4A6C8", "#F1CE63", "#D7B5A6", "#B07AA1",
+  "#BAB0AC", "#4E79A7", "#F28E2B", "#59A14F", "#E15759"
+)
+
+# 只取前15个颜色（对应CN1-CN15）
+cluster_colors_20 <- cluster_colors[1:20]
+names(cluster_colors_20) <- paste0("CN", 1:20)
+
+# 只保留实际出现的CN的颜色
+cn_colors <- cluster_colors_20[paste0("CN", all_cn_numbers)]
+
+# =====================
+# 绘制分面饼图
+# =====================
+
+p_facet_pie <- ggplot(fib_cn_composition, aes(x = "", y = proportion, fill = cn_label)) +
+  geom_bar(stat = "identity", width = 1, color = "black", size = 0.5) +
+  coord_polar("y", start = 0) +
+  facet_wrap(~ detailed, ncol =4) +
+  scale_fill_manual(values = cn_colors, name = "CN", breaks = paste0("CN", 1:15)) +
+  labs(title = "nmPT: CN Composition for Each Fibroblasts Subtype") +
+  theme_void() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    strip.text = element_text(size = 10, face = "bold"),
+    legend.position = "right",
+    legend.title = element_text(size = 10, face = "bold"),
+    legend.text = element_text(size = 8),
+    legend.key.size = unit(0.4, "cm")
+  )
+
+print(p_facet_pie)
+ggsave("nmPT_fib_subtype_facet_pie.pdf", p_facet_pie, 
+       width = 14, height = ceiling(length(fib_cell_types)/3) * 4, 
+       dpi = 300)
+```
+# metLN subtype CN
+```R
+library(Seurat)
+library(ggplot2)
+library(patchwork)
+library(pheatmap)
+library(vegan)
+library(dplyr)
+library(tidyr)
+library(RColorBrewer)
+
+# 加载结果
+message("=== 加载 CellCharter 结果 ===")
+metLN <- readRDS("metLN_cellcharter_FINAL.rds")
+
+#CN组成
+# 查看每个CN的细胞组成
+cn_composition <- table(metLN@meta.data$cellcharter_cluster, 
+                        metLN@meta.data$detailed)
+
+# 计算每个CN的比例
+cn_prop <- prop.table(cn_composition, margin = 1) * 100
+
+# 打印每个CN的主要细胞类型（前5种）
+for (cn in rownames(cn_prop)) {
+  cat("\n=== CN", cn, "===\n")
+  top10 <- sort(cn_prop[cn, ], decreasing = TRUE)[1:10]
+  for (i in 1:length(top10)) {
+    cat(names(top10)[i], ": ", round(top10[i], 1), "%\n", sep = "")
+  }
+}
+
+#CN注释
+
+
+
+cn_annotation_detailed <- c(
+  "1"  = "B_Cell_Follicle_Zone",
+  "2"  = "Plasma_Macrophage_Zone",
+  "3"  = "Plasma_Enriched_Zone_F",
+  "4"  = "Vascular_Stromal_Zone",
+  "5"  = "FRC-rich_Lymphoid_Zone",
+  "6"  = "Mast_Cell_Immune_Zone",
+  "7"  = "Immune-inflamed_Tumor_Zone_A",
+  "8"  = "B_T_Cell_Zone",
+  "9"  = "Immune-inflamed_Tumor_Zone_B",
+  "10" = "Macrophage_Dominant_Zone_C",
+  "11" = "Immune-inflamed_Tumor_Macrophage_Interface",
+  "12" = "Plasma_Enriched_Zone_G",
+  "13" = "Macrophage_Dominant_Zone_D",
+  "14" = "Immune-inflamed_Tumor_B_Cell_Interface"
+)
+# 应用到 Seurat 对象
+metLN@meta.data$cn_detailed <- cn_annotation_detailed[as.character(metLN@meta.data$cellcharter_cluster)]
+
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(patchwork)
+
+# 定义颜色（你的20种颜色）
+cluster_colors <- c(
+  "#A0CBE8", "#FFBE7D", "#8CD17D", "#86BCB6", "#FF9D9A",
+  "#FABFD2", "#D4A6C8", "#F1CE63", "#D7B5A6", "#B07AA1",
+  "#BAB0AC", "#4E79A7", "#F28E2B", "#59A14F", "#E15759",
+  "#499894", "#D37295", "#B6992D", "#9D7660", "#79706E"
+)
+
+# =====================
+# 1. 准备数据
+# =====================
+
+# 假设你的 metLN 对象中有：
+# - cn_detailed: CN编号 (1-15)
+# - sample: 样本名称
+
+# 计算总体比例
+total_prop <- metLN@meta.data %>%
+  group_by(cn_detailed) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  mutate(proportion = count / sum(count) * 100,
+         type = "Overall")
+
+# 计算各样本比例
+sample_prop <- metLN@meta.data %>%
+  group_by(sample, cn_detailed) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(sample) %>%
+  mutate(proportion = count / sum(count) * 100,
+         type = sample) %>%
+  ungroup()
+
+# 合并数据
+combined_data <- bind_rows(total_prop, sample_prop)
+
+# 确保 cn_detailed 是因子（按数字顺序）
+combined_data$cn_detailed <- factor(combined_data$cn_detailed, 
+                                     levels = sort(unique(combined_data$cn_detailed)))
+
+# =====================
+# 方法1：分面图（推荐）
+# =====================
+
+# 总体 + 各样本分面显示
+p_facet <- ggplot(combined_data, aes(x = type, y = proportion, fill = cn_detailed)) +
+  geom_bar(stat = "identity", position = "fill", width = 0.7) +
+  scale_fill_manual(values = cluster_colors, name = "Cell Neighborhood") +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(title = "CN Proportion by Sample",
+       x = "",
+       y = "Proportion") +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title = element_text(size = 12, face = "bold"),
+    legend.position = "right",
+    legend.text = element_text(size = 8),
+    strip.background = element_rect(fill = "lightgray"),
+    strip.text = element_text(size = 10, face = "bold")
+  )
+
+ggsave("metLN_cn_proportion_by_sample_facet.pdf", p_facet, width = 6, height = 6, dpi = 300)
+
+# 3. 每个邻域细胞组成热图
+# =====================
+message("=== 3. 生成邻域细胞组成热图 ===")
+
+cluster_composition <- table(metLN@meta.data$cellcharter_cluster, 
+                           metLN@meta.data$detailed)
+
+cluster_composition_df <- as.data.frame(cluster_composition)
+colnames(cluster_composition_df) <- c("Cluster", "CellType", "Count")
+
+cluster_totals <- aggregate(Count ~ Cluster, data = cluster_composition_df, sum)
+cluster_composition_df <- merge(cluster_composition_df, cluster_totals, by = "Cluster")
+cluster_composition_df$Proportion <- cluster_composition_df$Count.x / cluster_composition_df$Count.y
+
+# 转换为宽格式
+heatmap_data <- cluster_composition_df %>%
+  select(Cluster, CellType, Proportion) %>%
+  pivot_wider(names_from = CellType, values_from = Proportion, values_fill = 0)
+
+# 按Cluster数字排序
+cluster_numeric <- as.numeric(as.character(heatmap_data$Cluster))
+heatmap_data <- heatmap_data[order(cluster_numeric), ]
+
+# 创建行标签（使用你的注释名称）
+row_labels_annotated <- cn_annotation_detailed[as.character(cluster_numeric[order(cluster_numeric)])]
+
+# 设置行名
+rownames(heatmap_data) <- row_labels_annotated
+heatmap_matrix <- as.matrix(heatmap_data[, -1])
+
+# 绘制热图（字体增大的版本）
+p_heatmap <- pheatmap(heatmap_matrix,
+                    cluster_rows = TRUE,
+                    cluster_cols = TRUE,
+                    display_numbers = FALSE,
+                    main = "Cell Type Composition by Spatial Domain",
+                    fontsize = 14,           # 全局字体增大
+                    fontsize_row = 10,       # 行标签字体（注释名称较长，用10合适）
+                    fontsize_col = 9,        # 列标签字体
+                    labels_row = row_labels_annotated,
+                    color = colorRampPalette(c("#f0f0f0", "#3182bd", "#08519c"))(100),
+                    cellwidth = 11,          # 单元格宽度
+                    cellheight = 11)         # 单元格高度
+
+# 保存
+pdf("metLN_CN_cell_type_composition_heatmap_annotated.pdf", width = 16, height = 12)
+print(p_heatmap)
+dev.off()
+
+library(ggplot2)
+library(dplyr)
+library(scales)
+library(RColorBrewer)
+
+# 计算每个 CN 中每种细胞类型的数量
+stack_data_count <- metLN@meta.data %>%
+  group_by(cn_detailed, detailed) %>%
+  summarise(count = n(), .groups = "drop")
+
+# 为每个 CN 找出 top 10 细胞类型
+top10_per_cn <- stack_data_count %>%
+  group_by(cn_detailed) %>%
+  arrange(desc(count)) %>%
+  slice_head(n = 10) %>%
+  ungroup()
+
+# 将非 top 10 的细胞类型合并为 "Other"
+stack_data_top10 <- stack_data_count %>%
+  left_join(top10_per_cn %>% select(cn_detailed, detailed) %>% mutate(is_top10 = TRUE),
+            by = c("cn_detailed", "detailed")) %>%
+  mutate(detailed_grouped = ifelse(is_top10, detailed, "Other")) %>%
+  group_by(cn_detailed, detailed_grouped) %>%
+  summarise(count = sum(count), .groups = "drop")
+
+# 按首字母顺序排序 CN
+cn_order <- sort(unique(stack_data_top10$cn_detailed))
+stack_data_top10$cn_detailed <- factor(stack_data_top10$cn_detailed, levels = cn_order)
+
+# 获取所有需要着色的类别
+all_cell_types <- unique(stack_data_top10$detailed_grouped)
+n_colors_needed <- length(all_cell_types)
+
+# 方案1：使用彩虹色（qualitative调色板）
+# 提取足够多的颜色
+if(n_colors_needed <= 12) {
+  cell_colors <- brewer.pal(n_colors_needed, "Set3")
+} else {
+  # 使用 colorRampPalette 生成更多颜色
+  get_palette <- colorRampPalette(brewer.pal(12, "Set3"))
+  cell_colors <- get_palette(n_colors_needed)
+}
+names(cell_colors) <- all_cell_types
+
+# 确保 "Other" 是灰色
+if("Other" %in% names(cell_colors)) {
+  cell_colors["Other"] <- "#D3D3D3"
+}
+
+# 绘制
+p_count_top10 <- ggplot(stack_data_top10, aes(x = cn_detailed, y = count, fill = detailed_grouped)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.8) +
+  scale_fill_manual(values = cell_colors, name = "Cell Type") +
+  labs(title = "Cell Type Count by CN (Top 10 per CN + Others)",
+       x = "Cell Neighborhood (CN)",
+       y = "Cell Count") +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title = element_text(size = 12, face = "bold"),
+    legend.position = "right",
+    legend.text = element_text(size = 8),
+    legend.key.size = unit(0.4, "cm")
+  )
+
+ggsave("metLN_cn_celltype_count_top10_per_CN.pdf", p_count_top10, width = 16, height = 8, dpi = 300)
+```
+# fib fov
+```R
+
+fib <- readRDS("fib_anno_new.rds")
+obj <- readRDS("YA2025263-1_fin.rds")
+
+sample_tissue <- data.frame(
+  sample = c("A1", "A2", "A3", "A4", "A5", 
+             "B1", "B2", "B3", "B4", "B5",
+             "C1", "C2", "C3", "C4", "C5",
+             "D1", "D2", "D3", "D4", "D5"),
+  tissue = c("nmPT", "negLN", "nmPT", "negLN", "nmPT",
+             "negLN", "nmPT", "negLN", "mPT", "negLN",
+             "metLN", "mPT", "negLN", "metLN", "mPT",
+             "negLN", "metLN", "mPT", "negLN", "metLN")
+)
+obj$tissue <- sample_tissue$tissue[match(obj$sample, sample_tissue$sample)]
+
+# ===================== 细胞类型注释 =====================
+obj$CellType <- recode(obj$CellType,
+                       #"Malignant cells" = "unknown",
+                       "Basal cells" = "Malignant cells"
+)
+
+# 检查
+table(obj$CellType)
+
+
+obj@meta.data$sub_cell_type <- NA
+common_cells <- intersect(rownames(fib@meta.data), rownames(obj@meta.data))
+obj@meta.data[common_cells, "sub_cell_type"] <- fib@meta.data[common_cells, "sub_cell_type"]
+
+cat("成功注释的细胞数：", sum(!is.na(obj@meta.data$sub_cell_type)), "\n")
+cat("obj中sub_cell_type列的唯一值：", paste(unique(obj@meta.data$sub_cell_type), collapse = ", "), "\n")
+
+
+print(class(obj@meta.data$CellType))  # 查看类型（应该是factor）
+cell_type_levels <- levels(obj@meta.data$CellType)  # 提取因子水平（数字→名称映射）
+cat("CellType因子水平（数字→名称）：\n")
+print(cell_type_levels)
+
+# 1. 重置detailed列（先清空错误赋值）
+obj@meta.data$detailed <- NA
+
+# 2. 优先级1：填充sub_cell_type（非NA的细胞，保留原名称）
+sub_cell_idx <- !is.na(obj@meta.data$sub_cell_type)
+obj@meta.data$detailed[sub_cell_idx] <- as.character(obj@meta.data$sub_cell_type[sub_cell_idx])
+cat("优先级1（sub_cell_type）填充：", sum(sub_cell_idx), "个细胞\n")
+
+
+
+# 4. 优先级3：填充CellType（剩余细胞，关键：转字符+用因子水平映射真实名称）
+cell_type_idx <- is.na(obj@meta.data$detailed) & !is.na(obj@meta.data$CellType)
+# 方法：如果CellType是因子，用levels映射；否则直接转字符
+if (is.factor(obj@meta.data$CellType)) {
+  # 因子类型：用因子水平把数字编码转成真实名称
+  obj@meta.data$detailed[cell_type_idx] <- cell_type_levels[as.integer(obj@meta.data$CellType[cell_type_idx])]
+} else {
+  # 字符类型：直接转字符
+  obj@meta.data$detailed[cell_type_idx] <- as.character(obj@meta.data$CellType[cell_type_idx])
+}
+cat("优先级3（CellType）填充：", sum(cell_type_idx), "个细胞\n")
+
+# 验证修复结果
+cat("\n=== 修复后detailed列前10行 ===")
+print(head(obj@meta.data[, c("sub_cell_type", "CellType", "detailed")], 10))
+cat("\n=== 修复后detailed列前15个类型 ===")
+print(head(sort(table(obj@meta.data$detailed), decreasing = TRUE), 15))
+
+library(ggplot2)
+library(dplyr)
+
+# ==================== 1. 定义要显示的细胞类型 ====================
+# 成纤维亚型
+target_fib_subtypes <- c("Fib_apCAF_1", "Fib_apCAF_2", "Fib_iCAF_1", 
+                         "Fib_iCAF_2", "Fib_matCAF", "Fib_myCAF")
+
+# 恶性细胞（单独作为一类）
+malignant_cell <- "Malignant cells"
+
+# 合并所有要显示的细胞类型
+target_cell_types <- c(target_fib_subtypes, malignant_cell)
+
+# ==================== 2. 筛选数据 ====================
+selected_fovs <- c(272,273,274,275,276,277,278,279,280,281,282)
+
+fov_data <- obj@meta.data %>%
+  filter(sample == "B2", fov %in% selected_fovs)
+
+# 创建分组变量：目标细胞类型保留具体名称，其他细胞归为 "Other"
+fov_data$cell_group <- "Other"
+for (ct in target_cell_types) {
+  fov_data$cell_group[fov_data$detailed == ct] <- ct
+}
+
+# ==================== 3. 颜色方案 ====================
+fib_colors <- c(
+  "Fib_apCAF_1" = "#793c1b",
+  "Fib_apCAF_2" = "#B5EFB5",
+  "Fib_iCAF_1"  = "#ffc089",
+  "Fib_iCAF_2"  = "#ffff33",
+  "Fib_matCAF"  = "#6a3d9a",
+  "Fib_myCAF"   = "#1f78b4"
+)
+
+malignant_color <- c("Malignant cells" = "#df928e")
+other_color <- c("Other" = "#E0E0E0")
+
+# 合并颜色
+cell_colors <- c(fib_colors, malignant_color, other_color)
+
+# 只保留出现在数据中的颜色
+used_colors <- cell_colors[names(cell_colors) %in% unique(fov_data$cell_group)]
+if ("Other" %in% unique(fov_data$cell_group) && !"Other" %in% names(used_colors)) {
+  used_colors <- c(used_colors, "Other" = "#E0E0E0")
+}
+
+# ==================== 4. 设置绘图顺序 ====================
+plot_order <- c("Other", target_fib_subtypes, malignant_cell)
+fov_data$cell_group <- factor(fov_data$cell_group, levels = plot_order)
+
+# ==================== 5. 绘图（限制 X 轴范围）====================
+p <- ggplot(fov_data, aes(x = CenterX_global_px, y = CenterY_global_px, color = cell_group)) +
+  geom_point(size = 0.01, alpha = 0.9) +
+  scale_color_manual(values = used_colors, name = "Cell Type") +
+  # 关键修改：限制 X 轴显示范围
+  xlim(61565, 82820) +  # 只显示这个 X 范围内的点
+  labs(title = "nmPT (B2) - FOVs 272-282: Fibroblasts Subtypes and Malignant Cells",
+       x = "X Coordinate (px)",
+       y = "Y Coordinate (px)") +
+  theme_bw() +
+  theme(
+    aspect.ratio = 1/2,
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+    legend.position = "right",
+    panel.grid = element_blank(),
+    panel.background = element_rect(fill = "white", color = NA),
+    legend.key.size = unit(0.6, "cm"),
+    legend.text = element_text(size = 8)
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 3), ncol = 1))
+
+# ==================== 6. 保存 ====================
+ggsave("nmPT_B2_fov272_282_fib_malignant_xlim.pdf", p, width = 7, height = 3.5, dpi = 300)
+```
+# mPT CN5 chat
+```R
+# ===================== 
+# 分析 CN5 内部的细胞互作
+# =====================
+
+library(ggplot2)
+library(dplyr)
+library(pheatmap)
+library(doParallel)
+library(foreach)
+library(deldir)
+
+mPT <- readRDS("mPT_cellcharter_FINAL.rds")
+cn_composition <- table(mPT@meta.data$cellcharter_cluster, 
+                        mPT@meta.data$detailed)
+
+# 计算每个CN的比例
+cn_prop <- prop.table(cn_composition, margin = 1) * 100
+
+# 打印每个CN的主要细胞类型（前5种）
+for (cn in rownames(cn_prop)) {
+  cat("\n=== CN", cn, "===\n")
+  top10 <- sort(cn_prop[cn, ], decreasing = TRUE)[1:10]
+  for (i in 1:length(top10)) {
+    cat(names(top10)[i], ": ", round(top10[i], 1), "%\n", sep = "")
+  }
+}
+
+#CN注释
+
+cn_annotation_detailed <- c(
+  "1"  = "Alveolar_Homeostatic_Zone",
+  "2"  = "Immune_Zone",
+  "3"  = "Stromal_Remodeling_Zone",
+  "4"  = "TLS_Zone",
+  "5"  = "Inflammatory_Vascular_Zone",
+  "6"  = "Macrophage_Dominant_Zone_A",
+  "7"  = "Vascular_Stromal_Zone",
+  "8"  = "Pericyte_Dominant_Zone",
+  "9"  = "Plasma_Enriched_Zone_A",
+  "10" = "Plasma_Enriched_Zone_B",
+  "11" = "Metabolic_Tumor_Core_A",
+  "12" = "Metabolic_Tumor_Mast_Interface",
+  "13" = "Metabolic_Tumor_Core_B",
+  "14" = "Metabolic_Tumor_Stromal_Interface",
+  "15" = "Plasma_Enriched_Zone_C"
+)
+# 应用到 Seurat 对象
+mPT@meta.data$cn_detailed <- cn_annotation_detailed[as.character(mPT@meta.data$cellcharter_cluster)]
+
+# ===================== 定义空间分析函数 =====================
+run_spatial_analysis_cn5 <- function(coords_sub, labels_sub, sample_name, nperm = 1000) {
+  
+  cat("\n========================================\n")
+  cat("开始分析样本：", sample_name, "\n")
+  cat("CN5内细胞数量：", length(labels_sub), "\n")
+  cat("========================================\n")
+  
+  # 检查细胞类型数量
+  types <- sort(unique(labels_sub))
+  K <- length(types)
+  
+  if (K < 2) {
+    cat("警告：", sample_name, "只有", K, "种细胞类型，跳过分析\n")
+    return(NULL)
+  }
+  
+  cat("细胞类型数量：", K, "\n")
+  cat("细胞类型：", paste(types, collapse = ", "), "\n")
+  
+  # 提取坐标
+  x <- coords_sub[,1]
+  y <- coords_sub[,2]
+  
+  # 计算Delaunay三角剖分
+  cat("计算Delaunay三角剖分...\n")
+  deld <- deldir(x, y, rw = c(range(x), range(y)))
+  segs <- deld$delsgs
+  cat("生成三角边数量：", nrow(segs), "\n")
+  
+  # 构建边
+  edges <- cbind(segs$ind1, segs$ind2)
+  edges <- edges[edges[,1] != edges[,2], , drop=FALSE]
+  edges <- t(apply(edges, 1, function(x) sort(x)))
+  edges <- unique(edges)
+  edges_df <- data.frame(from = edges[,1], to = edges[,2])
+  cat("最终边数量：", nrow(edges_df), "\n")
+  
+  # 构建观察矩阵
+  type_by_index <- labels_sub
+  t1 <- type_by_index[edges_df$from]
+  t2 <- type_by_index[edges_df$to]
+  
+  mat_obs <- matrix(0, nrow = K, ncol = K, dimnames = list(types, types))
+  for(i in seq_along(t1)) {
+    a <- t1[i]
+    b <- t2[i]
+    mat_obs[a,b] <- mat_obs[a,b] + 1
+    mat_obs[b,a] <- mat_obs[b,a] + 1
+  }
+  
+  # 排列检验
+  cat("\n开始排列检验（", nperm, "次）...\n")
+  
+  from_idx <- edges_df$from
+  to_idx <- edges_df$to
+  n_cells <- length(type_by_index)
+  
+  ncores <- parallel::detectCores() - 1
+  ncores <- max(1, min(ncores, 24))
+  
+  cl <- makeCluster(ncores)
+  registerDoParallel(cl)
+  
+  perm_counts <- foreach(p = 1:nperm, .packages = c(), .combine = rbind) %dopar% {
+    set.seed(p + 12345)
+    perm_labels <- sample(type_by_index, n_cells, replace = FALSE)
+    
+    pt1 <- perm_labels[from_idx]
+    pt2 <- perm_labels[to_idx]
+    
+    mat <- matrix(0, nrow = K, ncol = K, dimnames = list(types, types))
+    for(i in seq_along(pt1)) {
+      a <- pt1[i]
+      b <- pt2[i]
+      mat[a,b] <- mat[a,b] + 1
+      mat[b,a] <- mat[b,a] + 1
+    }
+    as.vector(mat)
+  }
+  
+  stopCluster(cl)
+  cat("排列检验完成\n")
+  
+  # 计算结果
+  obs_vec <- as.vector(mat_obs)
+  mu_rand <- colMeans(perm_counts)
+  sd_rand <- apply(perm_counts, 2, sd)
+  
+  # z-score
+  z_vec <- (obs_vec - mu_rand) / (sd_rand + 1e-8)
+  
+  # 经验p值
+  p_emp <- sapply(seq_along(obs_vec), function(i) {
+    perm_i <- perm_counts[, i]
+    obs_i <- obs_vec[i]
+    mu_i <- mu_rand[i]
+    p_val <- (sum(abs(perm_i - mu_i) >= abs(obs_i - mu_i)) + 1) / (nperm + 1)
+    return(p_val)
+  })
+  
+  # 转为矩阵
+  mat_mu <- matrix(mu_rand, nrow = K, ncol = K, dimnames = list(types, types))
+  mat_sd <- matrix(sd_rand, nrow = K, ncol = K, dimnames = list(types, types))
+  mat_z <- matrix(z_vec, nrow = K, ncol = K, dimnames = list(types, types))
+  mat_p <- matrix(p_emp, nrow = K, ncol = K, dimnames = list(types, types))
+  
+  # 计算 log2FC
+  mat_fc <- mat_obs / (mat_mu + 1e-8)
+  mat_log2fc <- log2(mat_fc)
+  
+  # 返回结果
+  results <- list(
+    sample = sample_name,
+    mat_obs = mat_obs,
+    mat_z = mat_z,
+    mat_p = mat_p,
+    mat_mu = mat_mu,
+    mat_sd = mat_sd,
+    mat_log2fc = mat_log2fc,
+    cell_types = types,
+    n_cells = length(labels_sub),
+    n_edges = nrow(edges_df)
+  )
+  
+  return(results)
+}
+
+# ===================== 提取 CN5 内的细胞 =====================
+samples <- unique(mPT$sample)
+cat("mPT 样本:", paste(samples, collapse = ", "), "\n")
+
+# 存储结果
+cn5_results <- list()
+
+for (sample_id in samples) {
+  cat("\n\n########## 处理样本：", sample_id, " ##########\n")
+  
+  # 提取该样本中 CN5 的细胞
+  sample_cells <- subset(mPT, subset = sample == sample_id & cn_detailed == "Inflammatory_Vascular_Zone")
+  
+  if (nrow(sample_cells@meta.data) == 0) {
+    cat("警告：", sample_id, "CN5中没有细胞，跳过\n")
+    next
+  }
+  
+  cat("CN5细胞数量：", nrow(sample_cells@meta.data), "\n")
+  
+  # 获取坐标和标签
+  coords <- sample_cells@meta.data[, c("CenterX_global_px", "CenterY_global_px")]
+  coords <- coords[!is.na(coords[,1]) & !is.na(coords[,2]), , drop = FALSE]
+  labels <- as.character(sample_cells@meta.data$detailed)
+  names(labels) <- rownames(coords)
+  
+  # 移除NA标签
+  valid_idx <- !is.na(labels)
+  coords <- coords[valid_idx, , drop = FALSE]
+  labels <- labels[valid_idx]
+  
+  cat("有效细胞数量：", length(labels), "\n")
+  cat("细胞类型分布：\n")
+  print(table(labels))
+  
+  # 过滤稀有细胞类型（数量 < 5 的过滤，因为CN5内细胞数较少）
+  cell_counts <- table(labels)
+  rare_threshold <- 5
+  keep_types <- names(cell_counts[cell_counts >= rare_threshold])
+  keep_cells <- labels %in% keep_types
+  coords <- coords[keep_cells, , drop = FALSE]
+  labels <- labels[keep_cells]
+  
+  cat("过滤稀有细胞后数量：", length(labels), "\n")
+  
+  if (length(labels) < 30) {
+    cat("警告：", sample_id, "过滤后细胞太少，跳过\n")
+    next
+  }
+  
+  # 确保坐标是数值型
+  coords <- as.matrix(coords)
+  colnames(coords) <- c("x", "y")
+  
+  # 运行分析
+  result <- run_spatial_analysis_cn5(coords, labels, sample_id, nperm = 500)
+  
+  if (!is.null(result)) {
+    cn5_results[[sample_id]] <- result
+    
+    # 绘制并保存热图
+    if (nrow(result$mat_log2fc) > 1 && ncol(result$mat_log2fc) > 1) {
+      mat_plot <- result$mat_log2fc
+      
+      # 处理 Inf
+      mat_plot[is.infinite(mat_plot) & mat_plot < 0] <- -10
+      mat_plot[is.infinite(mat_plot) & mat_plot > 0] <- 10
+      mat_plot[mat_plot > 10] <- 10
+      mat_plot[mat_plot < -10] <- -10
+      
+      # 显著性标注
+      signif_symbols <- matrix("", nrow = length(result$cell_types), 
+                                ncol = length(result$cell_types),
+                                dimnames = list(result$cell_types, result$cell_types))
+      signif_symbols[result$mat_p < 0.001] <- "***"
+      signif_symbols[result$mat_p < 0.01 & result$mat_p >= 0.001] <- "**"
+      signif_symbols[result$mat_p < 0.05 & result$mat_p >= 0.01] <- "*"
+      
+      # 热图
+      pdf(paste0("mPT_CN5_", sample_id, "_contact_log2fc.pdf"), width = 12, height = 10)
+      pheatmap(mat_plot,
+               cluster_rows = TRUE,
+               cluster_cols = TRUE,
+               main = paste("CN5 - Log2(FC) -", sample_id),
+               fontsize = 10,
+               display_numbers = signif_symbols,
+               number_color = "black",
+               fontsize_number = 8)
+      dev.off()
+      
+      cat("保存热图：mPT_CN5_", sample_id, "_contact_log2fc.pdf\n", sep = "")
+    }
+  }
+}
+
+# ===================== 保存结果 =====================
+saveRDS(cn5_results, file = "mPT_CN5_cell_interaction_results.rds")
+cat("\n\n========== 分析完成 ==========\n")
+cat("成功分析样本数：", length(cn5_results), "\n")
+
+# ===================== 整合多样本CN5结果 =====================
+all_cell_types <- unique(unlist(lapply(cn5_results, function(x) x$cell_types)))
+cat("总细胞类型数量：", length(all_cell_types), "\n")
+cat("所有细胞类型：", paste(all_cell_types, collapse = ", "), "\n")
+
+if (length(all_cell_types) >= 2) {
+  # 计算平均 log2FC（初始化为0）
+  avg_log2fc <- matrix(0, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                       dimnames = list(all_cell_types, all_cell_types))
+  
+  # 记录每个单元格有多少个有效样本
+  n_effective <- matrix(0, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                         dimnames = list(all_cell_types, all_cell_types))
+  
+  # 存储合并 chi2 和自由度
+  combined_chi2 <- matrix(0, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                          dimnames = list(all_cell_types, all_cell_types))
+  combined_df <- matrix(0, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                        dimnames = list(all_cell_types, all_cell_types))
+  
+  for (sample_id in names(cn5_results)) {
+    res <- cn5_results[[sample_id]]
+    
+    # 当前样本的细胞类型
+    current_types <- res$cell_types
+    
+    # 只处理当前样本中存在的细胞类型
+    for (i in seq_along(current_types)) {
+      for (j in seq_along(current_types)) {
+        ct_i <- current_types[i]
+        ct_j <- current_types[j]
+        
+        avg_log2fc[ct_i, ct_j] <- avg_log2fc[ct_i, ct_j] + res$mat_log2fc[ct_i, ct_j]
+        n_effective[ct_i, ct_j] <- n_effective[ct_i, ct_j] + 1
+        
+        combined_chi2[ct_i, ct_j] <- combined_chi2[ct_i, ct_j] + (-2 * log(res$mat_p[ct_i, ct_j] + 1e-10))
+        combined_df[ct_i, ct_j] <- combined_df[ct_i, ct_j] + 2
+      }
+    }
+  }
+  
+  # 计算平均 log2FC
+  avg_log2fc <- avg_log2fc / n_effective
+  
+  # 计算合并 p 值
+  combined_p <- matrix(1, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                       dimnames = list(all_cell_types, all_cell_types))
+  for (i in seq_along(all_cell_types)) {
+    for (j in seq_along(all_cell_types)) {
+      if (combined_df[i, j] > 0) {
+        combined_p[i, j] <- pchisq(combined_chi2[i, j], df = combined_df[i, j], lower.tail = FALSE)
+      }
+    }
+  }
+  
+  # 处理 NaN 和 Inf
+  avg_log2fc[is.nan(avg_log2fc)] <- 0
+  avg_log2fc[is.infinite(avg_log2fc) & avg_log2fc < 0] <- -10
+  avg_log2fc[is.infinite(avg_log2fc) & avg_log2fc > 0] <- 10
+  avg_log2fc[avg_log2fc > 10] <- 10
+  avg_log2fc[avg_log2fc < -10] <- -10
+  
+  # 显著性标注
+  signif_symbols <- matrix("", nrow = length(all_cell_types), ncol = length(all_cell_types),
+                           dimnames = list(all_cell_types, all_cell_types))
+  signif_symbols[combined_p < 0.001] <- "***"
+  signif_symbols[combined_p < 0.01 & combined_p >= 0.001] <- "**"
+  signif_symbols[combined_p < 0.05 & combined_p >= 0.01] <- "*"
+  
+  # 绘制平均热图
+  p_avg <- pheatmap(avg_log2fc,
+                    cluster_rows = TRUE,
+                    cluster_cols = TRUE,
+                    main = "CN5: Average Log2(Fold Change) across mPT samples",
+                    fontsize = 10,
+                    display_numbers = signif_symbols,
+                    number_color = "black",
+                    fontsize_number = 8,
+                    filename = "mPT_CN5_all_samples_average_contact_log2fc.pdf",
+                    width = 14, height = 12)
+  
+  cat("保存平均热图：mPT_CN5_all_samples_average_contact_log2fc.pdf\n")
+  
+  # 保存整合结果
+  integrated_results <- list(
+    all_cell_types = all_cell_types,
+    avg_log2fc = avg_log2fc,
+    combined_p = combined_p,
+    n_effective = n_effective,
+    n_samples = length(cn5_results),
+    individual_results = cn5_results
+  )
+  
+  saveRDS(integrated_results, file = "mPT_CN5_integrated_results.rds")
+  cat("保存整合结果：mPT_CN5_integrated_results.rds\n")
+}
+
+#炎症型肿瘤正互作
+library(ggplot2)
+library(dplyr)
+library(patchwork)
+
+integrated_results <- readRDS("mPT_CN5_integrated_results.rds")
+
+# 目标细胞类型
+target_tumor_types <- c("Tumor_Immune-inflamed_1", "Tumor_Immune-inflamed_2")
+
+# 获取所有细胞类型
+all_types <- integrated_results$all_cell_types
+
+# ===================== 定义绘图函数 =====================
+plot_positive_interactions <- function(tumor_type, all_types, integrated_results) {
+  
+  if (!tumor_type %in% all_types) {
+    return(NULL)
+  }
+  
+  other_types <- all_types[all_types != tumor_type]
+  
+  df <- data.frame(
+    CellType = other_types,
+    Log2FC = integrated_results$avg_log2fc[tumor_type, other_types],
+    P_value = integrated_results$combined_p[tumor_type, other_types],
+    stringsAsFactors = FALSE
+  )
+  
+  # 只保留正值且显著
+  df_positive <- df[df$Log2FC > 0 & df$P_value < 0.05, ]
+  
+  if (nrow(df_positive) == 0) {
+    return(NULL)
+  }
+  
+  # 按 Log2FC 排序
+  df_positive <- df_positive[order(df_positive$Log2FC, decreasing = TRUE), ]
+  df_positive$CellType <- factor(df_positive$CellType, levels = rev(df_positive$CellType))
+  
+  # 提取肿瘤类型短名称
+  short_name <- ifelse(tumor_type == "Tumor_Immune-inflamed_1", "Immune-inflamed_1", "Immune-inflamed_2")
+  
+  p <- ggplot(df_positive, aes(x = Log2FC, y = CellType)) +
+    geom_bar(stat = "identity", fill = ifelse(tumor_type == "Tumor_Immune-inflamed_1", "#E15759", "#F28E2B")) +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "black") +
+    labs(title = short_name,
+         x = "Log2(Fold Change)",
+         y = "") +
+    theme_bw() +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+      axis.text.y = element_text(size = 10),
+      axis.text.x = element_text(size = 10),
+      axis.title.x = element_text(size = 11),
+      plot.margin = margin(5, 5, 5, 5)
+    )
+  
+  return(p)
+}
+p1 <- plot_positive_interactions("Tumor_Immune-inflamed_1", all_types, integrated_results)
+p2 <- plot_positive_interactions("Tumor_Immune-inflamed_2", all_types, integrated_results)
+
+# ===================== 左右拼接 =====================
+if (!is.null(p1) && !is.null(p2)) {
+  combined <- p1 + p2 +
+    plot_annotation(
+      title = "CN5: Positive interactions of immune-inflamed tumors",
+      subtitle = "Log2FC > 0, P < 0.05",
+      theme = theme(
+        plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
+        plot.subtitle = element_text(hjust = 0.5, size = 12)
+      )
+    ) +
+    plot_layout(widths = c(0.5, 0.5))
+  
+  ggsave("mPT_CN5_Immune_inflamed_positive_interactions_combined.pdf", 
+         combined, width = 10, height = 5, dpi = 300)
+  cat("保存拼接图：mPT_CN5_Immune_inflamed_positive_interactions_combined.pdf\n")
+  print(combined)
+} else if (!is.null(p1)) {
+  ggsave("mPT_CN5_Immune_inflamed_1_positive_interactions.pdf", p1, width = 5, height = 4, dpi = 300)
+  print(p1)
+} else if (!is.null(p2)) {
+  ggsave("mPT_CN5_Immune_inflamed_2_positive_interactions.pdf", p2, width = 5, height = 4, dpi = 300)
+  print(p2)
+} else {
+  cat("没有找到显著的吸引互作\n")
+}
+```
+# mPT CN4 chat
+```R
+# ===================== 定义空间分析函数 =====================
+run_spatial_analysis_cn4 <- function(coords_sub, labels_sub, sample_name, nperm = 1000) {
+  
+  cat("\n========================================\n")
+  cat("开始分析样本：", sample_name, "\n")
+  cat("CN4内细胞数量：", length(labels_sub), "\n")
+  cat("========================================\n")
+  
+  # 检查细胞类型数量
+  types <- sort(unique(labels_sub))
+  K <- length(types)
+  
+  if (K < 2) {
+    cat("警告：", sample_name, "只有", K, "种细胞类型，跳过分析\n")
+    return(NULL)
+  }
+  
+  cat("细胞类型数量：", K, "\n")
+  cat("细胞类型：", paste(types, collapse = ", "), "\n")
+  
+  # 提取坐标
+  x <- coords_sub[,1]
+  y <- coords_sub[,2]
+  
+  # 计算Delaunay三角剖分
+  cat("计算Delaunay三角剖分...\n")
+  deld <- deldir(x, y, rw = c(range(x), range(y)))
+  segs <- deld$delsgs
+  cat("生成三角边数量：", nrow(segs), "\n")
+  
+  # 构建边
+  edges <- cbind(segs$ind1, segs$ind2)
+  edges <- edges[edges[,1] != edges[,2], , drop=FALSE]
+  edges <- t(apply(edges, 1, function(x) sort(x)))
+  edges <- unique(edges)
+  edges_df <- data.frame(from = edges[,1], to = edges[,2])
+  cat("最终边数量：", nrow(edges_df), "\n")
+  
+  # 构建观察矩阵
+  type_by_index <- labels_sub
+  t1 <- type_by_index[edges_df$from]
+  t2 <- type_by_index[edges_df$to]
+  
+  mat_obs <- matrix(0, nrow = K, ncol = K, dimnames = list(types, types))
+  for(i in seq_along(t1)) {
+    a <- t1[i]
+    b <- t2[i]
+    mat_obs[a,b] <- mat_obs[a,b] + 1
+    mat_obs[b,a] <- mat_obs[b,a] + 1
+  }
+  
+  # 排列检验
+  cat("\n开始排列检验（", nperm, "次）...\n")
+  
+  from_idx <- edges_df$from
+  to_idx <- edges_df$to
+  n_cells <- length(type_by_index)
+  
+  ncores <- parallel::detectCores() - 1
+  ncores <- max(1, min(ncores, 24))
+  
+  cl <- makeCluster(ncores)
+  registerDoParallel(cl)
+  
+  perm_counts <- foreach(p = 1:nperm, .packages = c(), .combine = rbind) %dopar% {
+    set.seed(p + 12345)
+    perm_labels <- sample(type_by_index, n_cells, replace = FALSE)
+    
+    pt1 <- perm_labels[from_idx]
+    pt2 <- perm_labels[to_idx]
+    
+    mat <- matrix(0, nrow = K, ncol = K, dimnames = list(types, types))
+    for(i in seq_along(pt1)) {
+      a <- pt1[i]
+      b <- pt2[i]
+      mat[a,b] <- mat[a,b] + 1
+      mat[b,a] <- mat[b,a] + 1
+    }
+    as.vector(mat)
+  }
+  
+  stopCluster(cl)
+  cat("排列检验完成\n")
+  
+  # 计算结果
+  obs_vec <- as.vector(mat_obs)
+  mu_rand <- colMeans(perm_counts)
+  sd_rand <- apply(perm_counts, 2, sd)
+  
+  # z-score
+  z_vec <- (obs_vec - mu_rand) / (sd_rand + 1e-8)
+  
+  # 经验p值
+  p_emp <- sapply(seq_along(obs_vec), function(i) {
+    perm_i <- perm_counts[, i]
+    obs_i <- obs_vec[i]
+    mu_i <- mu_rand[i]
+    p_val <- (sum(abs(perm_i - mu_i) >= abs(obs_i - mu_i)) + 1) / (nperm + 1)
+    return(p_val)
+  })
+  
+  # 转为矩阵
+  mat_mu <- matrix(mu_rand, nrow = K, ncol = K, dimnames = list(types, types))
+  mat_sd <- matrix(sd_rand, nrow = K, ncol = K, dimnames = list(types, types))
+  mat_z <- matrix(z_vec, nrow = K, ncol = K, dimnames = list(types, types))
+  mat_p <- matrix(p_emp, nrow = K, ncol = K, dimnames = list(types, types))
+  
+  # 计算 log2FC
+  mat_fc <- mat_obs / (mat_mu + 1e-8)
+  mat_log2fc <- log2(mat_fc)
+  
+  # 返回结果
+  results <- list(
+    sample = sample_name,
+    mat_obs = mat_obs,
+    mat_z = mat_z,
+    mat_p = mat_p,
+    mat_mu = mat_mu,
+    mat_sd = mat_sd,
+    mat_log2fc = mat_log2fc,
+    cell_types = types,
+    n_cells = length(labels_sub),
+    n_edges = nrow(edges_df)
+  )
+  
+  return(results)
+}
+
+samples <- unique(mPT$sample)
+cat("mPT 样本:", paste(samples, collapse = ", "), "\n")
+
+# 存储结果
+cn4_results <- list()
+
+for (sample_id in samples) {
+  cat("\n\n########## 处理样本：", sample_id, " ##########\n")
+  
+  # 提取该样本中 CN4 的细胞
+  sample_cells <- subset(mPT, subset = sample == sample_id & cn_detailed == "TLS_Zone")
+  
+  if (nrow(sample_cells@meta.data) == 0) {
+    cat("警告：", sample_id, "CN4中没有细胞，跳过\n")
+    next
+  }
+  
+  cat("CN4细胞数量：", nrow(sample_cells@meta.data), "\n")
+  
+  # 获取坐标和标签
+  coords <- sample_cells@meta.data[, c("CenterX_global_px", "CenterY_global_px")]
+  coords <- coords[!is.na(coords[,1]) & !is.na(coords[,2]), , drop = FALSE]
+  labels <- as.character(sample_cells@meta.data$detailed)
+  names(labels) <- rownames(coords)
+  
+  # 移除NA标签
+  valid_idx <- !is.na(labels)
+  coords <- coords[valid_idx, , drop = FALSE]
+  labels <- labels[valid_idx]
+  
+  cat("有效细胞数量：", length(labels), "\n")
+  cat("细胞类型分布：\n")
+  print(table(labels))
+  
+  # 过滤稀有细胞类型（数量 < 5 的过滤，因为CN4内细胞数较少）
+  cell_counts <- table(labels)
+  rare_threshold <- 5
+  keep_types <- names(cell_counts[cell_counts >= rare_threshold])
+  keep_cells <- labels %in% keep_types
+  coords <- coords[keep_cells, , drop = FALSE]
+  labels <- labels[keep_cells]
+  
+  cat("过滤稀有细胞后数量：", length(labels), "\n")
+  
+  if (length(labels) < 30) {
+    cat("警告：", sample_id, "过滤后细胞太少，跳过\n")
+    next
+  }
+  
+  # 确保坐标是数值型
+  coords <- as.matrix(coords)
+  colnames(coords) <- c("x", "y")
+  
+  # 运行分析
+  result <- run_spatial_analysis_cn4(coords, labels, sample_id, nperm = 500)
+  
+  if (!is.null(result)) {
+    cn4_results[[sample_id]] <- result
+    
+    # 绘制并保存热图
+    if (nrow(result$mat_log2fc) > 1 && ncol(result$mat_log2fc) > 1) {
+      mat_plot <- result$mat_log2fc
+      
+      # 处理 Inf
+      mat_plot[is.infinite(mat_plot) & mat_plot < 0] <- -10
+      mat_plot[is.infinite(mat_plot) & mat_plot > 0] <- 10
+      mat_plot[mat_plot > 10] <- 10
+      mat_plot[mat_plot < -10] <- -10
+      
+      # 显著性标注
+      signif_symbols <- matrix("", nrow = length(result$cell_types), 
+                                ncol = length(result$cell_types),
+                                dimnames = list(result$cell_types, result$cell_types))
+      signif_symbols[result$mat_p < 0.001] <- "***"
+      signif_symbols[result$mat_p < 0.01 & result$mat_p >= 0.001] <- "**"
+      signif_symbols[result$mat_p < 0.05 & result$mat_p >= 0.01] <- "*"
+      
+      # 热图
+      pdf(paste0("mPT_CN4_", sample_id, "_contact_log2fc.pdf"), width = 12, height = 10)
+      pheatmap(mat_plot,
+               cluster_rows = TRUE,
+               cluster_cols = TRUE,
+               main = paste("CN4 - Log2(FC) -", sample_id),
+               fontsize = 10,
+               display_numbers = signif_symbols,
+               number_color = "black",
+               fontsize_number = 8)
+      dev.off()
+      
+      cat("保存热图：mPT_CN4_", sample_id, "_contact_log2fc.pdf\n", sep = "")
+    }
+  }
+}
+
+saveRDS(cn4_results, file = "mPT_CN4_cell_interaction_results.rds")
+cat("\n\n========== 分析完成 ==========\n")
+cat("成功分析样本数：", length(cn4_results), "\n")
+
+# ===================== 整合多样本CN4结果 =====================
+all_cell_types <- unique(unlist(lapply(cn4_results, function(x) x$cell_types)))
+cat("总细胞类型数量：", length(all_cell_types), "\n")
+cat("所有细胞类型：", paste(all_cell_types, collapse = ", "), "\n")
+
+if (length(all_cell_types) >= 2) {
+  # 计算平均 log2FC（初始化为0）
+  avg_log2fc <- matrix(0, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                       dimnames = list(all_cell_types, all_cell_types))
+  
+  # 记录每个单元格有多少个有效样本
+  n_effective <- matrix(0, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                         dimnames = list(all_cell_types, all_cell_types))
+  
+  # 存储合并 chi2 和自由度
+  combined_chi2 <- matrix(0, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                          dimnames = list(all_cell_types, all_cell_types))
+  combined_df <- matrix(0, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                        dimnames = list(all_cell_types, all_cell_types))
+  
+  for (sample_id in names(cn4_results)) {
+    res <- cn4_results[[sample_id]]
+    
+    # 当前样本的细胞类型
+    current_types <- res$cell_types
+    
+    # 只处理当前样本中存在的细胞类型
+    for (i in seq_along(current_types)) {
+      for (j in seq_along(current_types)) {
+        ct_i <- current_types[i]
+        ct_j <- current_types[j]
+        
+        avg_log2fc[ct_i, ct_j] <- avg_log2fc[ct_i, ct_j] + res$mat_log2fc[ct_i, ct_j]
+        n_effective[ct_i, ct_j] <- n_effective[ct_i, ct_j] + 1
+        
+        combined_chi2[ct_i, ct_j] <- combined_chi2[ct_i, ct_j] + (-2 * log(res$mat_p[ct_i, ct_j] + 1e-10))
+        combined_df[ct_i, ct_j] <- combined_df[ct_i, ct_j] + 2
+      }
+    }
+  }
+  
+  # 计算平均 log2FC
+  avg_log2fc <- avg_log2fc / n_effective
+  
+  # 计算合并 p 值
+  combined_p <- matrix(1, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                       dimnames = list(all_cell_types, all_cell_types))
+  for (i in seq_along(all_cell_types)) {
+    for (j in seq_along(all_cell_types)) {
+      if (combined_df[i, j] > 0) {
+        combined_p[i, j] <- pchisq(combined_chi2[i, j], df = combined_df[i, j], lower.tail = FALSE)
+      }
+    }
+  }
+  
+  # 处理 NaN 和 Inf
+  avg_log2fc[is.nan(avg_log2fc)] <- 0
+  avg_log2fc[is.infinite(avg_log2fc) & avg_log2fc < 0] <- -10
+  avg_log2fc[is.infinite(avg_log2fc) & avg_log2fc > 0] <- 10
+  avg_log2fc[avg_log2fc > 10] <- 10
+  avg_log2fc[avg_log2fc < -10] <- -10
+  
+  # 显著性标注
+  signif_symbols <- matrix("", nrow = length(all_cell_types), ncol = length(all_cell_types),
+                           dimnames = list(all_cell_types, all_cell_types))
+  signif_symbols[combined_p < 0.001] <- "***"
+  signif_symbols[combined_p < 0.01 & combined_p >= 0.001] <- "**"
+  signif_symbols[combined_p < 0.05 & combined_p >= 0.01] <- "*"
+  
+  # 绘制平均热图
+  p_avg <- pheatmap(avg_log2fc,
+                    cluster_rows = TRUE,
+                    cluster_cols = TRUE,
+                    main = "CN4: Average Log2(Fold Change) across mPT samples",
+                    fontsize = 10,
+                    display_numbers = signif_symbols,
+                    number_color = "black",
+                    fontsize_number = 8,
+                    filename = "mPT_CN4_all_samples_average_contact_log2fc.pdf",
+                    width = 14, height = 12)
+  
+  cat("保存平均热图：mPT_CN4_all_samples_average_contact_log2fc.pdf\n")
+  
+  # 保存整合结果
+  integrated_results <- list(
+    all_cell_types = all_cell_types,
+    avg_log2fc = avg_log2fc,
+    combined_p = combined_p,
+    n_effective = n_effective,
+    n_samples = length(cn4_results),
+    individual_results = cn4_results
+  )
+  
+  saveRDS(integrated_results, file = "mPT_CN4_integrated_results.rds")
+  cat("保存整合结果：mPT_CN4_integrated_results.rds\n")
+}

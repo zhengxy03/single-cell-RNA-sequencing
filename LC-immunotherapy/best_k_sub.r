@@ -20,7 +20,7 @@ source("cellcharter_R_parallel.R")
 # 1. 加载你的原始空间数据
 # =====================
 message("=== 1. 加载原始 mPT 对象 ===")
-mPT <- readRDS("mPT_detailed_new.rds")  # 改成你的路径
+mPT <- readRDS("mPT_detailed.rds")  # 改成你的路径
 
 
 # =====================
@@ -44,8 +44,8 @@ mPT <- aggregate_neighbors(mPT, n_layers = 3, use_rep = "pca",
 message("=== 3. 运行自动选择 k 值 ===")
 
 # 定义单一 k 值范围
-k_range <- 2:25
-range_name <- "2-25"
+k_range <- 2:30
+range_name <- "2-30"
 
 # 存储结果
 all_results <- list()
@@ -101,23 +101,58 @@ for (range_name in names(all_results)) {
 
 # 绘制综合稳定性曲线
 pdf(file.path(out_dir, "stability_curve_combined.pdf"), width = 12, height = 6)
-ggplot(all_stability, aes(x = k, y = stability, color = range)) +
-  geom_line(size = 1) +
-  geom_point(size = 3) +
-  labs(
-    title = "Cluster stability across k values",
-    x = "Number of clusters (k)",
-    y = "Stability score",
-    color = "k range"
-  ) +
-  theme_minimal() +
-  theme(
-    plot.title = element_text(size = 16, face = "bold"),
-    axis.title = element_text(size = 14),
-    axis.text = element_text(size = 12),
-    legend.title = element_text(size = 14),
-    legend.text = element_text(size = 12)
-  )
+
+# 提取数据
+k_vals <- all_stability$all_stability$k
+stability_vals <- all_stability$all_stability$stability
+best_k <- all_stability$global_best_k
+
+# 计算局部最大值（只针对稳定值 > 0 的区域，避免尾部零值干扰）
+# 找到稳定值 > 0 的索引
+pos_idx <- which(stability_vals > 0)
+if (length(pos_idx) >= 3) {
+  stability_pos <- stability_vals[pos_idx]
+  k_pos <- k_vals[pos_idx]
+  # 计算局部最大值
+  peaks_idx <- which(diff(sign(diff(stability_pos))) == -2) + 1
+  peaks_k <- k_pos[peaks_idx]
+  peaks_stability <- stability_pos[peaks_idx]
+} else {
+  peaks_k <- NULL
+  peaks_stability <- NULL
+}
+
+# 绘图
+plot(k_vals, stability_vals,
+     type = "b",           # 同时画点和线
+     xlab = "Number of clusters (k)",
+     ylab = "Stability score",
+     main = "Cluster stability across k values",
+     pch = 1,              # 空心圆点
+     col = "black",
+     lty = 1,
+     lwd = 1.5,
+     ylim = c(0, max(stability_vals) * 1.05))
+
+# 标注局部最大值点（实心红点）
+if (length(peaks_k) > 0) {
+  points(peaks_k, peaks_stability,
+         col = "red", pch = 16, cex = 1.5)
+}
+
+# 最佳 k 值竖线
+abline(v = best_k, col = "blue", lty = 2, lwd = 1.5)
+
+
+
+# 图例
+legend("topright",
+       legend = c("Stability", "Local maxima", "Best k"),
+       col = c("black", "red", "blue"),
+       pch = c(1, 16, NA),
+       lty = c(1, NA, 2),
+       bty = "n")
+
 dev.off()
 
 # 找到全局最佳 k 值

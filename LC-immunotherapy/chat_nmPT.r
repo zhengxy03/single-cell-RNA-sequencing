@@ -24,7 +24,7 @@ obj$tissue <- sample_tissue$tissue[match(obj$sample, sample_tissue$sample)]
 
 # ===================== 细胞类型注释 =====================
 obj$CellType <- recode(obj$CellType,
-                       "Malignant cells" = "unknown",
+                       #"Malignant cells" = "unknown",
                        "Basal cells" = "Malignant cells")
 
 # ===================== 提取 nmPT 样本 =====================
@@ -177,7 +177,7 @@ for (sample_id in samples) {
   # 获取坐标和标签
   coords <- sample_cells@meta.data[, c("CenterX_global_px", "CenterY_global_px")]
   coords <- coords[!is.na(coords[,1]) & !is.na(coords[,2]), , drop = FALSE]
-  labels <- as.character(sample_cells@meta.data$CellType)
+  labels <- as.character(sample_cells@meta.data$detailed)
   names(labels) <- rownames(coords)
   
   # 移除NA标签
@@ -216,10 +216,17 @@ for (sample_id in samples) {
     
     # 绘制并保存热图
     if (nrow(result$mat_log2fc) > 1 && ncol(result$mat_log2fc) > 1) {
-      # 裁剪
+      # ===== 修改：处理 -Inf 和 +Inf，然后裁剪 =====
       mat_plot <- result$mat_log2fc
-      mat_plot[mat_plot > 3] <- 3
-      mat_plot[mat_plot < -3] <- -3
+      
+      # 替换 -Inf 为 -10
+      mat_plot[is.infinite(mat_plot) & mat_plot < 0] <- -10
+      # 替换 +Inf 为 10
+      mat_plot[is.infinite(mat_plot) & mat_plot > 0] <- 10
+      
+      # 裁剪超出 [-10, 10] 的范围
+      mat_plot[mat_plot > 10] <- 10
+      mat_plot[mat_plot < -10] <- -10
       
       # 显著性标注
       signif_symbols <- matrix("", nrow = length(result$cell_types), 
@@ -238,59 +245,83 @@ for (sample_id in samples) {
                     display_numbers = signif_symbols,
                     number_color = "black",
                     fontsize_number = 8,
-                    filename = paste0("nmPT_", sample_id, "_contact_log2fc.pdf"),
+                    #filename = paste0("nmPT_", sample_id, "_contact_log2fc.pdf"),
                     width = 12, height = 10)
       
       cat("保存热图：nmPT_", sample_id, "_contact_log2fc.pdf\n", sep = "")
     }
     
     # 保存结果文件
-    saveRDS(result, file = paste0("nmPT_", sample_id, "_results.rds"))
+    #saveRDS(result, file = paste0("nmPT_", sample_id, "_results.rds"))
     cat("保存结果：nmPT_", sample_id, "_results.rds\n", sep = "")
   }
 }
-
+saveRDS(all_results, file = "nmPT_all_results_subtype_interaction.rds")
 # ===================== 整合多样本结果 =====================
-cat("\n\n========== 整合多样本结果 ==========\n")
+all_cell_types <- unique(unlist(lapply(all_results, function(x) x$cell_types)))
+cat("总细胞类型数量：", length(all_cell_types), "\n")
+cat("所有细胞类型：", paste(all_cell_types, collapse = ", "), "\n")
 
-# 找出所有样本共有的细胞类型
-common_types <- Reduce(intersect, lapply(all_results, function(x) x$cell_types))
-cat("共有细胞类型数量：", length(common_types), "\n")
-cat("共有细胞类型：", paste(common_types, collapse = ", "), "\n")
-
-if (length(common_types) >= 2) {
-  # 计算平均 log2FC
-  avg_log2fc <- matrix(0, nrow = length(common_types), ncol = length(common_types),
-                       dimnames = list(common_types, common_types))
+if (length(all_cell_types) >= 2) {
+  # 计算平均 log2FC（初始化为0）
+  avg_log2fc <- matrix(0, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                       dimnames = list(all_cell_types, all_cell_types))
   
-  # 计算合并 p 值 (Fisher's method)
-  combined_chi2 <- matrix(0, nrow = length(common_types), ncol = length(common_types))
-  n_samples <- length(all_results)
+  # 记录每个单元格有多少个有效样本
+  n_effective <- matrix(0, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                         dimnames = list(all_cell_types, all_cell_types))
+  
+  # 存储合并 chi2 和自由度（也要设置 dimnames）
+  combined_chi2 <- matrix(0, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                          dimnames = list(all_cell_types, all_cell_types))
+  combined_df <- matrix(0, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                        dimnames = list(all_cell_types, all_cell_types))
   
   for (sample_id in names(all_results)) {
     res <- all_results[[sample_id]]
-    mat_log2fc <- res$mat_log2fc[common_types, common_types]
-    mat_p <- res$mat_p[common_types, common_types]
     
-    # 平均 log2FC
-    avg_log2fc <- avg_log2fc + mat_log2fc
+    # 当前样本的细胞类型
+    current_types <- res$cell_types
     
-    # Fisher's method: -2 * sum(log(p))
-    combined_chi2 <- combined_chi2 + (-2 * log(mat_p + 1e-10))
+    # 只处理当前样本中存在的细胞类型
+    for (i in seq_along(current_types)) {
+      for (j in seq_along(current_types)) {
+        ct_i <- current_types[i]
+        ct_j <- current_types[j]
+        
+        avg_log2fc[ct_i, ct_j] <- avg_log2fc[ct_i, ct_j] + res$mat_log2fc[ct_i, ct_j]
+        n_effective[ct_i, ct_j] <- n_effective[ct_i, ct_j] + 1
+        
+        combined_chi2[ct_i, ct_j] <- combined_chi2[ct_i, ct_j] + (-2 * log(res$mat_p[ct_i, ct_j] + 1e-10))
+        combined_df[ct_i, ct_j] <- combined_df[ct_i, ct_j] + 2
+      }
+    }
   }
   
-  avg_log2fc <- avg_log2fc / n_samples
+  # 计算平均 log2FC
+  avg_log2fc <- avg_log2fc / n_effective
   
   # 计算合并 p 值
-  combined_p <- pchisq(combined_chi2, df = 2 * n_samples, lower.tail = FALSE)
+  combined_p <- matrix(1, nrow = length(all_cell_types), ncol = length(all_cell_types),
+                       dimnames = list(all_cell_types, all_cell_types))
+  for (i in seq_along(all_cell_types)) {
+    for (j in seq_along(all_cell_types)) {
+      if (combined_df[i, j] > 0) {
+        combined_p[i, j] <- pchisq(combined_chi2[i, j], df = combined_df[i, j], lower.tail = FALSE)
+      }
+    }
+  }
   
-  # 裁剪
-  avg_log2fc[avg_log2fc > 3] <- 3
-  avg_log2fc[avg_log2fc < -3] <- -3
+  # 处理 NaN 和 Inf
+  avg_log2fc[is.nan(avg_log2fc)] <- 0
+  avg_log2fc[is.infinite(avg_log2fc) & avg_log2fc < 0] <- -10
+  avg_log2fc[is.infinite(avg_log2fc) & avg_log2fc > 0] <- 10
+  avg_log2fc[avg_log2fc > 10] <- 10
+  avg_log2fc[avg_log2fc < -10] <- -10
   
-  # 显著性标注
-  signif_symbols <- matrix("", nrow = length(common_types), ncol = length(common_types),
-                           dimnames = list(common_types, common_types))
+  # 显著性标注（只标星号）
+  signif_symbols <- matrix("", nrow = length(all_cell_types), ncol = length(all_cell_types),
+                           dimnames = list(all_cell_types, all_cell_types))
   signif_symbols[combined_p < 0.001] <- "***"
   signif_symbols[combined_p < 0.01 & combined_p >= 0.001] <- "**"
   signif_symbols[combined_p < 0.05 & combined_p >= 0.01] <- "*"
@@ -304,21 +335,22 @@ if (length(common_types) >= 2) {
                     display_numbers = signif_symbols,
                     number_color = "black",
                     fontsize_number = 8,
-                    filename = "nmPT_all_samples_average_contact_log2fc.pdf",
+                    filename = "nmPT_all_samples_average_contact_log2fc_detailed.pdf",
                     width = 14, height = 12)
   
   cat("保存平均热图：nmPT_all_samples_average_contact_log2fc.pdf\n")
   
   # 保存整合结果
   integrated_results <- list(
-    common_cell_types = common_types,
+    all_cell_types = all_cell_types,
     avg_log2fc = avg_log2fc,
     combined_p = combined_p,
-    n_samples = n_samples,
+    n_effective = n_effective,
+    n_samples = length(all_results),
     individual_results = all_results
   )
   
-  saveRDS(integrated_results, file = "nmPT_integrated_results.rds")
+  saveRDS(integrated_results, file = "nmPT_integrated_results_detailed.rds")
   cat("保存整合结果：nmPT_integrated_results.rds\n")
 }
 
