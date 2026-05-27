@@ -1,5 +1,4 @@
-# CellCharter R implementation (Parallel version)
-# STABLE + INTELLIGENT MULTICORE
+# CellCharter R implementation
 library(Seurat)
 library(Matrix)
 library(mclust)
@@ -87,7 +86,7 @@ aggregate_neighbors <- function(seurat_obj, n_layers = 3, aggregations = "mean",
 }
 
 # --------------------------
-# GMM 聚类 → 自动限制 6 核
+# GMM 聚类
 # --------------------------
 cluster_cells <- function(seurat_obj, n_clusters = 5, cluster_key = "cellcharter_cluster", n_cores = 6) {
   message("Clustering cells (GMM) - AUTO LIMIT TO 6 CORES")
@@ -106,7 +105,7 @@ cluster_cells <- function(seurat_obj, n_clusters = 5, cluster_key = "cellcharter
 }
 
 # --------------------------
-# 边界细胞 → 必须单线程（不丢细胞）
+# 边界细胞
 # --------------------------
 identify_boundary_cells <- function(seurat_obj, cluster_col = "cellcharter_cluster", n_cores = 1) {
   message("Identifying boundary cells (SINGLE THREAD - NO BUG)")
@@ -125,7 +124,7 @@ identify_boundary_cells <- function(seurat_obj, cluster_col = "cellcharter_clust
 }
 
 # --------------------------
-# 形状计算 → 多核拉满
+# 形状计算
 # --------------------------
 calculate_shape_metrics <- function(seurat_obj, cluster_col = "cellcharter_cluster", n_cores = 1) {
   message("Calculating shape metrics (MULTICORE)")

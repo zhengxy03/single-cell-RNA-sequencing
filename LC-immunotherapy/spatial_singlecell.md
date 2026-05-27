@@ -11475,7 +11475,7 @@ dev.off()
 # DC sc
 ```R
 obj <- readRDS("sc_obj_anno.rds")
-options(future.globals.maxSize = 8000 * 1024^2)
+
 library(Seurat)
 library(ggplot2)
 library(dplyr)
