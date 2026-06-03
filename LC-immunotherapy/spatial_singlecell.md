@@ -14007,8 +14007,8 @@ for (cn in rownames(cn_prop)) {
 cn_annotation_detailed <- c(
   "1"  = "Vascular_Stromal_Zone",
   "2"  = "Immune_Zone",
-  "3"  = "Macrophage_Dominant_Zone_A",
-  "4"  = "Macrophage_Dominant_Zone_B",
+  "3"  = "Macrophage_Dominant_Zone_B",
+  "4"  = "Macrophage_Dominant_Zone_C",
   "5"  = "TLS_Zone",
   "6"  = "Stromal_Remodeling_Zone",
   "7"  = "Stem_Proliferative_Tumor_Zone_A",
@@ -14721,9 +14721,6 @@ for (cn in rownames(cn_prop)) {
 }
 
 #CN注释
-
-
-
 cn_annotation_detailed <- c(
   "1"  = "B_Cell_Follicle_Zone",
   "2"  = "Plasma_Macrophage_Zone",
@@ -14731,14 +14728,14 @@ cn_annotation_detailed <- c(
   "4"  = "Vascular_Stromal_Zone",
   "5"  = "FRC-rich_Lymphoid_Zone",
   "6"  = "Mast_Cell_Immune_Zone",
-  "7"  = "Immune-inflamed_Tumor_Zone_A",
+  "7"  = "Immune-inflamed_Tumor_Core_A",
   "8"  = "B_T_Cell_Zone",
-  "9"  = "Immune-inflamed_Tumor_Zone_B",
-  "10" = "Macrophage_Dominant_Zone_C",
+  "9"  = "Immune-inflamed_Tumor_Core_B",
+  "10" = "Macrophage_Dominant_Zone_D",
   "11" = "Immune-inflamed_Tumor_Macrophage_Interface",
   "12" = "Plasma_Enriched_Zone_G",
-  "13" = "Macrophage_Dominant_Zone_D",
-  "14" = "Immune-inflamed_Tumor_B_Cell_Interface"
+  "13" = "Macrophage_Dominant_Zone_E",
+  "14" = "B_Cell_Immune-inflamed_Tumor_Interface"
 )
 # 应用到 Seurat 对象
 metLN@meta.data$cn_detailed <- cn_annotation_detailed[as.character(metLN@meta.data$cellcharter_cluster)]
@@ -14928,6 +14925,1032 @@ p_count_top10 <- ggplot(stack_data_top10, aes(x = cn_detailed, y = count, fill =
   )
 
 ggsave("metLN_cn_celltype_count_top10_per_CN.pdf", p_count_top10, width = 16, height = 8, dpi = 300)
+
+#TLS区的差异
+#比较mPT、nmPT和metLN的TLS区
+library(ggplot2)
+library(dplyr)
+library(patchwork)
+
+# ===================== 提取三个数据集中 TLS_Zone 的细胞 =====================
+
+# mPT中的TLS_Zone
+mPT_tls <- mPT@meta.data %>% filter(cn_detailed == "TLS_Zone")
+mPT_tls$dataset <- "mPT"
+
+# nmPT中的TLS_Zone
+nmPT_tls <- nmPT@meta.data %>% filter(cn_detailed == "TLS_Zone")
+nmPT_tls$dataset <- "nmPT"
+
+# metLN中的TLS_Zone（注意metLN中可能叫其他名字，根据实际注释调整）
+# 根据之前的数据，metLN中CN8是B_T_Cell_Zone，CN1是B_Cell_Follicle_Zone，这些都接近TLS
+# 这里使用 "B_T_Cell_Zone" 作为metLN中接近TLS的区域
+metLN_tls <- metLN@meta.data %>% filter(cn_detailed == "B_T_Cell_Zone")
+metLN_tls$dataset <- "metLN"
+
+# 如果metLN有专门的TLS_Zone，用下面这行替换上面的
+# metLN_tls <- metLN@meta.data %>% filter(cn_detailed == "TLS_Zone")
+
+# 合并数据
+combined_tls <- bind_rows(mPT_tls, nmPT_tls, metLN_tls)
+
+cat("mPT TLS_Zone 细胞数：", nrow(mPT_tls), "\n")
+cat("nmPT TLS_Zone 细胞数：", nrow(nmPT_tls), "\n")
+cat("metLN B_T_Cell_Zone 细胞数：", nrow(metLN_tls), "\n")
+
+# ===================== 颜色方案 =====================
+cluster_colors <- c(
+  "#A0CBE8", "#FFBE7D", "#8CD17D", "#86BCB6", "#FF9D9A",
+  "#FABFD2", "#D4A6C8", "#F1CE63", "#D7B5A6", "#B07AA1",
+  "#BAB0AC", "#4E79A7", "#F28E2B", "#59A14F", "#E15759",
+  "#499894", "#D37295", "#B6992D", "#9D7660", "#79706E"
+)
+
+# ===================== 1. TLS_Zone 总细胞组成占比差异堆叠图 =====================
+
+# 计算每个数据集中各细胞类型的占比
+total_composition <- combined_tls %>%
+  group_by(dataset, detailed) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(dataset) %>%
+  mutate(percentage = count / sum(count) * 100) %>%
+  ungroup()
+
+# 获取top 15细胞类型
+top_cell_types <- total_composition %>%
+  group_by(detailed) %>%
+  summarise(total_count = sum(count)) %>%
+  arrange(desc(total_count)) %>%
+  slice_head(n = 15) %>%
+  pull(detailed)
+
+# 其他细胞类型合并为 "Other"
+total_composition_plot <- total_composition %>%
+  mutate(cell_group = ifelse(detailed %in% top_cell_types, detailed, "Other")) %>%
+  group_by(dataset, cell_group) %>%
+  summarise(percentage = sum(percentage), .groups = "drop")
+
+p_total <- ggplot(total_composition_plot, aes(x = dataset, y = percentage, fill = cell_group)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.6) +
+  scale_fill_manual(values = cluster_colors[1:length(unique(total_composition_plot$cell_group))], 
+                    name = "Cell Type") +
+  labs(title = "TLS_Like_Zone: Cell Composition Comparison",
+       subtitle = paste("mPT (n=", nrow(mPT_tls), ") | nmPT (n=", nrow(nmPT_tls), ") | metLN (n=", nrow(metLN_tls), ")"),
+       x = "",
+       y = "Percentage (%)") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    plot.subtitle = element_text(hjust = 0.5, size = 10),
+    axis.text.x = element_text(size = 12, face = "bold"),
+    axis.text.y = element_text(size = 10),
+    axis.title.y = element_text(size = 11),
+    legend.position = "right",
+    legend.text = element_text(size = 7),
+    legend.key.size = unit(0.4, "cm")
+  )
+
+ggsave("TLS_Zone_composition_comparison_three_groups.pdf", p_total, width = 14, height = 6, dpi = 300)
+print(p_total)
+
+# ===================== 2. T细胞亚群占比差异堆叠图 =====================
+
+# 提取T细胞（以 T_ 开头，排除 Tumor）
+t_cell_types <- grep("^T_", unique(combined_tls$detailed), value = TRUE)
+t_cell_types <- t_cell_types[!grepl("Tumor", t_cell_types)]
+
+t_composition <- combined_tls %>%
+  filter(detailed %in% t_cell_types) %>%
+  group_by(dataset, detailed) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(dataset) %>%
+  mutate(percentage = count / sum(count) * 100) %>%
+  ungroup()
+
+if (nrow(t_composition) > 0) {
+  p_t <- ggplot(t_composition, aes(x = dataset, y = percentage, fill = detailed)) +
+    geom_bar(stat = "identity", position = "stack", width = 0.6) +
+    scale_fill_manual(values = cluster_colors[1:length(unique(t_composition$detailed))], 
+                      name = "T Cell Subtype") +
+    labs(title = "TLS_Like_Zone: T Cell Subtype Comparison",
+         x = "",
+         y = "Percentage (%)") +
+    theme_bw() +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+      axis.text.x = element_text(size = 12, face = "bold"),
+      axis.text.y = element_text(size = 10),
+      axis.title.y = element_text(size = 11),
+      legend.position = "right",
+      legend.text = element_text(size = 8),
+      legend.key.size = unit(0.4, "cm")
+    )
+  
+  ggsave("TLS_Zone_composition_comparison_T_cells_three_groups.pdf", p_t, width = 8, height = 5, dpi = 300)
+  print(p_t)
+} else {
+  cat("没有找到T细胞\n")
+}
+
+# ===================== 3. B细胞亚群占比差异堆叠图 =====================
+
+# 提取B细胞（以 B_ 开头）
+b_cell_types <- grep("^B_", unique(combined_tls$detailed), value = TRUE)
+
+b_composition <- combined_tls %>%
+  filter(detailed %in% b_cell_types) %>%
+  group_by(dataset, detailed) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(dataset) %>%
+  mutate(percentage = count / sum(count) * 100) %>%
+  ungroup()
+
+if (nrow(b_composition) > 0) {
+  p_b <- ggplot(b_composition, aes(x = dataset, y = percentage, fill = detailed)) +
+    geom_bar(stat = "identity", position = "stack", width = 0.6) +
+    scale_fill_manual(values = cluster_colors[1:length(unique(b_composition$detailed))], 
+                      name = "B Cell Subtype") +
+    labs(title = "TLS_Like_Zone: B Cell Subtype Comparison",
+         x = "",
+         y = "Percentage (%)") +
+    theme_bw() +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+      axis.text.x = element_text(size = 12, face = "bold"),
+      axis.text.y = element_text(size = 10),
+      axis.title.y = element_text(size = 11),
+      legend.position = "right",
+      legend.text = element_text(size = 8),
+      legend.key.size = unit(0.4, "cm")
+    )
+  
+  ggsave("TLS_Zone_composition_comparison_B_cells_three_groups.pdf", p_b, width = 8, height = 5, dpi = 300)
+  print(p_b)
+} else {
+  cat("没有找到B细胞\n")
+}
+
+
+#肿瘤分布于哪些CN
+tumor_cell_types <- grep("Tumor_", unique(metLN@meta.data$detailed), value = TRUE)
+
+if(length(tumor_cell_types) == 0) {
+  tumor_cell_types <- grep("tumor|malignant|cancer", 
+                           unique(metLN@meta.data$detailed), 
+                           value = TRUE, ignore.case = TRUE)
+}
+
+print(paste("找到", length(tumor_cell_types), "种肿瘤亚型："))
+print(tumor_cell_types)
+
+# =====================
+# 计算每种肿瘤亚型在各CN中的占比
+# =====================
+
+tumor_cn_composition <- metLN@meta.data %>%
+  filter(detailed %in% tumor_cell_types) %>%
+  group_by(detailed, cellcharter_cluster) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(detailed) %>%
+  mutate(proportion = count / sum(count) * 100) %>%
+  ungroup() %>%
+  filter(proportion > 0)
+
+# =====================
+# 确保 CN 按数字顺序排序 (CN1 到 CNn)
+# =====================
+
+# 获取所有出现的CN编号
+all_cn_numbers <- sort(unique(tumor_cn_composition$cellcharter_cluster))
+
+# 创建 CN 标签（CN1, CN2, ...）
+tumor_cn_composition$cn_label <- factor(
+  paste0("CN", tumor_cn_composition$cellcharter_cluster),
+  levels = paste0("CN", all_cn_numbers)  # 按数字顺序设置级别
+)
+
+# =====================
+# 定义颜色（根据实际CN数量）
+# =====================
+
+cluster_colors <- c(
+  "#A0CBE8", "#FFBE7D", "#8CD17D", "#86BCB6", "#FF9D9A",
+  "#FABFD2", "#D4A6C8", "#F1CE63", "#D7B5A6", "#B07AA1",
+  "#BAB0AC", "#4E79A7", "#F28E2B", "#59A14F", "#E15759",
+  "#499894", "#D37295", "#B6992D", "#9D7660", "#79706E"
+)
+
+# 根据实际CN数量取颜色
+n_cn <- length(all_cn_numbers)
+cluster_colors_used <- cluster_colors[1:n_cn]
+names(cluster_colors_used) <- paste0("CN", all_cn_numbers)
+
+# 只保留实际出现的CN的颜色
+cn_colors <- cluster_colors_used[paste0("CN", all_cn_numbers)]
+
+# =====================
+# 绘制分面饼图
+# =====================
+
+p_facet_pie <- ggplot(tumor_cn_composition, aes(x = "", y = proportion, fill = cn_label)) +
+  geom_bar(stat = "identity", width = 1, color = "black", size = 0.5) +
+  coord_polar("y", start = 0) +
+  facet_wrap(~ detailed, ncol = 5) +
+  scale_fill_manual(values = cn_colors, name = "CN", breaks = paste0("CN", all_cn_numbers)) +
+  labs(title = "metLN: CN Composition for Each Tumor Subtype") +
+  theme_void() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    strip.text = element_text(size = 10, face = "bold"),
+    legend.position = "right",
+    legend.title = element_text(size = 10, face = "bold"),
+    legend.text = element_text(size = 8),
+    legend.key.size = unit(0.4, "cm")
+  )
+
+print(p_facet_pie)
+ggsave("metLN_tumor_subtype_facet_pie.pdf", p_facet_pie, 
+       width = 14, height = ceiling(length(tumor_cell_types)/3) * 4, 
+       dpi = 300)
+
+#比较mPT中肿瘤区域于metLN中的肿瘤相关区域
+# 比较 mPT 的 Inflammatory_Vascular_Zone 和 metLN 中特定区域
+library(ggplot2)
+library(dplyr)
+
+# ===================== 提取数据 =====================
+
+# mPT中的 Inflammatory_Vascular_Zone
+mPT_zone <- mPT@meta.data %>% filter(cn_detailed == "Inflammatory_Vascular_Zone")
+mPT_zone$dataset <- "mPT_Inflam_Vasc"
+
+# metLN中包含 "Tumor" 的CN（分开提取）
+tumor_related_cn <- grep("Tumor", unique(metLN@meta.data$cn_detailed), value = TRUE)
+
+# 分别提取每个Tumor相关的CN
+metLN_tumor_list <- list()
+for (cn in tumor_related_cn) {
+  temp <- metLN@meta.data %>% filter(cn_detailed == cn)
+  simple_name <- gsub("[-_]", "_", cn)
+  simple_name <- gsub(" ", "_", simple_name)
+  temp$dataset <- paste0("metLN_", simple_name)
+  metLN_tumor_list[[cn]] <- temp
+}
+
+# metLN中的 Mast_Cell_Immune_Zone
+metLN_mast <- metLN@meta.data %>% filter(cn_detailed == "Mast_Cell_Immune_Zone")
+metLN_mast$dataset <- "metLN_Mast_Cell"
+
+# 合并数据
+combined_data <- bind_rows(mPT_zone, metLN_mast)
+for (temp in metLN_tumor_list) {
+  combined_data <- bind_rows(combined_data, temp)
+}
+
+# ===================== 删除指定的dataset =====================
+combined_data <- combined_data %>%
+  filter(dataset != "metLN_B_Cell_Immune_inflamed_Tumor_Interface")
+
+# 验证
+cat("删除后剩余的dataset：\n")
+print(unique(combined_data$dataset))
+
+# ===================== 颜色方案 =====================
+cluster_colors <- c(
+  "#A0CBE8", "#FFBE7D", "#8CD17D", "#86BCB6", "#FF9D9A",
+  "#FABFD2", "#D4A6C8", "#F1CE63", "#D7B5A6", "#B07AA1",
+  "#BAB0AC", "#4E79A7", "#F28E2B", "#59A14F", "#E15759",
+  "#499894", "#D37295", "#B6992D", "#9D7660", "#79706E", "#D3D3D3"
+)
+
+# ===================== 总细胞组成占比差异堆叠图 =====================
+
+total_composition <- combined_data %>%
+  group_by(dataset, detailed) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(dataset) %>%
+  mutate(percentage = count / sum(count) * 100) %>%
+  ungroup()
+
+# 获取top 15细胞类型
+top_cell_types <- total_composition %>%
+  group_by(detailed) %>%
+  summarise(total_count = sum(count)) %>%
+  arrange(desc(total_count)) %>%
+  slice_head(n = 15) %>%
+  pull(detailed)
+
+# 将非top细胞类型标记为 "Other"
+total_composition_plot <- total_composition %>%
+  mutate(cell_group = ifelse(detailed %in% top_cell_types, detailed, "Other")) %>%
+  group_by(dataset, cell_group) %>%
+  summarise(percentage = sum(percentage), .groups = "drop") %>%
+  mutate(cell_group = factor(cell_group, 
+                              levels = c(sort(setdiff(unique(cell_group), "Other")), "Other")))
+
+# 设置dataset因子水平
+dataset_order <- unique(total_composition_plot$dataset)
+total_composition_plot$dataset <- factor(total_composition_plot$dataset, levels = dataset_order)
+
+# 计算颜色
+n_colors <- length(unique(total_composition_plot$cell_group))
+used_colors <- cluster_colors[1:n_colors]
+names(used_colors) <- levels(total_composition_plot$cell_group)
+
+p_total <- ggplot(total_composition_plot, aes(x = dataset, y = percentage, fill = cell_group)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.6) +
+  scale_fill_manual(values = used_colors, name = "Cell Type") +
+  labs(title = "Zone Comparison: mPT vs metLN",
+       x = "",
+       y = "Percentage (%)") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 9, face = "bold"),
+    axis.text.y = element_text(size = 10),
+    axis.title.y = element_text(size = 11),
+    legend.position = "right",
+    legend.text = element_text(size = 7),
+    legend.key.size = unit(0.4, "cm")
+  )
+
+ggsave("Zone_comparison_mPT_metLN_total.pdf", p_total, width = 9, height = 6, dpi = 300)
+print(p_total)
+
+#CN相关性
+# 比较 metLN 中四个 CN 与 mPT 炎症血管区细胞组成的 Pearson 相关性
+library(ggplot2)
+library(dplyr)
+library(pheatmap)
+
+# ===================== 提取各区域细胞组成 =====================
+
+# mPT 炎症血管区
+mPT_composition <- mPT@meta.data %>%
+  filter(cn_detailed == "Inflammatory_Vascular_Zone") %>%
+  group_by(detailed) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  mutate(percentage = count / sum(count) * 100,
+         region = "mPT_Inflammatory_Vascular")
+
+# metLN 四个CN（使用正确名称）
+metLN_cn_list <- c("Immune-inflamed_Tumor_Core_A", 
+                   "Immune-inflamed_Tumor_Core_B",
+                   "Immune-inflamed_Tumor_Macrophage_Interface",
+                   "Mast_Cell_Immune_Zone")
+
+# 提取 metLN 各 CN 数据
+metLN_compositions <- list()
+for (cn in metLN_cn_list) {
+  temp <- metLN@meta.data %>%
+    filter(cn_detailed == cn) %>%
+    group_by(detailed) %>%
+    summarise(count = n(), .groups = "drop") %>%
+    mutate(percentage = count / sum(count) * 100,
+           region = cn)
+  metLN_compositions[[cn]] <- temp
+}
+
+# 合并所有数据
+all_compositions <- bind_rows(mPT_composition)
+for (temp in metLN_compositions) {
+  all_compositions <- bind_rows(all_compositions, temp)
+}
+
+# 转换为宽格式
+wide_composition <- all_compositions %>%
+  select(region, detailed, percentage) %>%
+  tidyr::pivot_wider(names_from = region, values_from = percentage, values_fill = 0)
+
+wide_matrix <- as.matrix(wide_composition[, -1])
+rownames(wide_matrix) <- wide_composition$detailed
+
+# ===================== 计算 Pearson 相关性 =====================
+
+cor_matrix_pearson <- cor(wide_matrix, method = "pearson")
+
+print("=== Pearson 相关性矩阵 ===")
+print(round(cor_matrix_pearson, 3))
+
+# ===================== 绘制 Pearson 相关性热图 =====================
+
+pdf("zone_composition_pearson_correlation_heatmap.pdf", width = 8, height = 8)
+pheatmap(cor_matrix_pearson,
+         main = "Pearson Correlation of Cell Composition",
+         display_numbers = TRUE,
+         number_format = "%.2f",
+         color = colorRampPalette(c("#4E79A7", "white", "#E15759"))(100),
+         cluster_rows = TRUE,
+         cluster_cols = TRUE,
+         fontsize = 10)
+dev.off()
+
+# ===================== mPT 炎症血管区 vs metLN Mast_Cell_Immune_Zone 相关性分析 =====================
+library(ggplot2)
+library(dplyr)
+
+# 提取 mPT 炎症血管区的细胞组成
+mPT_composition <- mPT@meta.data %>%
+  filter(cn_detailed == "Inflammatory_Vascular_Zone") %>%
+  group_by(detailed) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  mutate(percentage = count / sum(count) * 100,
+         region = "mPT_Inflammatory_Vascular")
+
+# 提取 metLN Mast_Cell_Immune_Zone 的细胞组成
+metLN_composition <- metLN@meta.data %>%
+  filter(cn_detailed == "Mast_Cell_Immune_Zone") %>%
+  group_by(detailed) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  mutate(percentage = count / sum(count) * 100,
+         region = "metLN_Mast_Cell_Immune_Zone")
+
+# 合并两个区域的数据
+comparison_data <- bind_rows(mPT_composition, metLN_composition)
+
+# 转换为宽格式（每个细胞类型一行，两个区域各一列）
+wide_data <- comparison_data %>%
+  select(region, detailed, percentage) %>%
+  tidyr::pivot_wider(names_from = region, values_from = percentage, values_fill = 0)
+
+# 计算 Pearson 相关系数
+cor_pearson <- cor(wide_data$mPT_Inflammatory_Vascular, 
+                   wide_data$metLN_Mast_Cell_Immune_Zone, 
+                   method = "pearson")
+
+# 计算 Spearman 相关系数
+cor_spearman <- cor(wide_data$mPT_Inflammatory_Vascular, 
+                    wide_data$metLN_Mast_Cell_Immune_Zone, 
+                    method = "spearman")
+
+cat("=== 相关性分析结果 ===\n")
+cat("Pearson 相关系数: ", round(cor_pearson, 4), "\n")
+cat("Spearman 相关系数: ", round(cor_spearman, 4), "\n")
+
+# ===================== 散点图 =====================
+
+# 计算线性回归
+lm_fit <- lm(metLN_Mast_Cell_Immune_Zone ~ mPT_Inflammatory_Vascular, data = wide_data)
+
+# 获取R²和p值
+r_squared <- summary(lm_fit)$r.squared
+p_value <- summary(lm_fit)$coefficients[2, 4]
+
+# 散点图
+p_scatter <- ggplot(wide_data, aes(x = mPT_Inflammatory_Vascular, y = metLN_Mast_Cell_Immune_Zone)) +
+  geom_point(size = 3, alpha = 0.7, color = "#4E79A7") +
+  geom_smooth(method = "lm", se = TRUE, color = "#E15759", fill = "#FABFD2") +
+  annotate("text", x = max(wide_data$mPT_Inflammatory_Vascular) * 0.7, 
+           y = max(wide_data$metLN_Mast_Cell_Immune_Zone) * 0.95,
+           label = paste("Pearson r =", round(cor_pearson, 3),
+                        #"\nSpearman ρ =", round(cor_spearman, 3),
+                        "\nR² =", round(r_squared, 3)),
+           size = 4, hjust = 0) +
+  labs(title = "mPT Inflammatory_Vascular_Zone vs metLN Mast_Cell_Immune_Zone",
+       x = "mPT Inflammatory_Vascular Zone (%)",
+       y = "metLN Mast_Cell_Immune_Zone (%)") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+    axis.title = element_text(size = 11),
+    axis.text = element_text(size = 10)
+  )
+
+ggsave("mPT_vs_metLN_Mast_Cell_correlation.pdf", p_scatter, width = 6, height = 5, dpi = 300)
+print(p_scatter)
+
+#点图
+selected_fovs <- c(239, 240)
+
+d2_data <- metLN@meta.data %>% 
+  filter(sample == "D2", fov %in% selected_fovs)
+
+# 筛选X轴范围（如果需要，可以调整或删除）
+# d2_data <- d2_data %>%
+#   filter(CenterX_global_px >= 73060 & CenterX_global_px <= 85024)
+
+cat("筛选后细胞数：", nrow(d2_data), "\n")
+cat("X轴范围：", range(d2_data$CenterX_global_px), "\n")
+cat("Y轴范围：", range(d2_data$CenterY_global_px), "\n")
+
+# ===================== 获取实际出现的CN =====================
+actual_cn <- sort(unique(d2_data$cn_detailed))
+cat("实际出现的CN：\n")
+print(actual_cn)
+
+# ===================== 定义颜色 =====================
+cluster_colors <- c(
+  "#A0CBE8", "#FFBE7D", "#8CD17D", "#86BCB6", "#FF9D9A",
+  "#FABFD2", "#D4A6C8", "#F1CE63", "#D7B5A6", "#B07AA1",
+  "#BAB0AC", "#4E79A7", "#F28E2B", "#59A14F", "#E15759",
+  "#499894", "#D37295", "#B6992D", "#9D7660", "#79706E"
+)
+
+# 将颜色直接赋给CN注释名称
+used_colors <- cluster_colors[1:length(actual_cn)]
+names(used_colors) <- actual_cn
+
+# ===================== 绘制点图（所有FOV在一张图上） =====================
+
+p <- ggplot(d2_data, aes(x = CenterX_global_px, y = CenterY_global_px, color = cn_detailed)) +
+  geom_point(size = 0.5, alpha = 0.8) +
+  scale_color_manual(values = used_colors, name = "Cell Neighborhood (CN)") +
+  coord_fixed(ratio = 1) +
+  labs(
+    title = "metLN D2 Sample: Spatial Distribution of Cell Neighborhoods",
+    subtitle = paste("FOV:", paste(selected_fovs, collapse = ", "), 
+                     "| Total cells:", nrow(d2_data)),
+    x = "X Coordinate (px)",
+    y = "Y Coordinate (px)"
+  ) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+    plot.subtitle = element_text(hjust = 0.5, size = 8),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid = element_blank(),
+    legend.position = "right",
+    legend.title = element_text(size = 11, face = "bold"),
+    legend.text = element_text(size = 7),
+    legend.key.size = unit(0.6, "cm"),
+    aspect.ratio = 0.5
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 3)))
+
+ggsave("metLN_D2_FOV239_240_CN_spatial.pdf", p, width = 8, height = 4, dpi = 300)
+
+```
+# negLN subtype CN
+```R
+library(Seurat)
+library(ggplot2)
+library(patchwork)
+library(pheatmap)
+library(vegan)
+library(dplyr)
+library(tidyr)
+library(RColorBrewer)
+
+# 加载结果
+message("=== 加载 CellCharter 结果 ===")
+negLN <- readRDS("negLN_cellcharter_FINAL.rds")
+
+#CN组成
+# 查看每个CN的细胞组成
+cn_composition <- table(negLN@meta.data$cellcharter_cluster, 
+                        negLN@meta.data$detailed)
+
+# 计算每个CN的比例
+cn_prop <- prop.table(cn_composition, margin = 1) * 100
+
+# 打印每个CN的主要细胞类型（前5种）
+for (cn in rownames(cn_prop)) {
+  cat("\n=== CN", cn, "===\n")
+  top10 <- sort(cn_prop[cn, ], decreasing = TRUE)[1:10]
+  for (i in 1:length(top10)) {
+    cat(names(top10)[i], ": ", round(top10[i], 1), "%\n", sep = "")
+  }
+}
+
+#CN注释
+cn_annotation_detailed <- c(
+  "1"  = "T_Cell_Dominant_Zone",
+  "2"  = "Mast_Cell_Immune_Zone",
+  "3"  = "FRC-rich_Lymphoid_Zone",
+  "4"  = "Immune_Zone",
+  "5"  = "Macrophage_Dominant_Zone_F",
+  "6"  = "B_Cell_Follicle_Zone",
+  "7"  = "Plasma_Enriched_Zone_H",
+  "8"  = "Macrophage_Dominant_Zone_D",
+  "9"  = "B_Germinal_Center_Zone",
+  "10" = "Plasma_Enriched_Zone_I",
+  "11" = "Vascular_Stromal_Zone",
+  "12" = "Plasma_Enriched_Zone_G"
+)
+# 应用到 Seurat 对象
+negLN@meta.data$cn_detailed <- cn_annotation_detailed[as.character(negLN@meta.data$cellcharter_cluster)]
+
+library(ggplot2)
+library(dplyr)
+library(patchwork)
+
+# ===================== 1. 准备数据 =====================
+
+# 样本顺序（按首字母排序）
+samples_order <- c("A2", "A4", "B1", "B3", "B5", "C3", "D1", "D4")
+non_metastatic_samples <- samples_order[1:4]  # "A2", "A4", "B1", "B3"
+metastatic_samples <- samples_order[5:8]      # "B5", "C3", "D1", "D4"
+
+# 计算总体比例
+total_prop <- negLN@meta.data %>%
+  group_by(cn_detailed) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  mutate(proportion = count / sum(count) * 100,
+         group = "Overall")
+
+# 计算未转移样本组比例
+non_metastatic_prop <- negLN@meta.data %>%
+  filter(sample %in% non_metastatic_samples) %>%
+  group_by(cn_detailed) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  mutate(proportion = count / sum(count) * 100,
+         group = "Non-Metastatic")
+
+# 计算转移样本组比例
+metastatic_prop <- negLN@meta.data %>%
+  filter(sample %in% metastatic_samples) %>%
+  group_by(cn_detailed) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  mutate(proportion = count / sum(count) * 100,
+         group = "Metastatic")
+
+# 合并分组数据
+group_data <- bind_rows(total_prop, non_metastatic_prop, metastatic_prop)
+
+# 计算各样本比例
+sample_prop <- negLN@meta.data %>%
+  group_by(sample, cn_detailed) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(sample) %>%
+  mutate(proportion = count / sum(count) * 100) %>%
+  ungroup()
+
+# 设置因子水平
+group_data$cn_detailed <- factor(group_data$cn_detailed, 
+                                  levels = sort(unique(group_data$cn_detailed)))
+group_data$group <- factor(group_data$group, 
+                            levels = c("Overall", "Non-Metastatic", "Metastatic"))
+
+sample_prop$cn_detailed <- factor(sample_prop$cn_detailed, 
+                                   levels = sort(unique(sample_prop$cn_detailed)))
+sample_prop$sample <- factor(sample_prop$sample, levels = samples_order)
+
+# ===================== 2. 颜色方案 =====================
+
+cluster_colors <- c(
+  "#A0CBE8", "#FFBE7D", "#8CD17D", "#86BCB6", "#FF9D9A",
+  "#FABFD2", "#D4A6C8", "#F1CE63", "#D7B5A6", "#B07AA1",
+  "#BAB0AC", "#4E79A7", "#F28E2B", "#59A14F", "#E15759",
+  "#499894", "#D37295", "#B6992D", "#9D7660", "#79706E"
+)
+
+# ===================== 3. 图1：分组统计堆叠图 =====================
+
+p_group <- ggplot(group_data, aes(x = group, y = proportion, fill = cn_detailed)) +
+  geom_bar(stat = "identity", position = "fill", width = 0.6) +
+  scale_fill_manual(values = cluster_colors, name = "CN") +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(title = "A: CN Composition by Group",
+       x = "",
+       y = "Proportion") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+    axis.text.x = element_text(angle = 0, hjust = 0.5, size = 10, face = "bold"),
+    axis.text.y = element_text(size = 9),
+    axis.title.y = element_text(size = 10),
+    legend.position = "none",
+    panel.grid = element_blank()
+  )
+
+# ===================== 4. 图2：各样本堆叠图 =====================
+
+p_samples <- ggplot(sample_prop, aes(x = sample, y = proportion, fill = cn_detailed)) +
+  geom_bar(stat = "identity", position = "fill", width = 0.7) +
+  scale_fill_manual(values = cluster_colors, name = "CN") +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(title = "B: CN Composition by Individual Sample",
+       x = "",
+       y = "Proportion") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
+    axis.text.y = element_text(size = 9),
+    axis.title.y = element_text(size = 10),
+    legend.position = "right",
+    legend.text = element_text(size = 7),
+    legend.key.size = unit(0.4, "cm"),
+    panel.grid = element_blank()
+  )
+
+# ===================== 5. 提取图例 =====================
+
+library(cowplot)
+legend <- get_legend(p_samples)
+
+# 移除图2的图例
+p_samples_no_legend <- p_samples + theme(legend.position = "none")
+
+# ===================== 6. 合并两张图 =====================
+
+combined_plot <- (p_group | p_samples_no_legend) +
+  plot_annotation(
+    title = "negLN: Cell Neighborhood Composition",
+    theme = theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 14))
+  ) +
+  plot_layout(widths = c(0.6, 1.4))
+
+# 添加图例到右侧
+final_plot <- plot_grid(combined_plot, legend, ncol = 2, rel_widths = c(3, 0.4))
+
+ggsave("negLN_cn_proportion_combined.pdf", final_plot, width = 16, height = 6, dpi = 300)
+
+
+# 3. 每个邻域细胞组成热图
+# =====================
+message("=== 3. 生成邻域细胞组成热图 ===")
+
+cluster_composition <- table(negLN@meta.data$cellcharter_cluster, 
+                           negLN@meta.data$detailed)
+
+cluster_composition_df <- as.data.frame(cluster_composition)
+colnames(cluster_composition_df) <- c("Cluster", "CellType", "Count")
+
+cluster_totals <- aggregate(Count ~ Cluster, data = cluster_composition_df, sum)
+cluster_composition_df <- merge(cluster_composition_df, cluster_totals, by = "Cluster")
+cluster_composition_df$Proportion <- cluster_composition_df$Count.x / cluster_composition_df$Count.y
+
+# 转换为宽格式
+heatmap_data <- cluster_composition_df %>%
+  select(Cluster, CellType, Proportion) %>%
+  pivot_wider(names_from = CellType, values_from = Proportion, values_fill = 0)
+
+# 按Cluster数字排序
+cluster_numeric <- as.numeric(as.character(heatmap_data$Cluster))
+heatmap_data <- heatmap_data[order(cluster_numeric), ]
+
+# 创建行标签（使用你的注释名称）
+row_labels_annotated <- cn_annotation_detailed[as.character(cluster_numeric[order(cluster_numeric)])]
+
+# 设置行名
+rownames(heatmap_data) <- row_labels_annotated
+heatmap_matrix <- as.matrix(heatmap_data[, -1])
+
+# 绘制热图（字体增大的版本）
+p_heatmap <- pheatmap(heatmap_matrix,
+                    cluster_rows = TRUE,
+                    cluster_cols = TRUE,
+                    display_numbers = FALSE,
+                    main = "Cell Type Composition by Spatial Domain",
+                    fontsize = 14,           # 全局字体增大
+                    fontsize_row = 10,       # 行标签字体（注释名称较长，用10合适）
+                    fontsize_col = 9,        # 列标签字体
+                    labels_row = row_labels_annotated,
+                    color = colorRampPalette(c("#f0f0f0", "#3182bd", "#08519c"))(100),
+                    cellwidth = 11,          # 单元格宽度
+                    cellheight = 11)         # 单元格高度
+
+# 保存
+pdf("negLN_CN_cell_type_composition_heatmap_annotated.pdf", width = 16, height = 12)
+print(p_heatmap)
+dev.off()
+
+
+#空间点图
+selected_fovs <- c(380, 382)
+
+b1_data <- negLN@meta.data %>% 
+  filter(sample == "B1", fov %in% selected_fovs)
+
+# 筛选X轴范围（如果需要，可以调整或删除）
+# b1_data <- b1_data %>%
+#   filter(CenterX_global_px >= 73060 & CenterX_global_px <= 85024)
+
+cat("筛选后细胞数：", nrow(b1_data), "\n")
+cat("X轴范围：", range(b1_data$CenterX_global_px), "\n")
+cat("Y轴范围：", range(b1_data$CenterY_global_px), "\n")
+
+# ===================== 获取实际出现的CN =====================
+actual_cn <- sort(unique(b1_data$cn_detailed))
+cat("实际出现的CN：\n")
+print(actual_cn)
+
+# ===================== 定义颜色 =====================
+cluster_colors <- c(
+  "#A0CBE8", "#FFBE7D", "#8CD17D", "#86BCB6", "#FF9D9A",
+  "#FABFD2", "#D4A6C8", "#F1CE63", "#D7B5A6", "#B07AA1",
+  "#BAB0AC", "#4E79A7", "#F28E2B", "#59A14F", "#E15759",
+  "#499894", "#D37295", "#B6992D", "#9D7660", "#79706E"
+)
+
+# 将颜色直接赋给CN注释名称
+used_colors <- cluster_colors[1:length(actual_cn)]
+names(used_colors) <- actual_cn
+
+# ===================== 绘制点图（所有FOV在一张图上） =====================
+
+p <- ggplot(b1_data, aes(x = CenterX_global_px, y = CenterY_global_px, color = cn_detailed)) +
+  geom_point(size = 0.5, alpha = 0.8) +
+  scale_color_manual(values = used_colors, name = "Cell Neighborhood (CN)") +
+  coord_fixed(ratio = 1) +
+  labs(
+    title = "negLN B1 Sample: Spatial Distribution of Cell Neighborhoods",
+    subtitle = paste("FOV:", paste(selected_fovs, collapse = ", "), 
+                     "| Total cells:", nrow(b1_data)),
+    x = "X Coordinate (px)",
+    y = "Y Coordinate (px)"
+  ) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+    plot.subtitle = element_text(hjust = 0.5, size = 8),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid = element_blank(),
+    legend.position = "right",
+    legend.title = element_text(size = 11, face = "bold"),
+    legend.text = element_text(size = 7),
+    legend.key.size = unit(0.6, "cm"),
+    aspect.ratio = 0.5
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 3)))
+
+ggsave("negLN_B1_FOV380_382_CN_spatial.pdf", p, width = 8, height = 4, dpi = 300)
+
+
+selected_fovs <- c(193, 195, 198, 199)
+
+b3_data <- negLN@meta.data %>% 
+  filter(sample == "B3", fov %in% selected_fovs)
+
+# 筛选X轴范围（如果需要，可以调整或删除）
+# b3_data <- b3_data %>%
+#   filter(CenterX_global_px >= 73060 & CenterX_global_px <= 85024)
+
+cat("筛选后细胞数：", nrow(b3_data), "\n")
+cat("X轴范围：", range(b3_data$CenterX_global_px), "\n")
+cat("Y轴范围：", range(b3_data$CenterY_global_px), "\n")
+
+# ===================== 获取实际出现的CN =====================
+actual_cn <- sort(unique(b3_data$cn_detailed))
+cat("实际出现的CN：\n")
+print(actual_cn)
+
+# ===================== 定义颜色 =====================
+cluster_colors <- c(
+  "#A0CBE8", "#FFBE7D", "#8CD17D", "#86BCB6", "#FF9D9A",
+  "#FABFD2", "#D4A6C8", "#F1CE63", "#D7B5A6", "#B07AA1",
+  "#BAB0AC", "#4E79A7", "#F28E2B", "#59A14F", "#E15759",
+  "#499894", "#D37295", "#B6992D", "#9D7660", "#79706E"
+)
+
+# 将颜色直接赋给CN注释名称
+used_colors <- cluster_colors[1:length(actual_cn)]
+names(used_colors) <- actual_cn
+
+# ===================== 绘制点图（所有FOV在一张图上） =====================
+
+p <- ggplot(b3_data, aes(x = CenterX_global_px, y = CenterY_global_px, color = cn_detailed)) +
+  geom_point(size = 0.05, alpha = 0.8) +
+  scale_color_manual(values = used_colors, name = "Cell Neighborhood (CN)") +
+  coord_fixed(ratio = 1) +
+  labs(
+    title = "negLN B3 Sample: Spatial Distribution of Cell Neighborhoods",
+    subtitle = paste("FOV:", paste(selected_fovs, collapse = ", "), 
+                     "| Total cells:", nrow(b3_data)),
+    x = "X Coordinate (px)",
+    y = "Y Coordinate (px)"
+  ) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 10),
+    plot.subtitle = element_text(hjust = 0.5, size = 8),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid = element_blank(),
+    legend.position = "right",
+    legend.title = element_text(size = 11, face = "bold"),
+    legend.text = element_text(size = 7),
+    legend.key.size = unit(0.6, "cm"),
+    aspect.ratio = 1
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 3)))
+
+ggsave("negLN_B3_FOV193_195_198_199_CN_spatial.pdf", p, width = 6, height = 4, dpi = 300)
+
+#C3
+selected_fovs <- c(167, 168)
+
+c3_data <- negLN@meta.data %>% 
+  filter(sample == "C3", fov %in% selected_fovs)
+
+# 筛选X轴范围（如果需要，可以调整或删除）
+# c3_data <- c3_data %>%
+#   filter(CenterX_global_px >= 73060 & CenterX_global_px <= 85024)
+
+cat("筛选后细胞数：", nrow(c3_data), "\n")
+cat("X轴范围：", range(c3_data$CenterX_global_px), "\n")
+cat("Y轴范围：", range(c3_data$CenterY_global_px), "\n")
+
+# ===================== 获取实际出现的CN =====================
+actual_cn <- sort(unique(c3_data$cn_detailed))
+cat("实际出现的CN：\n")
+print(actual_cn)
+
+# ===================== 定义颜色 =====================
+cluster_colors <- c(
+  "#A0CBE8", "#FFBE7D", "#8CD17D", "#86BCB6", "#FF9D9A",
+  "#FABFD2", "#D4A6C8", "#F1CE63", "#D7B5A6", "#B07AA1",
+  "#BAB0AC", "#4E79A7", "#F28E2B", "#59A14F", "#E15759",
+  "#499894", "#D37295", "#B6992D", "#9D7660", "#79706E"
+)
+
+# 将颜色直接赋给CN注释名称
+used_colors <- cluster_colors[1:length(actual_cn)]
+names(used_colors) <- actual_cn
+
+# ===================== 绘制点图（所有FOV在一张图上） =====================
+
+p <- ggplot(c3_data, aes(x = CenterX_global_px, y = CenterY_global_px, color = cn_detailed)) +
+  geom_point(size = 0.5, alpha = 0.8) +
+  scale_color_manual(values = used_colors, name = "Cell Neighborhood (CN)") +
+  coord_fixed(ratio = 1) +
+  labs(
+    title = "negLN C3 Sample: Spatial Distribution of Cell Neighborhoods",
+    subtitle = paste("FOV:", paste(selected_fovs, collapse = ", "), 
+                     "| Total cells:", nrow(c3_data)),
+    x = "X Coordinate (px)",
+    y = "Y Coordinate (px)"
+  ) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+    plot.subtitle = element_text(hjust = 0.5, size = 8),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid = element_blank(),
+    legend.position = "right",
+    legend.title = element_text(size = 11, face = "bold"),
+    legend.text = element_text(size = 7),
+    legend.key.size = unit(0.6, "cm"),
+    aspect.ratio = 0.5
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 3)))
+
+ggsave("negLN_C3_FOV167_168_CN_spatial.pdf", p, width = 8, height = 4, dpi = 300)
+
+selected_fovs <- c(315, 316)
+
+d1_data <- negLN@meta.data %>% 
+  filter(sample == "D1", fov %in% selected_fovs)
+
+# 筛选X轴范围（如果需要，可以调整或删除）
+# d1_data <- d1_data %>%
+#   filter(CenterX_global_px >= 73060 & CenterX_global_px <= 85024)
+
+cat("筛选后细胞数：", nrow(d1_data), "\n")
+cat("X轴范围：", range(d1_data$CenterX_global_px), "\n")
+cat("Y轴范围：", range(d1_data$CenterY_global_px), "\n")
+
+# ===================== 获取实际出现的CN =====================
+actual_cn <- sort(unique(d1_data$cn_detailed))
+cat("实际出现的CN：\n")
+print(actual_cn)
+
+# ===================== 定义颜色 =====================
+cluster_colors <- c(
+  "#A0CBE8", "#FFBE7D", "#8CD17D", "#86BCB6", "#FF9D9A",
+  "#FABFD2", "#D4A6C8", "#F1CE63", "#D7B5A6", "#B07AA1",
+  "#BAB0AC", "#4E79A7", "#F28E2B", "#59A14F", "#E15759",
+  "#499894", "#D37295", "#B6992D", "#9D7660", "#79706E"
+)
+
+# 将颜色直接赋给CN注释名称
+used_colors <- cluster_colors[1:length(actual_cn)]
+names(used_colors) <- actual_cn
+
+# ===================== 绘制点图（所有FOV在一张图上） =====================
+
+p <- ggplot(d1_data, aes(x = CenterX_global_px, y = CenterY_global_px, color = cn_detailed)) +
+  geom_point(size = 0.5, alpha = 0.8) +
+  scale_color_manual(values = used_colors, name = "Cell Neighborhood (CN)") +
+  coord_fixed(ratio = 1) +
+  labs(
+    title = "negLN D1 Sample: Spatial Distribution of Cell Neighborhoods",
+    subtitle = paste("FOV:", paste(selected_fovs, collapse = ", "), 
+                     "| Total cells:", nrow(d1_data)),
+    x = "X Coordinate (px)",
+    y = "Y Coordinate (px)"
+  ) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+    plot.subtitle = element_text(hjust = 0.5, size = 8),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid = element_blank(),
+    legend.position = "right",
+    legend.title = element_text(size = 11, face = "bold"),
+    legend.text = element_text(size = 7),
+    legend.key.size = unit(0.6, "cm"),
+    aspect.ratio = 0.5
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 3)))
+
+ggsave("negLN_D1_FOV315_316_CN_spatial.pdf", p, width = 8, height = 4, dpi = 300)
+
 ```
 # fib fov
 ```R
